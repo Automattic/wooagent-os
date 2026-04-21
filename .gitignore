@@ -1,0 +1,34 @@
+# Go
+/daemon/bin/
+/daemon/wooagent
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+
+# Node
+/ui/node_modules/
+/ui/dist/
+/ui/.vite/
+/ui/*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local runtime state
+/.wooagent/
+/tmp/
