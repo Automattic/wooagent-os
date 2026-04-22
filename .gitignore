@@ -32,3 +32,6 @@ yarn-error.log*
 # Local runtime state
 /.wooagent/
 /tmp/
+
+# Build artifacts
+/dist/
