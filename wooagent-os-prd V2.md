@@ -180,6 +180,12 @@ The REST API remains as a fallback for stores not yet on WordPress 7.0 or withou
 
 Each persona is opinionated and shipped configured. Operators can disable, clone, fork, or create new personas. Every persona is built on ADK and loads relevant WordPress Agent Skills as context.
 
+**UI visibility vs. functional readiness.** All six operator personas plus the Chief of Staff meta-agent ship visible in the UI from v0.1 — they appear in the agent roster, as selectable owners on issue cards, and in the onboarding "default fleet deployed" summary. Functional readiness is phased: at the May 22 demo, Marketing, Pricing, and Sales Support run the full propose → review → approve → write loop against the live store, while Inventory, Accounting, and Reporting are present in the roster with a clearly-labeled inert state ("coming soon" badge; demo-only seeded sample issues may appear on the board to illustrate the shape of their work but do not invoke MCP writes). Chief of Staff is scaffolded — it exists in the roster and generates the first-run store-profile issue, but autonomous coordination remains deferred to v0.2. The intent is for the operator to see the full breadth of the fleet from day one, and for the phased functional rollout to happen underneath a stable UI surface. Personas flagged as non-functional for v1:
+- **Inventory Manager** (§7.3) — UI-visible, inert for v1.
+- **Accounting** (§7.4) — UI-visible, inert for v1.
+- **Reporting** (§7.5) — UI-visible, inert for v1.
+- **Chief of Staff** (§7.7) — scaffolded only; full arbitration behavior per the v0.2 roadmap.
+
 ### 7.1 Marketing & SEO Agent
 
 **Mandate:** Grow organic traffic and conversion.
@@ -590,7 +596,7 @@ wooagent export --format json --since 2026-01-01
 ### v0.1 (Alpha)
 - Single-store, single-operator.
 - MCP client with ability discovery and caching.
-- Six default personas, read-only mode (MCP reads only).
+- **Full fleet visible in UI: all six operator personas + Chief of Staff appear in the roster from first run.** Marketing, Pricing, and Sales Support are fully functional end-to-end (read → propose → approve → write). Inventory, Accounting, and Reporting ship UI-visible but inert (coming-soon state; optional demo-seeded sample issues illustrate their work shape without invoking MCP writes). Chief of Staff is scaffolded — generates the first-run store-profile issue; autonomous coordination lands in v0.2. Read-only mode (MCP reads only) across the fleet.
 - Anthropic, OpenAI, Ollama providers.
 - Kanban UI, CLI, SQLite storage.
 - Ability browser in the UI.
