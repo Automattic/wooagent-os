@@ -98,13 +98,14 @@ Pulled the Wed–Thu foundation tasks forward a day so Phase 1's co-work block w
 
 ### Remaining Wed Apr 22 – Tue Apr 28
 
+- ✅ **Wed Apr 22** (pulled forward from Fri Apr 24): **ADK Go spike landed.** Agent loop runs end-to-end against local LM Studio (Gemma 4 e4b) — model calls stub tool, gets structured response, composes final text. Anthropic adapter wired into `go.mod` so provider-flip is a line change. PRD §11.1/§11.10 corrected inline.
 - ⏳ **Wed Apr 22** (both): user-flow agreement on the 3 surfaces (60 min session); design-delivery conventions (share-link format, spec template, cadence).
-- ⏳ **Wed Apr 22** (Elizabeth): API contract v1 delivered to Nevena.
+- ⏳ **Wed Apr 22** (Elizabeth): formal delivery of API contract v1 to Nevena (`docs/api-contract-v1.md` already written in Pre-Phase 1).
 - ⏳ **Wed–Thu** (Nevena): lightweight style tile (colors, type, spacing).
-- ✅ **Wed Apr 22** (pulled forward from Fri Apr 24): **ADK Go spike landed.** Agent loop runs end-to-end against local LM Studio (Gemma 4 e4b) — model calls stub tool, gets structured response, composes final text. See "Pulled forward into Wed Apr 22" below. Anthropic adapter is already wired into `go.mod` so flipping providers is a line change, not a dep change.
+- ⏳ **Thu Apr 23** (Elizabeth — pulled forward from Mon Apr 27): **MCP client in daemon** — connect to test store, discover the `wooagent-*` ability surface, cache schemas. Hard stop: talking to the store by EOD. Readiness gates green: MCP endpoint + schemas already verified end-to-end on Apr 21.
+- ⏳ **Fri Apr 24** (Elizabeth — pulled forward from Mon–Tue): **Begin Marketing agent persona.** Reads products, generates a rewrite proposal, lands in `In Review` via existing HTTP endpoints. If the MCP client slips into Friday, Marketing starts Monday on the original slot.
 - ⏳ **Fri–Mon Apr 24, 27** (Nevena): kanban card anatomy + board-layout wireframes delivered by EOD Mon.
-- ⏳ **Mon Apr 27** (Elizabeth): MCP client in daemon — connect to test store, discover the `wooagent-*` ability surface, cache schemas. Hard stop: talking to the store. (Unblocked ahead of schedule thanks to Tue-eve plugin work.)
-- ⏳ **Mon–Tue Apr 27–28** (Elizabeth): **Marketing agent persona** — reads products via `wooagent-products/list` + `wooagent-products/get`, generates a rewrite proposal, lands in `In Review` via the existing HTTP endpoints; kanban board React translated from Nevena's designs as they land.
+- ⏳ **Mon–Tue Apr 27–28** (Elizabeth): finish Marketing agent; translate kanban React from Nevena's designs as they land. Reclaimed-time options if Marketing is done early: kanban polish, run-log panel headstart, or pull Pricing agent skeleton forward from Phase 2.
 - ⏳ **Tue Apr 28** (Nevena): full kanban board mockups (all 5 columns, card states, interaction spec) + first pass on review/approval prose diff layout.
 
 ### Exit criteria
