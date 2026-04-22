@@ -1,15 +1,32 @@
 # WooAgent OS
 
-Open-source, local-first agent operating system for WooCommerce store operators. See `wooagent-os-prd V2.md` for the full PRD and `WooAgent_plan.md` for the Phase 1 build plan.
+**Open-source, local-first agent operating system for WooCommerce store operators.**
+
+A fleet of opinionated AI agents — Marketing, Pricing, Inventory, Accounting, Reporting, Sales Support — runs continuously against your live WooCommerce store, coordinated by a Chief of Staff meta-agent. Each unit of agent work is a trackable issue on a kanban-style command center. Nothing gets written to the store without the operator seeing a diff and approving it.
+
+See `wooagent-os-prd V2.md` for the full PRD and `WooAgent_Pitch.md` for the short version.
+
+## What makes it different
+
+- **MCP-native.** WooAgent OS connects to any WordPress/WooCommerce site via the WordPress MCP Adapter. Every plugin that registers abilities through the WP Abilities API — WooCommerce, Yoast SEO, ACF, Gravity Forms, 70+ others — is automatically available to the agent fleet. No bespoke integrations.
+- **Local-first.** The whole stack runs on a single operator machine. Store data, run logs, model calls, and agent state stay on the host. No cloud account required.
+- **Model-agnostic.** Point the daemon at any frontier provider (Anthropic, Google, OpenAI, xAI) or any local runtime (LM Studio, Ollama, llama.cpp). The agent fleet runs identically.
+- **Propose / approve.** Agents never write to the store directly. Every change lands as an issue with a diff the operator reviews. A run log captures every model call, every ability call, and every state change.
+
+## Architecture
+
+- **Go daemon** (`daemon/`) — headless single binary. Owns the agent fleet, MCP client, issue queue, auth, local storage (SQLite), and the REST API the UI and CLI consume. Cross-platform, no external runtime dependencies.
+- **React UI** (`ui/`) — standalone Vite + `@wordpress/components` app. Connects to any daemon over HTTP. Ships on its own release cadence; runs as a hosted build, a local `wooagent ui` command, or self-hosted static assets.
+- **Companion WordPress plugin** (`companion-plugin/`) — installed on the WooCommerce store. Registers the `wooagent-*` ability surface the agent fleet consumes over MCP. Becomes thinner as WooCommerce's own native ability surface fills in.
 
 ## Repo layout
 
-- `daemon/` — Go daemon. Headless by default. Exposes a REST API that the UI and CLI consume.
-- `ui/` — Standalone React UI (Vite + `@wordpress/components`). Connects to any daemon over HTTP.
-- `companion-plugin/` — WordPress plugin that registers the `wooagent-*` ability surface on a WooCommerce store. Installed on the store side. Paired with the daemon.
-- `docs/` — API contracts and design notes shared across daemon + UI.
-- `dist/` — Build artifacts (plugin zips, etc.). Gitignored.
-- Top-level `.md` files — PRD, pitch, plans, persona research, and `companion-plugin-v0.1-plan.md` scope note.
+- `daemon/` — Go daemon. Entry point `cmd/wooagent`; internals under `internal/`.
+- `ui/` — Standalone React UI (Vite + `@wordpress/components`).
+- `companion-plugin/` — WordPress plugin source.
+- `docs/` — API contracts and shared design notes (`api-contract-v1.md`).
+- `dist/` — Build artifacts (plugin zips, UI bundles). Gitignored.
+- Top-level `.md` — PRD, pitch, and related planning documents.
 
 ## Quickstart (dev)
 
@@ -31,7 +48,7 @@ Open `http://localhost:5173`, paste the daemon URL and token from Terminal 1, an
 
 ## Connecting a WooCommerce store
 
-The daemon talks to any WooCommerce store running WP 6.9+ and the MCP Adapter. For Phase 1 you also need the **WooAgent Companion** plugin installed on the store — it registers the `wooagent-*` ability surface that the agent fleet consumes (PRD §10.4 and `companion-plugin-v0.1-plan.md` explain why we pulled this forward from v0.3).
+The daemon talks to any WooCommerce store running WP 6.9+ with the MCP Adapter installed. You also need the **WooAgent Companion** plugin on the store — it registers the `wooagent-*` ability surface the agent fleet uses. Rationale and debugging notes live in `companion-plugin-v0.1-plan.md`.
 
 ```bash
 # Build the plugin zip
@@ -39,8 +56,19 @@ cd companion-plugin
 zip -r ../dist/wooagent-companion-0.1.0.zip . -x "*.DS_Store"
 ```
 
-Upload the resulting zip via wp-admin → Plugins → Add New → Upload Plugin. Then authenticate the daemon with a WordPress Application Password (Users → Profile → Application Passwords). Native device-pair flow ships in Companion Plugin v0.2.
+Upload the zip via **wp-admin → Plugins → Add New → Upload Plugin**. Authenticate the daemon with a WordPress Application Password (**Users → Profile → Application Passwords**). A native device-pair flow ships in a later plugin version.
 
 ## Status
 
-Pre-Phase 1 scaffolding + **Companion Plugin v0.1 verified end-to-end against a live Pressable staging store** (Apr 21). Daemon CLI and HTTP endpoints are still mostly stubs — real agent behaviour (ADK Go agents, MCP client, first persona) lands through Phase 1 per `WooAgent_plan.md` and `progress.md`.
+Early development. What's live:
+
+- **Go daemon** — CLI surface, SQLite store + migrations, REST API with bearer auth, agents/issues/runs schemas, embedded prompt + skill registry, telemetry scaffolding.
+- **React UI** — Vite + `@wordpress/components` shell, connection flow, kanban skeleton.
+- **Companion plugin v0.1** — `wooagent-products/*`, `wooagent-orders/*`, `wooagent-customers/*` CRUD abilities, verified end-to-end against a real WooCommerce store over MCP.
+- **Agent runtime** — ADK Go wired into the daemon; stub-tool agent loop verified end-to-end against a local model.
+
+Up next: live MCP client in the daemon, first production persona (Marketing), kanban React translated from design.
+
+## License
+
+Apache 2.0. See `LICENSE`.
