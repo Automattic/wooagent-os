@@ -69,13 +69,15 @@ Pulled the Wed–Thu foundation tasks forward a day so Phase 1's co-work block w
 
 ### Scheduled
 
+- ✅ **Tue Apr 21** (Elizabeth): test WooCommerce store provisioned on Pressable staging (`woo-demo-store-99cc5c.mystagingwebsite.com`). MCP Adapter pre-installed and verified via handshake. 15 apparel products seeded. **Discovered:** WooCommerce has not registered `woocommerce/*` abilities on this install; only 5 core/Jetpack abilities exposed. Triggered Companion Plugin scope pull-forward — see `companion-plugin-v0.1-plan.md`.
+- ✅ **Tue Apr 21** (Elizabeth): **Companion Plugin v0.1 shipped + verified end-to-end** (`companion-plugin/`). 7 CRUD abilities fully implemented, 3 device-pair abilities stubbed. Installed on test store and **live product data returned through MCP `mcp-adapter-execute-ability`** — Marketing persona's critical path is unblocked. Uncovered three non-obvious WP Abilities API rules (single-slash names, dual init hooks, separate `meta.mcp.public` opt-in); all documented in `companion-plugin-v0.1-plan.md` "Debugging lessons" section.
 - ⏳ **Wed Apr 22** (both): user-flow agreement on the 3 surfaces (60 min session); design-delivery conventions (share-link format, spec template, cadence).
-- ⏳ **Wed–Thu Apr 22–23** (Elizabeth): test WooCommerce store standup + MCP Adapter installed (InstaWP primary; WordPress.com sandbox or `wp-env` fallback); API contract v1 delivered to Nevena.
+- ⏳ **Wed Apr 22** (Elizabeth): install Companion Plugin on test store; verify the 7 CRUD abilities discover via `/wp-json/wp-abilities/v1/abilities` and invoke through MCP `mcp-adapter-execute-ability`; API contract v1 delivered to Nevena.
 - ⏳ **Wed–Thu** (Nevena): lightweight style tile (colors, type, spacing).
 - ⏳ **Fri Apr 24** (Elizabeth): **ADK Go spike** — get any `github.com/google/adk-go` agent running with Anthropic + a stub tool. Hard stop: working by EOD.
 - ⏳ **Fri–Mon Apr 24, 27** (Nevena): kanban card anatomy + board-layout wireframes delivered by EOD Mon.
-- ⏳ **Mon Apr 27** (Elizabeth): MCP client — connect to test store, discover abilities, cache schemas. Hard stop: talking to the store.
-- ⏳ **Mon–Tue Apr 27–28** (Elizabeth): **Marketing agent persona** — reads products, generates a rewrite proposal, lands in `In Review` via the existing HTTP endpoints; kanban board React translated from Nevena's designs as they land.
+- ⏳ **Mon Apr 27** (Elizabeth): MCP client — connect to test store, discover the `wooagent-*` ability surface, cache schemas. Hard stop: talking to the store.
+- ⏳ **Mon–Tue Apr 27–28** (Elizabeth): **Marketing agent persona** — reads products via `wooagent-products/list` + `wooagent-products/get`, generates a rewrite proposal, lands in `In Review` via the existing HTTP endpoints; kanban board React translated from Nevena's designs as they land.
 - ⏳ **Tue Apr 28** (Nevena): full kanban board mockups (all 5 columns, card states, interaction spec) + first pass on review/approval prose diff layout.
 
 ### Exit criteria
@@ -177,3 +179,4 @@ Straight from `WooAgent_plan.md`:
 - **Day-1 scope (Apr 21):** user chose to pull Wed–Thu foundation scope forward to Tue, minus test-store standup which stays Wed. Buys a day of slack ahead of the aggressive Phase 1.
 - **Repo + git (Apr 21):** `github.com/elizaan36/wooagent-os`, private. Monorepo with `daemon/` + `ui/` siblings; the PRD's plan to ship UI independently (its own release cadence) still stands — the UI splits out at open-sourcing or first independent release, whichever comes first. Apache 2.0 `LICENSE` committed now so open-sourcing doesn't require license-archeology later.
 - **Collaboration mode (Apr 21):** Claude authorized to commit + push freely on feature branches; confirms before pushing to `main`; never force-pushes, skips hooks, or runs destructive git ops without explicit confirmation.
+- **Companion Plugin scope pull-forward (Apr 21):** PRD §10.4 originally scoped the Companion Plugin's non-pairing abilities for v0.3. Test-store probe revealed WooCommerce has not registered `woocommerce/*` abilities on the current ecosystem — only 5 core/Jetpack abilities surface. Rather than fall back to WC REST (which sidesteps the PRD's MCP-native bet), we're registering `wooagent/*` CRUD abilities in our own plugin now. They flow through the existing MCP Adapter's execute-tool — no daemon changes needed. When WC eventually ships native abilities, ours deprecate gracefully. Full plan in `companion-plugin-v0.1-plan.md`. Tradeoff: weakens the "zero-install on Pressable/WPE/WordPress.com" pitch in the short term; pulls ~2-3 days of PHP into Phase 1, absorbed by Phase 4 buffer.
