@@ -20,7 +20,7 @@ The WooAgent OS PRD and pitch describe a local-first, MCP-native agent OS for Wo
 - **No shared code repo** between the two — Nevena works in Claude.ai/design, Elizabeth works in her local codebase,
 - Covering **three design surfaces**: onboarding, kanban, review/approval.
 
-Ability browser / agent roster is explicitly deferred. Three personas (not six) is the target.
+Ability browser is explicitly deferred. The **agent roster is visible from day one and shows all six operator personas plus Chief of Staff** so the demo conveys the full fleet — functional readiness is phased: three personas run end-to-end, the other three are UI-visible but inert.
 
 ---
 
@@ -38,16 +38,21 @@ Ability browser / agent roster is explicitly deferred. Three personas (not six) 
 3. **Review / approval interaction**
    - In Review column opens an issue detail with a before/after diff (rendered from MCP ability call parameters).
    - Approve button triggers the ability invocation; Reject stays in Review with a comment.
-4. **Three personas running end-to-end**
-   - **Marketing & SEO** (product-description rewrite — shows off a content-write diff).
-   - **Pricing** (margin flag + proposed price change — shows off a structured-field diff).
-   - **Sales Support** (order-status draft reply — shows off a customer-facing write).
-   - These three cover the three most interesting diff shapes (prose, numbers, customer message).
+4. **Full fleet in the UI; three personas running end-to-end**
+   - **Agent roster shows all six operator personas + Chief of Staff** from first run, so the demo conveys the intended scope of the system. This includes the onboarding "default fleet deployed" summary, the agent-roster surface, and the owner dropdown on issue cards.
+   - **Fully functional for May 22:**
+     - **Marketing & SEO** (product-description rewrite — shows off a content-write diff).
+     - **Pricing** (margin flag + proposed price change — shows off a structured-field diff).
+     - **Sales Support** (order-status draft reply — shows off a customer-facing write).
+     - These three cover the three most interesting diff shapes (prose, numbers, customer message).
+   - **UI-visible but inert for May 22:**
+     - **Inventory Manager**, **Accounting**, **Reporting** — appear in the roster with a "coming soon" badge. Optional demo-only seeded sample issues may appear on the board to illustrate the shape of their work (e.g., a low-stock flag card), but Approve does not invoke an MCP write — it shows a "functionality in a later release" state instead.
+     - **Chief of Staff** — scaffolded. Produces the first-run store-profile issue only; autonomous coordination deferred.
 
 ### Out of scope for May 22
 
-- Ability browser UI, agent roster UI, settings UI beyond a stub page.
-- Remaining three personas (Inventory, Accounting, Reporting) — architecture supports them; they just aren't built.
+- Ability browser UI, settings UI beyond a stub page. *(Note: agent roster is now **in scope** at minimum fidelity — needed to render the full fleet per item 4 above.)*
+- **Functional** Inventory, Accounting, and Reporting agents — they ship UI-visible but inert; no real MCP writes, no real diff generation. Full functionality in a later release.
 - Webhook ingestion, local repo integration, read-only DB replica.
 - OAuth 2.1 / host-specific auth.
 - UI self-host / hosted build story — run the UI via `wooagent ui` locally for the demo.
@@ -161,13 +166,13 @@ Aggressive — this phase combines what was originally two phases of work into o
 **Elizabeth**
 - Implement onboarding backend (connection config, device-pair or App-Password auth, provider config, fleet bootstrap).
 - Build the **onboarding flow** React from Nevena's Phase 2/Phase 3 designs (every screen, transitions, error states).
-- Seed logic: on first run, Chief of Staff stub produces 2–3 starter issues per persona so the kanban has content for the demo.
+- Seed logic: on first run, Chief of Staff stub produces 2–3 starter issues for each of the three functional personas (Marketing, Pricing, Sales Support) and 1–2 demo-only sample issues for each of the inert personas (Inventory, Accounting, Reporting) so the kanban has content for the demo and the full fleet feels alive. Inert-persona cards carry a "preview — coming soon" label on the detail view so the approve action is obviously disabled.
 - Build the run-log panel React once Nevena's design lands.
 
 **Nevena**
 - Finish **onboarding flow** mockups including error states (store unreachable, pairing timed out, model key invalid).
 - Design the **run-log panel** (quick view of "what did the agent actually do").
-- Finalize persona visual identities (avatars, color accents).
+- Finalize persona visual identities (avatars, color accents) for all six operator personas + Chief of Staff, including a "coming soon" treatment for the three inert personas that reads as deliberate rather than unfinished.
 
 **Phase 3 exit criteria**
 - End-to-end first-run walkthrough works on a clean machine: install → pair → configure → deploy → see issues on board → approve one → verify change on store.
@@ -186,7 +191,7 @@ No new features. The whole phase is about running the prototype against the test
 **Nevena**
 - Ride along: watch Elizabeth's daily walkthroughs or screenshots. Flag fidelity drift, clunky transitions, confusing microcopy.
 - Produce targeted redesigns for whatever is breaking under real use (likely: an empty state, a loading indicator, an error message).
-- **Stretch:** start sketches of deferred surfaces (ability browser, agent roster) for v2.
+- **Stretch:** start sketches of deferred surfaces (ability browser) for v2, plus concepts for the "coming soon" inert-persona detail view if Phase 3 shipped only a rough version.
 
 **Phase 4 exit criteria**
 - Elizabeth has completed at least three full operator walkthroughs on her machine without crashes.
@@ -206,8 +211,10 @@ No new features. The whole phase is about running the prototype against the test
 
 - [ ] Fresh-machine install works: `wooagent init` → `wooagent run` → `wooagent ui` opens the app.
 - [ ] Onboarding completes in under 10 minutes on a fresh machine (matches the pitch's success metric).
-- [ ] Three personas generate real issues against the test store within the first session.
-- [ ] Operator can approve one issue of each type (prose, numeric, message) and the change lands on the store.
+- [ ] **Full fleet visible in the agent roster:** all six operator personas + Chief of Staff present, with clear functional-vs-inert states.
+- [ ] Three personas (Marketing, Pricing, Sales Support) generate real issues against the test store within the first session.
+- [ ] The three inert personas (Inventory, Accounting, Reporting) appear with demo sample issues and an obviously-disabled approve action labeled "coming soon."
+- [ ] Operator can approve one issue of each functional type (prose, numeric, message) and the change lands on the store.
 - [ ] Run-log panel shows a clean trace for any approved issue.
 - [ ] No crashes on the demo laptop during a 10-minute walkthrough.
 
@@ -233,8 +240,8 @@ No new features. The whole phase is about running the prototype against the test
 ## Deferred — post-May 22
 
 The PRD roadmap v0.1 items not shipping by May 22:
-- Ability browser + agent roster UI
-- Inventory / Accounting / Reporting personas
+- Ability browser UI (agent roster **is** shipping — see in-scope item 4).
+- **Functional** Inventory / Accounting / Reporting personas — they ship UI-visible but inert; real propose/approve behavior and MCP writes are a post-May-22 release.
 - OAuth 2.1 + host-specific auth paths
 - **Companion Plugin v0.2:** native device-pair token flow (stubs are in place in v0.1). Staged-changes, guardrails, and issue-status sync remain scoped to PRD v0.3.
 - Hosted UI build at `ui.wooagent.dev`
@@ -262,8 +269,8 @@ We do not recommend all three together; each is a separate lever available if a 
 End-to-end walkthrough on a clean laptop:
 
 1. Run `curl -fsSL https://wooagent.dev/install.sh | sh` (or pre-built `.dmg`).
-2. Run `wooagent init` — pair with the test store via the device-pair flow (or App Password fallback), configure Anthropic, deploy the three-persona fleet.
-3. Run `wooagent run` + `wooagent ui` — kanban loads with 6–9 starter issues (2–3 per persona).
+2. Run `wooagent init` — pair with the test store via the device-pair flow (or App Password fallback), configure Anthropic, deploy the full fleet (six operator personas + Chief of Staff visible in the roster; three of them functional).
+3. Run `wooagent run` + `wooagent ui` — kanban loads with ~9–12 starter issues: 2–3 real issues from the three functional personas plus 1–2 demo-only sample issues from each inert persona so the full fleet is represented on the board.
 4. Click into a Marketing issue in `In Review` — see before/after product-description diff — approve — watch the product update on the store in a second browser tab.
 5. Repeat for a Pricing issue and a Sales Support issue.
 6. Open the run log for one approved issue — see the model calls and ability invocations listed cleanly.
