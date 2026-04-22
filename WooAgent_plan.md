@@ -1,9 +1,11 @@
 # WooAgent OS — Prototype Plan (Apr 22 – May 22)
 
-**Start:** Wednesday, April 22, 2026
+**Start:** Wednesday, April 22, 2026 (Pre-Phase 1 foundation work landed Tue Apr 21)
 **Deadline:** Friday, May 22, 2026 (internal hack/review day)
 **Window:** 23 work days (weekends excluded)
 **Team:** Elizabeth (@elizaan36, builder + designer) · Nevena (@nevenailic1013, designer in Claude.ai/design)
+
+> Live status: `progress.md` is the continuously-updated actuals log; this file is the canonical scope + dates.
 
 ---
 
@@ -28,7 +30,7 @@ Ability browser / agent roster is explicitly deferred. Three personas (not six) 
 
 1. **Onboarding / first-run flow**
    - Install, connect to a test WooCommerce store via MCP, discover abilities, configure a model, deploy a small fleet.
-   - Device-pair auth UX is designed; implementation falls back to WordPress Application Password if Companion Plugin work slips (documented fallback in the PRD).
+   - Device-pair auth UX is designed; implementation uses WordPress Application Password for Phase 1 (Companion Plugin v0.1 shipped device-pair abilities as 501 stubs — native pairing flow ships in Companion Plugin v0.2, likely post-May 22).
 2. **Kanban board** with real issue data
    - Backlog / Todo / In Progress / In Review / Done columns.
    - Issue cards showing persona avatar, title, status, priority.
@@ -53,7 +55,7 @@ Ability browser / agent roster is explicitly deferred. Three personas (not six) 
 
 ### Demo constraints
 
-- **Test store:** a dev WooCommerce instance Elizabeth stands up on Day 1 (Wed Apr 22) of Phase 1 (WordPress.com sandbox, InstaWP, or local via `wp-env`). Real MCP Adapter installed. Seeded with ~20 sample products and ~10 sample orders.
+- **Test store:** Pressable staging site at `woo-demo-store-99cc5c.mystagingwebsite.com` (WP 6.9.4, WC 10.7.0, PHP 8.4). MCP Adapter pre-installed by Pressable. 15 apparel products seeded. **WooAgent Companion v0.1 installed + verified end-to-end via MCP (Tue Apr 21).** Ready for Phase 1.
 - **Model:** Anthropic Claude (fastest to integrate, reliable tool use) + Ollama as a "look, it works locally too" fallback for the demo narrative.
 
 ---
@@ -97,6 +99,21 @@ Elizabeth writes all code: Go daemon, React UI, MCP integration, model adapters,
 
 > Each phase spans 5 work days (Mon–Fri equivalent) except Phase 5 which is 3 days (May 20–22, Wed–Fri). Phase 1 straddles a weekend — it starts Wed Apr 22 and runs through Tue Apr 28.
 
+### Pre-Phase 1 — Tue Apr 21 (completed, pulled forward)
+
+Foundation scaffold + test-store standup + Companion Plugin v0.1 all landed the day before Phase 1 formally begins. PR #1 merged to trunk. Shipped:
+
+- **Foundation scaffold** — Go daemon (`daemon/`) with CLI, SQLite migrations, REST API, auth tokens. React UI (`ui/`) with Vite + `@wordpress/components`, connection form, kanban shell, stub routes. API contract v0.
+- **Test store** — Pressable staging site provisioned, MCP Adapter verified, 15 apparel products seeded, Application Password auth working for the daemon. Replaces the "InstaWP / WordPress.com sandbox / `wp-env`" Day-1 task originally scheduled for Wed Apr 22.
+- **WooAgent Companion Plugin v0.1** (`companion-plugin/`) — 7 CRUD abilities fully implemented (`wooagent-products/{list,get,update}`, `wooagent-orders/{list,get,add-note}`, `wooagent-customers/get`), 3 `wooagent-device-pair/*` stubs for v0.2. Pulled forward from PRD v0.3 scope to compensate for WooCommerce not yet registering a native `woocommerce/*` ability namespace on WC 10.7.0. Full MCP invocation verified end-to-end against real product data.
+
+**Impact on Phase 1 timeline**
+- Elizabeth's Wed–Thu block loses the "test store stand-up" item (~1 day) and lands with a working `wooagent-*` ability surface Monday's MCP-client work can target directly.
+- The Companion-Plugin scope pull-forward is sunk cost; Phase 4 testing buffer is intact.
+- **No downstream phase dates change.** Marketing persona still targets Mon–Tue Apr 27–28; demo still May 22.
+
+Decisions + debugging lessons captured in `companion-plugin-v0.1-plan.md` and `progress.md`.
+
 ### Phase 1 — Apr 22–28 (Wed → Tue, 5 work days): Foundations + first persona end-to-end (compressed)
 
 Aggressive — this phase combines what was originally two phases of work into one. Goal: by Tue Apr 28, a real Marketing agent is producing real issues on a kanban board backed by a real daemon against a real test store. Everything is rough; that's fine.
@@ -106,10 +123,10 @@ Aggressive — this phase combines what was originally two phases of work into o
 - Agree design-delivery conventions: share-link format, spec template, iteration cadence.
 
 **Elizabeth (Wed Apr 22 → Tue Apr 28)**
-- **Wed–Thu (Apr 22–23):** React app skeleton (Vite + `@wordpress/components` + `@wordpress/ui`), WordPress Design System MCP (`@wordpress/design-system-mcp`) registered in Claude Code so component/token lookups work from day 1, Go daemon skeleton (single binary, REST API, SQLite), test WooCommerce store stood up + MCP Adapter installed, API contract doc v1.
-- **Fri (Apr 24):** ADK Go spike — get *any* adk-go agent running with Anthropic + a stub tool.
-- **Mon (Apr 27):** MCP client — connect to test store, discover abilities, cache schemas.
-- **Mon–Tue (Apr 27–28):** Marketing agent persona — reads products, generates a rewrite proposal, lands in `In Review` via `GET /issues`, `POST /issues/:id/approve`, `POST /issues/:id/reject`. Build the kanban board React from Nevena's designs as they land.
+- **Wed–Thu (Apr 22–23):** Deliver API contract v1 to Nevena. (React app skeleton, Go daemon skeleton, WP Design System MCP registration, test store + Companion Plugin all done in Pre-Phase 1 — see above.)
+- **Fri (Apr 24):** ADK Go spike — get *any* adk-go agent running with Anthropic + a stub tool. Hard stop: working by EOD.
+- **Mon (Apr 27):** MCP client in daemon — connect to test store, discover the `wooagent-*` ability surface, cache schemas. Starts from a known-good endpoint (Companion Plugin already serving data).
+- **Mon–Tue (Apr 27–28):** Marketing agent persona — reads products via `wooagent-products/list` + `wooagent-products/get`, generates a rewrite proposal, lands in `In Review` via `GET /issues`, `POST /issues/:id/approve`, `POST /issues/:id/reject`. Build the kanban board React from Nevena's designs as they land.
 
 **Nevena (Wed Apr 22 → Tue Apr 28)**
 - **Wed–Thu (Apr 22–23):** lightweight style tile (colors, type, spacing — persona avatars can slip to Phase 2) so Elizabeth isn't blocked on visual tokens.
@@ -202,11 +219,12 @@ No new features. The whole phase is about running the prototype against the test
 |---|---|
 | **Phase 1 is deliberately over-scoped.** | This is the biggest risk. If Phase 1 slips, Phase 4 (testing) is the absorber — not Phase 5 (demo). Hard stops: by end of Fri Apr 24, ADK Go must be working with a stub tool; by end of Mon Apr 27, MCP client must be talking to the test store. If either misses, cut the Marketing agent's scope to a hard-coded proposal (skip the LLM) so kanban can still demo a real issue flow. |
 | **Scope is ambitious, especially with Elizabeth doing all the coding.** | Three personas is the hard floor — drop to two if Phase 2 slips. Drop Ollama fallback from the demo if time is tight; ship only Anthropic. Consider pre-configuring the app for the demo instead of running onboarding live (preserves the surface in designs but saves build time). |
-| **MCP Adapter auth (device-pair) is new work in the PRD.** | Ship App Password auth as the v0 fallback. Nevena designs the device-pair UX; Elizabeth only implements it if Phase 3 has slack. |
+| **MCP Adapter auth (device-pair) is new work in the PRD.** | App Password auth is the Phase 1 path. Companion Plugin v0.1 already registers `wooagent-device-pair/*` abilities as 501 stubs; full token flow ships in Companion Plugin v0.2, likely post-May 22. Nevena designs the device-pair UX; Elizabeth only wires the frontend if Phase 3 has slack. |
+| **WP Abilities API has silent-failure gotchas.** | Uncovered during the Apr 21 Companion Plugin build: single-slash name regex, `wp_`-prefixed dual init hooks (`wp_abilities_api_categories_init` fires before `wp_abilities_api_init`), and a separate `meta.mcp.public` opt-in for MCP exposure beyond `show_in_rest`. All are silent `_doing_it_wrong()` notices outside `WP_DEBUG`. Documented in `companion-plugin-v0.1-plan.md` "Debugging lessons." The daemon's MCP client should treat ability discovery as the source of truth and never assume a name space exists until it appears in the adapter's response. |
 | **Design-to-code translation fidelity loss.** | Elizabeth uses `@wordpress/components` / `@wordpress/ui` primitives everywhere so translation is mostly composition, not pixel-pushing. The WordPress Design System MCP (`@wordpress/design-system-mcp`) gives her authoritative props and tokens during build, so she isn't improvising API shapes from Nevena's screenshots. Nevena reviews screenshots twice weekly; fidelity fixes are scoped as "close enough for testing." Don't let Phase 5 (3 days only) become a pixel-polish vortex. |
 | **Design-ahead-of-code lag.** | Nevena's Phase 1 is heavily front-loaded so Elizabeth is never blocked: lightweight style tile by end of Thu Apr 23, kanban card + layout by end of Mon Apr 27, full kanban mockups by Tue Apr 28. If Nevena slips on a later surface, Elizabeth defers that screen and uses a placeholder for the demo. |
 | **ADK Go unfamiliarity for Elizabeth.** | Spike on Fri Apr 24 (Day 3 of Phase 1): get *any* ADK Go agent running with Anthropic + a stub tool before committing to MCP integration the following Monday. |
-| **Test Woo store setup blocks everything else.** | Day 1 (Wed Apr 22) priority. InstaWP or WordPress.com sandbox are fastest. Fallback: local `wp-env` on Elizabeth's machine. |
+| **Test Woo store setup blocks everything else.** | **Resolved Tue Apr 21** — Pressable staging site live, MCP Adapter + Companion Plugin v0.1 verified end-to-end. |
 | **Drag-drop interactions are a rabbit hole.** | First, check the WordPress Design System MCP (`wpds://components`) for a drag-drop or sortable primitive — the WP ecosystem has iterated on this for Gutenberg. If nothing suitable exists, use `@dnd-kit/core` wrapped in WP-styled components. Don't over-invest. |
 | **Real LLM cost during dogfooding.** | Set a per-day dollar cap in the model adapter from day 1; cache ability discovery. Use Ollama as a cost-free fallback for persona development when Elizabeth doesn't need frontier-quality output. |
 
@@ -218,7 +236,7 @@ The PRD roadmap v0.1 items not shipping by May 22:
 - Ability browser + agent roster UI
 - Inventory / Accounting / Reporting personas
 - OAuth 2.1 + host-specific auth paths
-- Full Companion Plugin features (staged-changes, guardrails, issue-status sync)
+- **Companion Plugin v0.2:** native device-pair token flow (stubs are in place in v0.1). Staged-changes, guardrails, and issue-status sync remain scoped to PRD v0.3.
 - Hosted UI build at `ui.wooagent.dev`
 - Multi-store, multi-operator
 - Skill pack installer, cost caps, offline mode
