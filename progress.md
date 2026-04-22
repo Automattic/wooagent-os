@@ -82,12 +82,26 @@ Pulled the Wed–Thu foundation tasks forward a day so Phase 1's co-work block w
 - MCP `tools/call mcp-adapter-execute-ability` → `wooagent-products/get` for id=821 returns the full product — real name, short description, long description.
 - Stub abilities return `isError: true` via MCP as designed (friendly 501 message is collapsed by the adapter's error wrapper; passthrough polish tracked in `companion-plugin-v0.1-plan.md`).
 
+### Pulled forward into Wed Apr 22 (morning)
+
+- ✅ **ADK Go spike — green on first run.** Throwaway `daemon/cmd/spike-adk/` binary: one `llmagent` with one `functiontool` (`get_product_stub`), driven by `google.golang.org/adk` v1.1.0's `runner` against a local LM Studio server (`google/gemma-4-e4b` at `localhost:1234/v1`). Gemma correctly invoked the stub with `product_id=821`, consumed the structured reply, and produced a one-sentence marketing line using only the returned fields. Exit 0.
+
+### Findings from the spike
+
+- **PRD §11.1 and §11.10 import path fixed.** Module is `google.golang.org/adk` (v1.1.0 as of Apr 10, 2026), not `github.com/google/adk-go`. The GitHub URL is the repo, not the Go module path. Corrected inline on Apr 22.
+- **No native Anthropic in ADK.** Only `gemini` + `apigee` in `google.golang.org/adk/model`. The `model.LLM` interface is typed on `google.golang.org/genai` content — any custom provider has to translate genai ↔ provider format. For now we use third-party adapters:
+  - Anthropic: `github.com/Alcova-AI/adk-anthropic-go` v0.1.15 (Apr 7, 2026) — wired into go.mod, not used in this spike run but ready.
+  - OpenAI-compatible (LM Studio / Ollama / vLLM): `github.com/huytd/adk-openai-go` — uses `/v1/chat/completions`, which is what LM Studio serves. `amammay/adk-go-openai` is newer but uses the `/v1/responses` endpoint that LM Studio doesn't implement, so rejected.
+- **Third-party-adapter maintenance risk.** Both adapters are small, low-star, single-maintainer repos. **Acceptable for v1 prototype.** Before Phase 5 demo, either vendor them into `daemon/internal/models/` or follow the upstream `google/adk-go-community` effort (PR #242, pending as of Apr 4).
+- **Cost posture.** Local Gemma on LM Studio works well enough for agent-loop smoke tests and early Marketing persona iteration. Flip to Claude Haiku 4.5 when diff quality matters (review/approval testing in Phase 2–4).
+- **`model.LLM` interface hasn't broken since v0.3.0.** huytd's adapter pins v0.3.0 but compiles and runs against our v1.1.0 unchanged — reduces concern about ADK churn.
+
 ### Remaining Wed Apr 22 – Tue Apr 28
 
 - ⏳ **Wed Apr 22** (both): user-flow agreement on the 3 surfaces (60 min session); design-delivery conventions (share-link format, spec template, cadence).
 - ⏳ **Wed Apr 22** (Elizabeth): API contract v1 delivered to Nevena.
 - ⏳ **Wed–Thu** (Nevena): lightweight style tile (colors, type, spacing).
-- ⏳ **Fri Apr 24** (Elizabeth): **ADK Go spike** — get any `github.com/google/adk-go` agent running with Anthropic + a stub tool. Hard stop: working by EOD.
+- ✅ **Wed Apr 22** (pulled forward from Fri Apr 24): **ADK Go spike landed.** Agent loop runs end-to-end against local LM Studio (Gemma 4 e4b) — model calls stub tool, gets structured response, composes final text. See "Pulled forward into Wed Apr 22" below. Anthropic adapter is already wired into `go.mod` so flipping providers is a line change, not a dep change.
 - ⏳ **Fri–Mon Apr 24, 27** (Nevena): kanban card anatomy + board-layout wireframes delivered by EOD Mon.
 - ⏳ **Mon Apr 27** (Elizabeth): MCP client in daemon — connect to test store, discover the `wooagent-*` ability surface, cache schemas. Hard stop: talking to the store. (Unblocked ahead of schedule thanks to Tue-eve plugin work.)
 - ⏳ **Mon–Tue Apr 27–28** (Elizabeth): **Marketing agent persona** — reads products via `wooagent-products/list` + `wooagent-products/get`, generates a rewrite proposal, lands in `In Review` via the existing HTTP endpoints; kanban board React translated from Nevena's designs as they land.

@@ -1,6 +1,7 @@
 # Go
 /daemon/bin/
 /daemon/wooagent
+/daemon/spike-adk
 *.exe
 *.exe~
 *.dll
