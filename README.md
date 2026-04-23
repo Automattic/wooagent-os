@@ -9,9 +9,10 @@ See `wooagent-os-prd V2.md` for the full PRD and `WooAgent_Pitch.md` for the sho
 ## What makes it different
 
 - **MCP-native.** WooAgent OS connects to any WordPress/WooCommerce site via the WordPress MCP Adapter. Every plugin that registers abilities through the WP Abilities API — WooCommerce, Yoast SEO, ACF, Gravity Forms, 70+ others — is automatically available to the agent fleet. No bespoke integrations.
-- **Local-first.** The whole stack runs on a single operator machine. Store data, run logs, model calls, and agent state stay on the host. No cloud account required.
+- **Local-first, no WordPress.com required.** The whole stack runs on a single operator machine against any self-hosted Woo store. Store data, run logs, model calls, and agent state stay on the host. A Jetpack connection is optional and unlocks additional WPCOM-routed abilities (an enhanced tier), but is never a prerequisite for core functionality.
 - **Model-agnostic.** Point the daemon at any frontier provider (Anthropic, Google, OpenAI, xAI) or any local runtime (LM Studio, Ollama, llama.cpp). The agent fleet runs identically.
-- **Propose / approve.** Agents never write to the store directly. Every change lands as an issue with a diff the operator reviews. A run log captures every model call, every ability call, and every state change.
+- **Pre-signed, policy-enforced abilities.** The agent doesn't get to invent what it can call. WooAgent OS ships a curated manifest of trusted plugin abilities with canonical schema hashes and per-persona scope. A deterministic non-LLM middleware verifies every invocation before it reaches the store. Prompt-injected or hallucinated tool calls are denied, not executed. Plugin updates that silently change a schema auto-demote the affected ability to unapproved until the operator reviews.
+- **Propose / approve.** On top of trust enforcement, agents never apply changes directly by default. Every write lands as an issue with a diff the operator reviews. A run log captures every model call, every ability call, and every state change.
 
 ## Architecture
 
@@ -65,9 +66,11 @@ Early development. What's live:
 - **Go daemon** — CLI surface, SQLite store + migrations, REST API with bearer auth, agents/issues/runs schemas, embedded prompt + skill registry, telemetry scaffolding.
 - **React UI** — Vite + `@wordpress/components` shell, connection flow, kanban skeleton.
 - **Companion plugin v0.1** — `wooagent-products/*`, `wooagent-orders/*`, `wooagent-customers/*` CRUD abilities, verified end-to-end against a real WooCommerce store over MCP.
-- **Agent runtime** — ADK Go wired into the daemon; stub-tool agent loop verified end-to-end against a local model.
+- **Agent runtime, end-to-end** — ADK Go agent loop verified against a live WooCommerce store: model → ADK orchestrator → MCP client → `mcp-adapter-execute-ability` → `wooagent-products/list` → real product data → grounded text (no hallucination). Driven by local `gemma-4-e4b-it` on LM Studio; Anthropic and other providers slot in via config.
+- **MCP client** — Streamable HTTP + JSON-RPC 2.0 client with session-id tracking, Basic Auth, and pass-through to the WP MCP Adapter's three-meta-tool pattern (`discover-abilities`, `get-ability-info`, `execute-ability`).
+- **Pre-signed ability manifest** — shipped default with 25 real entries covering the Companion Plugin baseline, the WooCommerce AI plugin's local abilities, Jetpack Forms, and WP core — every entry with a SHA-256 schema hash computed from live schemas, so drift detection is live from day one. Operator overlay support at `~/.wooagent/manifest.json`. A `manifest-compute` dev tool refreshes the seed as plugin schemas change.
 
-Up next: live MCP client in the daemon, first production persona (Marketing), kanban React translated from design.
+Up next: Policy Enforcement Point middleware (the deterministic gate between orchestrator and MCP client), first production persona (Marketing), kanban React translated from design.
 
 ## License
 
