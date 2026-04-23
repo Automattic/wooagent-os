@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-23T16:56:16Z",
+  "entries": [
+    {
+      "ability": "core/get-site-info",
+      "namespace_owner": "wordpress/wordpress",
+      "source_url": "",
+      "schema_hash": "sha256:f2b78fca3a03b12d650ae4f6b8fe6b82b914fcc7da94195906c5e3b4b4d44a75",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "accounting",
+        "reporting",
+        "sales-support",
+        "chief-of-staff"
+      ],
+      "description": "Returns site information configured in WordPress. By default returns all fields, or optionally a filtered subset."
+    },
+    {
+      "ability": "core/get-environment-info",
+      "namespace_owner": "wordpress/wordpress",
+      "source_url": "",
+      "schema_hash": "sha256:adea6efc20e4a1b3b8abe978c343eb6f5823dac01deb5c886bc4cd32d6b65b35",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "accounting",
+        "reporting",
+        "sales-support",
+        "chief-of-staff"
+      ],
+      "description": "Returns core details about the site's runtime context for diagnostics and compatibility (environment, PHP runtime, database server info, WordPress version)."
+    },
+    {
+      "ability": "wooagent-products/list",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:dd5b020d0c9e3ab7319b88882397b1ee4dede5b2892280e27eedd28748e16435",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "List WooCommerce products with optional filters. Returns a lightweight summary per product."
+    },
+    {
+      "ability": "wooagent-products/get",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:c63eb1b81015447eafbcb75d832b5216f9d44277fa1a81ae289dc58307af3a2e",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Read a single product including full description, short description, and SEO meta."
+    },
+    {
+      "ability": "wooagent-products/update",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:6bd03352cddef9b27fedba25722fcc0981a71d89d5b24c08e23af326f24c2dd6",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Update any subset of editable product fields. Only the fields provided are modified."
+    },
+    {
+      "ability": "wooagent-orders/list",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:1c3313b134bbcdf775ff7b1fd02cce1a655204f74809acb1328360493124efcf",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "accounting",
+        "reporting",
+        "sales-support"
+      ],
+      "description": "List WooCommerce orders, filterable by status and date."
+    },
+    {
+      "ability": "wooagent-orders/get",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:8fd2dec8c2abf69d48058b6fc96b537e6d6eb3fbb669299de28b8538a820f3de",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "accounting",
+        "reporting",
+        "sales-support"
+      ],
+      "description": "Read a single order with full line items, billing, and shipping details."
+    },
+    {
+      "ability": "wooagent-orders/add-note",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:4eafc43879dc4ccaeadfdb87368aacb543bb8944e8d2eff3c5296be201b3fcc5",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "accounting",
+        "reporting",
+        "sales-support"
+      ],
+      "description": "Add a note to an order. Customer-facing notes are emailed to the customer; internal notes are visible only in wp-admin."
+    },
+    {
+      "ability": "wooagent-customers/get",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:23054023292bf609ba8f6d4a243b7a49ec5e296a8a3bee8acda128770d4fe361",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Read a single WooCommerce customer including lifetime spend and order count."
+    },
+    {
+      "ability": "wooagent-device-pair/request",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:daa7810fd7c6a97ac6711d24a1e31c8e83f9f955479a34a68864e32b7c54e3c5",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [],
+      "description": "Daemon-initiated: requests a short pairing code the operator can enter in wp-admin. v0.2."
+    },
+    {
+      "ability": "wooagent-device-pair/confirm",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:bf0a4d18513a6b37c716690cd9ef8ee911f3ddc611d98e88a366731ed3d5ce06",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [],
+      "description": "Operator-facing: approves a pending pairing code and mints a scoped device token. v0.2."
+    },
+    {
+      "ability": "wooagent-device-pair/revoke",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:10d32d6e6645c00bd9eb6b2ef51ed3105911d6900a5aded3469bc6898ad65826",
+      "scope": "apply",
+      "reversibility": 0.2,
+      "personas": [],
+      "description": "Revoke a previously-paired device token. v0.2."
+    },
+    {
+      "ability": "woocommerce/create-bookable-product",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:beb68d044ff5ef4829e899200f95fb4c9825600fd73e7fee3a5272357c589120",
+      "scope": "propose",
+      "reversibility": 0.7,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Guides merchants through defining bookable services (e.g., massage, workshop) by asking questions about duration, price, location, and provider details. Requires WooCommerce Bookings plugin."
+    },
+    {
+      "ability": "woocommerce/create-product",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:e8701a04043810b69eb4cb8ef2abcb155ca5e8cf69237039899940f46a74c8d3",
+      "scope": "propose",
+      "reversibility": 0.7,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Create a new product using simplified types: physical (tangible items), digital (downloadable files), or affiliate (external products for commission)"
+    },
+    {
+      "ability": "woocommerce/get-product",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:ae86f0d486e5500fe51ef8ef8d749408e6c8618b618ca8b07d4b31c6dec62c8b",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Retrieve detailed information for a WooCommerce product by ID, including pricing, inventory, categories, and tags."
+    },
+    {
+      "ability": "woocommerce/update-product",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:f0e7dfcfdf2d9f41810e08b3b569fd284887c28cbf0cd3b333542341d3a48569",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Back-end tool for updating a product. Applies changes immediately to the database and confirms they were saved. Use this tool when: (1) the user is not currently on a product edit page, (2) the user is on a product page but wants to modify a different product, (3) the user specifies a product by ID without having it open, or (4) the user requests a bulk update. If the user is editing a product and wants to change that same product, use the front-end tool instead to let them review before saving."
+    },
+    {
+      "ability": "woocommerce/search-products",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:e99453aa4c97b62515f0640bc3b91f9a910be45c6895f0b0de991bb3a3c1aa57",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Search for existing products by name, SKU, or other attributes. Use this to find products when the user references them by name or identifier."
+    },
+    {
+      "ability": "woocommerce/get-order",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:255e35c27d597d0edd64b325d00b26df913232ac4104be4d002e28dd64170c18",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Retrieve detailed information for a WooCommerce order by ID"
+    },
+    {
+      "ability": "woocommerce/create-product-category",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:c857b5a9d56abe1e745e6ca8539b5ede562db7fe3bd1576059676c35d47af59a",
+      "scope": "propose",
+      "reversibility": 0.7,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Create a new product category or subcategory in the store taxonomy"
+    },
+    {
+      "ability": "woocommerce/create-product-tag",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:3e1517883e299ed68ed19ffb9147b3ece25e67cffab1f5fc1b3232e19c29e491",
+      "scope": "propose",
+      "reversibility": 0.7,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Create a new product tag in the store"
+    },
+    {
+      "ability": "woocommerce/manage-shipping-zones",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:3d637a09a587ae12e757fbeed2d065a17833a0882fba6db62343dd81ce24426d",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Create, update, delete, and manage shipping zones"
+    },
+    {
+      "ability": "woocommerce/analyze-shipping-needs",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:2e61f2e6f3bafdf14e4bda28d8ab5321d422fda347562f00ef8799736718c849",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Analyze store data to recommend shipping zones and methods for US-based stores"
+    },
+    {
+      "ability": "jetpack-forms/get-responses",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:e6dfc984787b5fbc5b10e8ba1b2f6a3b451dd9bae620af4edceae38b354c606b",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "List or search form responses. Returns response data including sender info, form fields, and metadata. Supports filtering by status, date range, read state, and search terms."
+    },
+    {
+      "ability": "jetpack-forms/update-response",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:5a1ca11dc635d3fd06b9bb5358341e593ef0c49ccc2dabddddb4ab6047701054",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Modify a form response. Use to mark as spam, move to trash, restore from trash, or toggle read/unread state."
+    },
+    {
+      "ability": "jetpack-forms/get-status-counts",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:fc103e7bf60c0eacabd09242bdbd734d1d3101ad3b3bfd5631727bd6ac993ba7",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Get a summary of form responses grouped by status. Returns counts for inbox (active), spam, and trash. Useful for dashboard stats or checking if there are new responses."
+    }
+  ]
+}
