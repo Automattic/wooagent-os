@@ -53,6 +53,7 @@ WordPress built the protocol layer. WooAgent OS is the operations layer on top o
 4. An agent marketplace or agent-to-agent commerce. Agents collaborate internally; external exchange is out of scope.
 5. Browser-automation agents. Agents work via MCP, REST API, and file system. Headless-browser work is a later extension.
 6. Replacing the WordPress AI provider plugin ecosystem. WooAgent OS runs its own model adapters locally for agent inference. It does not duplicate or compete with `wp_ai_client_prompt()` or the WP provider plugins.
+7. A WordPress.com account or Jetpack connection as a hard dependency. WooAgent OS runs end-to-end against any self-hosted WordPress/Woo store with the MCP Adapter installed; no SaaS tether is required or used by the core path. Stores that do have a Jetpack connection get access to an enhanced ability surface (see §11.7), but this is strictly an optional enhancement.
 
 ## 5. Target Users
 
@@ -296,20 +297,23 @@ Each persona is opinionated and shipped configured. Operators can disable, clone
 
 WooAgent OS agents have access to two distinct categories of capabilities: **MCP abilities** (remote, on the WordPress site) and **local skills** (computational, running inside WooAgent OS).
 
-### 8.1 MCP Abilities (Remote, Auto-Discovered)
+### 8.1 MCP Abilities (Remote, Discovered Universally, Trust Curated)
 
-These are provided by the store. WooAgent OS discovers them dynamically on connection and caches the schemas. Agents invoke them through the MCP client.
+These are provided by the store. WooAgent OS discovers every ability registered via `wp_register_ability()` on the connected store, caches the schemas, and makes them visible in the Ability explorer. **Discovery is universal. Trust is curated** — which abilities are actually invocable by which agents is governed by the pre-signed manifest described in §8.4, not by the fact of discovery alone.
+
+**Baseline (always present on any store running our Companion Plugin):**
+The `wooagent-*` ability namespaces registered by the WooAgent OS Companion Plugin (§11.4) — products, orders, customers, device pairing, and (from v0.3) staged changes and guardrail policy. These are pre-signed by construction: we ship both sides of the contract.
 
 **WooCommerce core abilities** (registered under `woocommerce/*`):
-Products (list, get, create, update), orders (list, get, refund), customers (list, get), categories, tags, coupons, stock, variations. WooCommerce also publishes a demo plugin showing third-party developers how to register custom abilities.
+Products (list, get, create, update), orders (list, get, refund), customers (list, get), categories, tags, coupons, stock, variations. When the WooCommerce AI plugin is installed, its 10 local `woocommerce/*` abilities (`analyze-shipping-needs`, `create-bookable-product`, `manage-shipping-zones`, `search-products`, etc.) light up alongside the core set.
 
-**Plugin-provided abilities** (auto-discovered, zero config):
-Yoast SEO (`yoast-seo/*`), ACF (`acf/*`), Ninja Forms (32 abilities across 7 capability areas), WS Form (full MCP server), Gravity Forms via GravityMCP, WPForms, Jetpack, MainWP, WPCode, hCaptcha, miniOrange SSO/OAuth/LDAP, and any other plugin using `wp_register_ability()`.
+**Plugin-provided abilities** (discovered from any plugin using `wp_register_ability()`):
+Yoast SEO (`yoast-seo/*`), ACF (`acf/*`), Jetpack Forms (`jetpack-forms/*`), Ninja Forms, WS Form, Gravity Forms via GravityMCP, WPForms, Jetpack, MainWP, WPCode, hCaptcha, miniOrange SSO/OAuth/LDAP, and any other plugin using the Abilities API.
 
 **WordPress core abilities** (registered by WordPress 7.0 itself):
-Posts, pages, media, users, settings, taxonomies. Includes proposals in active development: `core/get-settings`, `core/update-settings`, `core/get-user`, `core/get-post`.
+Posts, pages, media, users, settings, taxonomies, plus `core/get-site-info`, `core/get-environment-info`. Includes proposals in active development: `core/get-settings`, `core/update-settings`, `core/get-user`, `core/get-post`.
 
-The key design principle: **WooAgent OS does not maintain a list of supported plugins.** It connects to MCP, discovers what's there, and makes it available. If an operator installs a new plugin tomorrow that registers abilities, agents can use them immediately.
+A freshly-discovered plugin namespace is not automatically trusted. It is surfaced to the operator through the Ability explorer with a clear `unapproved` badge, and the operator can promote it to `operator-approved` after inspecting the schema, or it can be picked up by the pre-signed manifest in a subsequent WooAgent OS release. See §8.4 for the full trust model.
 
 ### 8.2 Local Skills (Computational, Built-In)
 
@@ -345,6 +349,69 @@ The `WordPress/agent-skills` repo contains 14 portable instruction bundles that 
 - **Chief of Staff:** `wp-project-triage`
 
 Agent Skills are installed via `npx skills add` or bundled with the WooAgent OS distribution. They are Markdown files, not code. They update independently of WooAgent OS releases.
+
+### 8.4 Ability Trust Model — Pre-Signed Manifest and Policy Enforcement
+
+LLMs produce tool calls, but LLMs are untrusted: prompt injection, hallucinated arguments, and compromised plugin updates ("rug pulls") can all result in a model deciding to invoke an ability that should not be invoked. WooAgent OS's stance is that **trust in a tool call cannot come from the model's self-report** — it has to be decided ahead of time, enforced deterministically at runtime, and cryptographically grounded where possible. This section describes how.
+
+The design has two layers: a **pre-signed manifest** (the allowlist, decided ahead of time) and a **Policy Enforcement Point** (the runtime gate, enforced at every invocation).
+
+#### 8.4.1 The pre-signed manifest
+
+A curated JSON document shipped with every WooAgent OS release. It enumerates trusted plugin namespaces and the specific abilities within each namespace that the daemon is willing to invoke by default. Each manifest entry contains:
+
+- **Fully-qualified ability name** (e.g., `yoast-seo/meta.update`, never bare `meta.update`). Prevents namespace impersonation.
+- **Namespace owner and source-of-truth URL** (plugin slug on WordPress.org, or GitHub repo for first-party abilities). Human-readable provenance.
+- **Expected schema hash** — a hash over the ability's `input_schema` + `output_schema` as registered. Detects silent contract changes.
+- **Version constraint** — semver range or plugin version range the manifest entry is valid for.
+- **Default persona mappings** — which personas get access (e.g., `yoast-seo/meta.update` maps to Marketing & SEO).
+- **Default scope** — `read`, `propose`, or `apply`. Least-privilege by default; `apply` is opt-in per ability.
+
+The manifest lives at `~/.wooagent/manifest.json` after install, is inspectable by the operator, and is extensible: operators can add entries for abilities they've reviewed themselves. Upstream additions (new plugins, updated schema hashes for plugin releases) flow through pull requests to `github.com/wooagent-os/manifest` and ship with daemon releases. The manifest file itself is signed by the WooAgent OS release key; the daemon refuses to load an unsigned or mismatched manifest.
+
+**Three trust states apply to every discovered ability:**
+
+- **`pre-signed`** — matches a manifest entry, schema hash verifies, version constraint holds. Invocable by mapped personas at the manifest's default scope.
+- **`operator-approved`** — not in the manifest, but the operator has explicitly enabled it after reviewing the schema. Invocable only by the personas and at the scope the operator specified.
+- **`unapproved`** — discovered but not trusted. Visible in the Ability explorer, dormant to every persona. Cannot be invoked.
+
+**Drift detection.** On every connection and every periodic re-sync, the daemon recomputes the schema hash of each discovered ability and compares it to the manifest. A mismatch auto-demotes the ability from `pre-signed` to `unapproved` and alerts the operator: *"the `yoast-seo/meta.update` ability's schema changed since the last manifest update; review required."* This catches plugin updates that silently alter contracts, as well as a malicious plugin replacing a legitimate namespace.
+
+#### 8.4.2 The Policy Enforcement Point (PEP)
+
+The PEP is deterministic Go code sitting between the agent orchestrator and the MCP client. Every ability invocation from every persona flows through it. There is no orchestrator → MCP shortcut. The PEP is **not an LLM**, holds no model state, and cannot be prompt-injected. Its behavior is reproducible, auditable, and covered by unit tests — not by vibes.
+
+On every invocation, the PEP checks, in order:
+
+1. **Trust state.** Is the ability `pre-signed` or `operator-approved`? If not, deny with `ability_unapproved`.
+2. **Persona scope.** Is this persona permitted to invoke this ability? (Manifest default, plus operator overrides.) Deny with `persona_forbidden` otherwise.
+3. **Schema validation.** Do the arguments validate against the ability's `input_schema`? Deny with `invalid_arguments` otherwise. Structural, not semantic.
+4. **Policy predicates.** Do the arguments satisfy any operator-configured policies? (e.g., *"never invoke `woocommerce/products-update` with `price < cost + 10%`,"* *"never invoke `orders-refund` for an order >$500 without explicit per-issue approval."*) Deny with `policy_violation` otherwise.
+5. **Budgets.** Is this invocation within the persona's daily token/cost/call budgets? Deny with `budget_exceeded` otherwise.
+6. **Scope sufficiency.** If this is a write and the ability's scope is `read` or `propose`, deny with `scope_insufficient` unless the call is explicitly staging a proposal (not applying it).
+
+If all checks pass, the PEP mints a short-lived scoped capability token bound to this single invocation, routes the call through the MCP client, and records a full **chain-of-identity** record to the audit log:
+
+```
+plan_id → task_id → step_id → persona → model → prompt_hash → ability → arguments → outcome
+```
+
+Every row is append-only, tamper-evident, and queryable. See §15.
+
+If any check fails, the orchestrator receives a typed `permission_denied` error with the reason code. The agent can retry with adjusted arguments, but cannot bypass the PEP.
+
+#### 8.4.3 Invariants
+
+- The agent never holds long-lived store credentials. The OS keychain holds the device-pair token (or Application Password); only the PEP accesses it.
+- No ability can be invoked except through the PEP. There is no direct orchestrator → MCP client path.
+- Manifest updates never take effect without operator review — the daemon shows a diff at upgrade time and waits for confirmation.
+- Every ability call is traceable to an operator-approved plan, task, or explicit per-issue sign-off.
+
+#### 8.4.4 What this buys us
+
+- **Prompt injection becomes an inconvenience, not a breach.** A malicious prompt that convinces the model to call `woocommerce/products-update { id: 1, price: 0 }` is simply denied by the policy predicate.
+- **Rug-pull resistance.** A plugin update that silently changes an ability's contract to do something different gets caught by schema-hash drift and surfaces for operator review before any agent can invoke the new version.
+- **Auditable autonomy.** The operator can always answer "why did the agent do that?" because every invocation has a cryptographically-linked chain back to a human approval.
 
 ## 9. Kanban UX
 
@@ -388,13 +455,106 @@ The primary interface is a kanban board modeled on modern issue trackers. Every 
 - One-click rerun of any past run with same or different model.
 - **Ability explorer.** Click any discovered ability to see its schema, try a test invocation, and see which agents use it.
 
-## 10. Store Integration Model
+## 10. Insights, Planning, and Background Execution
 
-### 10.1 MCP Endpoint (Primary Mode)
+WooAgent OS is not a chat-first assistant that waits to be asked. The daemon is designed to run continuously against a connected store, surface what matters, propose what to do, and — once approved — execute in the background while the operator gets on with their day. This section describes the work loop that sits between raw MCP access and the Kanban surface.
+
+The loop has four stages: **insight → plan → task → execution.** Each stage is independently useful (an operator can open a plan from scratch without an insight, or approve a bare task without a plan), and each stage persists as a first-class object in the daemon's store.
+
+### 10.1 Insight generation and scoring
+
+Agents — primarily Chief of Staff, supported by the persona fleet — generate **insights** from observed store state. Insights are short, structured findings: "15 products have no images," "orders from Germany spiked 40% week-over-week," "three coupons expire tomorrow." Insight generation runs on a schedule (daily by default, configurable per persona), not synchronously on UI load.
+
+Every insight is scored across four dimensions:
+
+| Dimension | Range | What it captures |
+| --- | --- | --- |
+| **Impact** | 0.0–1.0 | Estimated effect on revenue, conversion, or operator time if acted on. |
+| **Confidence** | 0.0–1.0 | How certain the agent is that the finding is real and not noise. |
+| **Urgency** | 0.0–1.0 | How time-sensitive the action is (expiring coupon = high; blog topic idea = low). |
+| **Reversibility** | 0.0–1.0 | How easy it is to undo. Editing a draft = 1.0; issuing a refund = 0.2; deleting an order = 0.0. |
+
+Scoring serves two purposes. First, it **ranks** insights on the Kanban Backlog so the operator sees the right things on top. Second, it **feeds policy**: the reversibility dimension is a direct input to the approval-gate rules in §10.5. A highly-reversible action can be auto-run inside an approved plan; a low-reversibility action always surfaces for review regardless of how it was initiated.
+
+Insights are not a separate UI surface. They appear in the Kanban Backlog as issues tagged `insight`, with the four scores visible on the card. Clicking "Explore this" on an insight opens the planning surface described in §10.2 with the insight attached as context.
+
+### 10.2 The plan as a durable artifact
+
+When an operator asks an agent to plan something — either from an insight or from scratch — the agent writes a **plan**: a markdown document, separate from the chat, that evolves through conversation. Plans are owned by the daemon and persisted on disk, not ephemeral chat state.
+
+Why a separate document:
+
+- **Chat scrolls; plans don't.** A plan embedded in conversation history gets buried. A plan as a standalone artifact stays readable, diffable, and shareable.
+- **Any UI can render it.** Because the plan is a markdown file on the daemon, the React app, the CLI (`wooagent plan show`), and any future surface can all display the same artifact.
+- **It survives restart.** Plan drafts persist by default. An operator can close the laptop, come back tomorrow, and the plan is where they left it.
+
+The agent evolves the plan through two internal abilities:
+
+- `wooagent/plan.start` — opens a new plan with initial content, linked to an issue.
+- `wooagent/plan.update` — replaces the plan body.
+
+Plans are freeform markdown. No required template. The agent writes whatever structure fits the problem. The operator can edit the plan directly (contenteditable in the React UI, `$EDITOR` from the CLI) or steer it through conversation with the agent.
+
+### 10.3 Plan-to-task conversion
+
+When the operator is happy with a plan, they **approve** it. Approval does two things:
+
+1. A structured task is extracted from the plan: `title`, `goal`, ordered `steps[]`, estimated cost/time, persona assignment. Extraction uses an LLM call against the same provider the agent is running on.
+2. The task is persisted to the daemon's task store (SQLite, not WordPress options) and appears in the Kanban `Todo` column.
+
+The plan itself stays attached to the task as its source document. Operators (and agents) can re-open the plan later to see the thinking behind a completed task. Re-extraction is cheap and idempotent, so editing the plan after the fact and re-approving is supported.
+
+### 10.4 Step semantics: goals, not tool calls
+
+Steps inside a task are written as **goals**, not as specific ability invocations. "Find all products without images and list their IDs" is a step. "Call `woocommerce/products.list` with `meta_query={_thumbnail_id: NOT EXISTS}`" is not.
+
+Each step runs as a fresh orchestrator session with access to the assigned persona's abilities. The orchestrator reasons about which tools to use, retries on failure, tries alternatives when a tool is unavailable, and passes context forward to the next step. This is the pattern the ADK-Go agent loop already implements — steps are just goal-scoped sessions chained together.
+
+This matters because stores differ. The same goal ("tag every product that hasn't sold in 90 days") may require `woocommerce/*` abilities on one store and a mix of `woocommerce/*` + custom plugin abilities on another. Goals survive that variation; tool-call recipes don't.
+
+### 10.5 Approval gates and provenance
+
+Every task starts in one of two approval states, determined by its **provenance**:
+
+| Provenance | Initial state | Rationale |
+| --- | --- | --- |
+| Operator approved a plan, plan was extracted into this task | `approved`, ready to run | The operator already reviewed and signed off on the plan. Re-asking would be noise. |
+| Agent spawned this task on its own (e.g., Chief of Staff chained follow-up work) | `pending_approval` | The operator has not seen this. Human-in-the-loop required before anything runs. |
+
+Within an approved task, individual steps may still surface for review based on **reversibility**. A step whose primary ability has `reversibility < 0.5` (storewide price change, refund issuance, bulk deletion) transitions the task to Kanban's **In Review** column and waits for per-step approval, even though the task as a whole is approved. This keeps the "approve once" ergonomics of a plan without opening the door to irreversible damage from a misread step.
+
+Operators can override the reversibility threshold per persona in settings. The default threshold for v1 is 0.5.
+
+### 10.6 Background execution
+
+Once a task is approved, the daemon runs it in the background. Step by step. Without the operator on the page. The operator can close the UI, close the browser, shut the laptop — the daemon continues.
+
+This is where WooAgent OS's architecture pays off relative to browser-bound agents. Prototypes elsewhere in the ecosystem achieve background execution by dispatching steps to WPCOM async jobs over Jetpack Connection, because the browser is the only always-available runtime in that stack. WooAgent OS already has an always-available runtime: the Go daemon. There is no round-trip to WPCOM, no per-step async job, no cold-start. A step's orchestrator session runs in-process and calls MCP abilities directly against the connected store.
+
+Execution produces:
+
+- **Step results** — structured output attached to each step, visible in the issue detail view.
+- **Run logs** — every model call, every ability invocation, every retry, timestamped and replayable (§9.2).
+- **Change deltas** — every write ability emits a structured `_delta` record (before/after) attached to the run log. Deltas are the substrate for v2 undo (see §17 Roadmap); v1 uses them for diffs in the Kanban `In Review` and `Done` columns.
+
+Tasks that fail or need attention transition back to `In Review` with the partial state preserved. The operator can modify the plan, re-approve, and resume — the daemon picks up from the first incomplete step.
+
+### 10.7 Deferred to later versions
+
+The following are explicitly out of scope for v1 and tracked in §17 Roadmap:
+
+- **Smart Undo ability.** A generic `wooagent/undo` tool that reads `_delta` records from a task's run log and reverses them. v1 captures the deltas; v2 ships the undo.
+- **Inline task progress components.** Rendering live task progress inside a chat message or plan document, rather than only in the Kanban issue view.
+- **Mid-execution interaction.** Pausing a running task to ask the operator a clarifying question, then resuming. v1 runs approved tasks to completion or to failure; mid-run prompts are a v2 design question.
+- **Auto-approval policy learning.** Letting the operator teach the system "always auto-approve price changes under $5" rather than setting a per-persona threshold. v1 exposes thresholds; v2 could learn them from approval history.
+
+## 11. Store Integration Model
+
+### 11.1 MCP Endpoint (Primary Mode)
 
 The operator connects a live WordPress/WooCommerce store by its MCP endpoint URL. Authentication uses one of two mechanisms, in priority order:
 
-1. **Device pairing via the Companion Plugin (default, recommended).** On first connection, the daemon displays a short pairing code. The operator opens **wp-admin → WooAgent → Pair device**, enters the code, and approves. The Companion Plugin mints a scoped token bound to a WooAgent device identity (not a WP user), which the daemon stores in the OS keychain. Tokens are independently revocable per-device from wp-admin. See §10.4. This is the primary path and the default in `wooagent init`.
+1. **Device pairing via the Companion Plugin (default, recommended).** On first connection, the daemon displays a short pairing code. The operator opens **wp-admin → WooAgent → Pair device**, enters the code, and approves. The Companion Plugin mints a scoped token bound to a WooAgent device identity (not a WP user), which the daemon stores in the OS keychain. Tokens are independently revocable per-device from wp-admin. See §11.4. This is the primary path and the default in `wooagent init`.
 
 2. **Application Password (fallback, always works).** For stores that have not yet installed the Companion Plugin — or for operators who prefer not to — the operator generates a WordPress Application Password (native since WP 5.6), and pastes it into `wooagent init`. The daemon then authenticates as that WP user; the user's role and capabilities determine which abilities are invokable.
 
@@ -415,37 +575,66 @@ All write operations go through MCP with a configurable staging mode: staged cha
 - InstaWP includes a built-in MCP server on every site.
 - Self-hosted sites install the MCP Adapter plugin (free, official WordPress project, 800+ GitHub stars).
 
-### 10.2 REST API Fallback
+### 11.2 REST API Fallback
 
 For stores not yet on WordPress 7.0 or without the MCP Adapter, WooAgent OS can connect via WooCommerce REST API key pair (consumer key + secret). This mode has reduced capability: agents can only access WooCommerce data (products, orders, customers), not the broader WordPress ecosystem. The UI displays a clear notice that MCP mode is recommended.
 
-### 10.3 Webhooks
+### 11.3 Webhooks
 
 The orchestrator optionally subscribes to WooCommerce webhooks for real-time event ingestion (new orders, stock changes, customer registration). Requires an HTTPS ingress (via ngrok, Cloudflare Tunnel, or operator-provided tunnel). Webhook events are converted to issues and routed to the appropriate persona.
 
-### 10.4 WooAgent OS Companion Plugin (Optional)
+### 11.4 WooAgent OS Companion Plugin (Baseline Ability Provider)
 
-A lightweight WordPress plugin that registers WooAgent-specific abilities on the store side. Shipped in two tiers:
+The Companion Plugin is the **baseline ability surface** that guarantees WooAgent OS works out of the box on any WooCommerce store, without requiring the operator to install or configure any other plugin. It is pre-signed by construction (we ship both sides of the contract) and is the anchor that makes the no-WPCOM / no-third-party-dependency stance in §4 concrete. It ships in two tiers.
 
-**Minimal Companion Plugin (v0.1, required for device pairing):**
-- `wooagent/device-pair` -- implements the device-pairing flow: exposes a **WooAgent → Pair device** screen in wp-admin, validates operator-entered pairing codes against pending requests from a WooAgent daemon, mints scoped tokens bound to a WooAgent device identity, and provides per-device revocation. This replaces hand-managed Application Passwords as the default auth path and gives operators a Claude-Code-style pairing experience instead of basic-auth credential copy-paste.
+**Minimal Companion Plugin (v0.1, the baseline):**
+
+- **`wooagent-products/*`** — `list`, `get`, `update`. A minimum-viable product-catalog surface that every WooAgent OS install can rely on, independent of whether the WooCommerce AI plugin (or any other plugin) is present.
+- **`wooagent-orders/*`** — `list`, `get`, `add-note`. Order inspection and annotation.
+- **`wooagent-customers/*`** — `get`. Customer lookup.
+- **`wooagent-device-pair/*`** — `request`, `confirm`, `revoke`. Implements the device-pairing flow: exposes a **WooAgent → Pair device** screen in wp-admin, validates operator-entered pairing codes against pending requests from a WooAgent daemon, mints scoped tokens bound to a WooAgent device identity, and provides per-device revocation. This replaces hand-managed Application Passwords as the default auth path and gives operators a Claude-Code-style pairing experience instead of basic-auth credential copy-paste.
 
 **Full Companion Plugin (v0.3):**
-- `wooagent/staged-changes` -- allows the store admin to see and approve changes staged by agents directly in wp-admin.
-- `wooagent/issue-status` -- syncs issue status between WooAgent OS and a wp-admin dashboard widget.
-- `wooagent/guardrail-policy` -- lets the store admin define per-ability guardrails that WooAgent OS respects.
 
-The Minimal plugin is strongly recommended (it is the default path in `wooagent init` and the one the UX is designed around), but not required: operators can always fall back to WordPress Application Password auth (§10.1) and skip the plugin entirely. The Full plugin is additive — once the Minimal plugin is installed, enabling the Full features is an in-plugin toggle, not a separate install.
+- `wooagent-staged-changes/*` — allows the store admin to see and approve changes staged by agents directly in wp-admin.
+- `wooagent-issue-status/*` — syncs issue status between WooAgent OS and a wp-admin dashboard widget.
+- `wooagent-guardrail-policy/*` — lets the store admin define per-ability guardrails (policy predicates the PEP in §8.4.2 will enforce).
 
-### 10.5 Local Repo (Optional Mode)
+**Positioning.** The Minimal plugin is the default path in `wooagent init`, the UX is designed around it, and every persona in §7 has at least one invocable ability from it. Operators can still fall back to WordPress Application Password auth (§11.1) and skip the Companion Plugin entirely — WooAgent OS will connect and discover whatever other abilities the store has — but in that configuration, the available ability surface is entirely dependent on what third-party plugins the store has installed, and may be empty. Installing the Minimal plugin is the only way to guarantee a working baseline. The Full plugin is additive — once the Minimal plugin is installed, enabling the Full features is an in-plugin toggle, not a separate install.
+
+**Trust.** Because WooAgent OS ships the Companion Plugin, the manifest entries for `wooagent-*/*` abilities are signed by the WooAgent OS release key with matching schema hashes. They will always be `pre-signed` on any release version the operator is running. The drift-detection behavior in §8.4.1 applies equally here: if the Companion Plugin installed on the store doesn't match the daemon's expected schema, the abilities demote to `unapproved` pending operator review, same as for any third-party plugin.
+
+### 11.5 Local Repo (Optional Mode)
 
 If the operator has the Woo codebase available locally (for custom plugins, themes, migrations), they can register the repo path. Agents with `repo.*` skills can read and propose changes. Writes are always via git branches with the agent as author; commits happen only after operator approval, and pushes are never automatic. Repo-mode agents load `wp-plugin-development`, `wp-phpstan`, and `wp-wpcli-and-ops` Agent Skills as context.
 
-### 10.6 Read-Only Database Replica (Advanced)
+### 11.6 Read-Only Database Replica (Advanced)
 
 For stores where agents need analytical queries beyond what MCP or the REST API supports cheaply, the operator can configure a read-only MySQL connection to a Woo replica. Skills can run typed, sandboxed SQL with LIMIT enforcement and query cost budgets.
 
-## 11. Technical Stack
+### 11.7 WPCOM-Enhanced Mode (Optional)
+
+Stores that are already connected to WordPress.com via Jetpack get access to an **enhanced ability surface** on top of everything in §11.1–§11.6. This is strictly optional, strictly additive, and never a prerequisite for core functionality. A store without a Jetpack connection is a first-class citizen.
+
+**What lights up when `jetpack_connected: true`:**
+
+- **The WooCommerce AI plugin's progressive MCP registry** — the 50-tool surface (14 providers: products, orders, customers, coupons, product categories, product tags, order notes, order refunds, shipping zones, payment gateways, settings, analytics, tax rates, system status) served via the plugin's `remote_mcp_url` at `public-api.wordpress.com/wpcom/v2/woocommerce-ai-mcp/v1`. Roughly 5× the coverage of the plugin's local Abilities API surface, particularly for Pricing (coupons, taxes), Accounting (payment-gateways, settings, system-status), and Reporting (analytics-revenue, analytics-orders).
+- **WPCOM-native aggregations** — abilities injected by the WPCOM proxy layer that are not registered on the site at all (e.g., cross-store aggregation, WooCommerce Analytics with extended history, third-party service MCPs bridged via WPCOM).
+- **Future WPCOM-side AI features** registered as abilities — whatever the ecosystem ships gets picked up without a WooAgent OS change.
+
+**How the operator opts in:**
+
+1. In `wooagent init` or Settings, the operator toggles **"Enable WPCOM-enhanced mode."**
+2. The daemon detects `jetpack_connected: true` via the WooCommerce AI plugin's `/settings` endpoint (or a direct Jetpack status check) and enables the toggle.
+3. WPCOM-enhanced abilities appear in the Ability explorer alongside local abilities, tagged `wpcom-enhanced`.
+
+**Trust model unchanged.** WPCOM-enhanced abilities flow through the same pre-signed manifest and PEP described in §8.4. A WPCOM-routed ability must match a manifest entry or be explicitly operator-approved before any persona can invoke it. Connection to WPCOM does **not** imply trust, and the PEP applies every check (schema validation, policy predicates, budgets, scope) regardless of whether the ability is local or WPCOM-routed.
+
+**Data flow and sovereignty.** When the daemon invokes a WPCOM-enhanced ability, the request goes: daemon → `public-api.wordpress.com/wpcom/v2/woocommerce-ai-mcp/v1` → Jetpack → store. The response returns on the same path. The daemon's own state (issue database, audit log, plans, secrets) never leaves the operator's host. The only data WPCOM sees is the ability arguments and responses — exactly the same as it would see if the operator drove the plugin through its standard UI. There is no daemon-to-WPCOM persistent channel, no telemetry, no account keyed to WooAgent OS.
+
+**Why this matters strategically.** Enhanced mode creates a genuine reason for stores to stay (or become) Jetpack-connected: their WooAgent OS deployment is measurably more capable when they are. That aligns WooAgent OS with Automattic's commercial interests without compromising the local-first guarantee for operators who can't or won't connect.
+
+## 12. Technical Stack
 
 1. **Agent runtime:** Agent Development Kit for Go (module path `google.golang.org/adk`; source at [github.com/google/adk-go](https://github.com/google/adk-go)) as the agent and skill framework. The orchestrator, CLI, MCP client, and agent runtime all run in a single Go process.
 2. **Orchestrator / CLI:** Go. Single static binary per platform. Runs as a headless daemon by default — no UI is served unless the operator explicitly opts in. An optional `wooagent ui` subcommand serves a bundled copy of the standalone React UI for operators who want a one-command local experience. No sidecar processes or external language runtimes required at install time.
@@ -457,35 +646,35 @@ For stores where agents need analytical queries beyond what MCP or the REST API 
 8. **Observability:** Built-in run-log viewer. OpenTelemetry export optional.
 9. **Auth (local):** Device-pair model for the local web UI. Single operator by default; add teammates explicitly.
 
-### 11.10 Resolved architecture decisions
+### 12.10 Resolved architecture decisions
 
 - **Single-language Go runtime (resolved, supersedes earlier drafts).** Earlier drafts proposed a Go orchestrator managing a Python ADK sidecar. With ADK Go (module `google.golang.org/adk`) now at v1.1.0 (Apr 2026), the agent runtime is implemented natively in Go. This preserves the single-binary install promise, eliminates cross-language IPC, and removes Python as an install-time dependency on the operator's machine. **Caveat discovered during the Apr 22 spike:** ADK Go's `model/` package ships only Gemini and Apigee natively. Other providers (Anthropic, OpenAI/OpenAI-compatible) plug in via third-party implementations of the `model.LLM` interface — currently `github.com/Alcova-AI/adk-anthropic-go` and `github.com/huytd/adk-openai-go`. Acceptable for v1; before Phase 5, either vendor these into `daemon/internal/models/` or follow the upstream `google/adk-go-community` effort (PR #242). The `model.LLM` interface is typed on `google.golang.org/genai` content, so any custom adapter is fundamentally a genai ↔ provider translator — same cost whether we write our own or rely on the third-party shims.
 
-## 12. Model Provider Support
+## 13. Model Provider Support
 
-### 12.1 Frontier providers (v1)
+### 13.1 Frontier providers (v1)
 
 - **Anthropic:** Claude Opus, Sonnet, Haiku. Native tool use.
 - **Google:** Gemini Pro and Flash families. Native tool use.
 - **OpenAI:** GPT-5 and successor families. Native tool use.
 - **xAI:** Grok family. Native tool use.
 
-### 12.2 Local runtimes (v1)
+### 13.2 Local runtimes (v1)
 
 - **Ollama:** Discovered automatically on `localhost:11434`. All pulled models listed in the UI. Tool use via the model's native or emulated function-calling.
 - **LM Studio:** Discovered on `localhost:1234` (configurable). OpenAI-compatible endpoint.
 - **llama.cpp server / vLLM / any OpenAI-compatible endpoint:** Configured manually with base URL, optional API key, model name.
 
-### 12.3 Model routing
+### 13.3 Model routing
 
 - Each persona declares a preferred model family and a fallback chain.
 - Operator can override globally (e.g., "use only local models") or per persona.
 - Cost accounting per run, per agent, per model, visible in the UI.
 - Offline mode: when enabled, any attempt to reach a non-local endpoint fails loudly rather than silently falling back.
 
-## 13. Installation and First-Run
+## 14. Installation and First-Run
 
-### 13.1 Install
+### 14.1 Install
 
 ```bash
 # macOS
@@ -498,7 +687,7 @@ curl -fsSL https://wooagent.dev/install.sh | sh
 winget install wooagent.os
 ```
 
-### 13.2 First Run
+### 14.2 First Run
 
 ```bash
 $ wooagent init
@@ -544,7 +733,7 @@ $ wooagent run
 → Chief of Staff created 4 initial issues in Backlog
 ```
 
-### 13.3 Common CLI Commands
+### 14.3 Common CLI Commands
 
 ```bash
 wooagent init                           # scaffold local state
@@ -570,7 +759,7 @@ wooagent abilities refresh              # re-discover abilities from store
 wooagent export --format json --since 2026-01-01
 ```
 
-## 14. Security, Privacy, and Data
+## 15. Security, Privacy, and Data
 
 1. **Local by default.** No outbound network traffic except to the model provider(s) and the connected store's MCP endpoint.
 2. **Secrets.** Store credentials, model API keys, and other secrets live in the OS keychain (Keychain on macOS, Credential Manager on Windows, Secret Service on Linux), not in plain-text config.
@@ -580,8 +769,9 @@ wooagent export --format json --since 2026-01-01
 6. **Rate limits and cost caps.** Per-persona daily token and dollar caps. Hard stop at cap; operator is notified.
 7. **Audit log.** Every model call, ability invocation, and state mutation is appended to a tamper-evident local log.
 8. **Offline mode.** A single setting that forbids any outbound call to a non-local endpoint. Useful for sensitive stores or testing. In offline mode, only local models and repo-mode skills are available.
+9. **Pre-signed ability manifest + Policy Enforcement Point.** The daemon never auto-trusts an ability just because it was discovered via MCP. Trust is conferred by a manifest shipped (and signed) with the daemon release, or by explicit per-ability operator approval. Every ability invocation routes through a deterministic Policy Enforcement Point (non-LLM Go middleware) that verifies trust state, schema match, persona scope, argument validity, operator-configured policy predicates, and budget. Schema drift between the manifest and the discovered ability auto-demotes the ability to `unapproved` and alerts the operator — catching plugin rug-pulls and silent contract changes. Every approved invocation is logged with full chain-of-identity (plan → task → step → persona → model → prompt → ability → outcome). See §8.4 for the full model.
 
-## 15. Extensibility
+## 16. Extensibility
 
 1. **Custom personas.** Operators can fork any default persona, edit its system prompt, ability bindings, Agent Skills context, and model preferences, and redeploy.
 2. **Custom local skills.** Operators ship skills as standalone executables that speak the WooAgent skill protocol (gRPC over stdio, following the go-plugin pattern used by Terraform providers and similar Go ecosystems). Skills can be written in any language — Go, Python, TypeScript, Rust — as long as they implement the protocol. The orchestrator discovers skill binaries in `~/.wooagent/skills/` and in any repo-local `./wooagent.skills/` directory. A Go skill SDK built on ADK Go is shipped as the default path; reference Python and TypeScript SDKs follow in v1.
@@ -591,7 +781,7 @@ wooagent export --format json --since 2026-01-01
 6. **UI themes.** The board view supports theming via CSS variables.
 7. **Agent Skills contributions.** Operators can write custom WordPress Agent Skills in Markdown and load them into their personas, or contribute them upstream to `WordPress/agent-skills`.
 
-## 16. Roadmap
+## 17. Roadmap
 
 ### v0.1 (Alpha)
 - Single-store, single-operator.
@@ -633,7 +823,7 @@ wooagent export --format json --since 2026-01-01
 - Optional hosted control plane for agencies managing many stores.
 - Two-way MCP: WooAgent OS registers itself as an MCP server so other AI tools can interact with the agent fleet.
 
-## 17. Success Metrics
+## 18. Success Metrics
 
 1. **Time-to-first-issue:** Operator completes install, connects via MCP, and sees the first agent-produced issue in under 10 minutes on a fresh machine.
 2. **Ability coverage:** On a typical WooCommerce store with 5+ plugins, agents successfully use abilities from 3+ plugins within the first session.
@@ -642,7 +832,7 @@ wooagent export --format json --since 2026-01-01
 5. **Catalog:** 20+ community skill packs within 12 months of v1.
 6. **Stars and forks** as proxy for community velocity, but secondary to active operators.
 
-## 18. Open Questions
+## 19. Open Questions
 
 1. **Default local model.** Which small model best handles tool-use (MCP ability invocation) at acceptable quality on consumer hardware? Needs to reliably generate well-formed ability calls.
 2. **Chief of Staff autonomy.** Fully autonomous arbitration of cross-agent conflicts vs. always-ask-the-operator? Current lean is propose-mode for conflict resolution with the operator as tiebreaker.
@@ -650,18 +840,19 @@ wooagent export --format json --since 2026-01-01
 4. **Ability schema evolution.** When a plugin updates and changes its ability schemas, how does WooAgent OS handle the drift? Current thinking: re-discover on each `wooagent run` startup, diff against cache, and alert on breaking changes.
 5. **Pricing agent data sources.** Bundle a default competitor-data fetcher or leave that as a skill pack? The MCP ecosystem doesn't solve this since competitor data doesn't live on the operator's WordPress site.
 
-## 19. Competitive Positioning
+## 20. Competitive Positioning
 
 WooAgent OS sits in a unique position relative to the WordPress AI ecosystem:
 
 - **vs. the WordPress AI Plugin:** The AI Plugin is a reference implementation for one-shot AI features (generate a title, summarize a post). WooAgent OS is persistent multi-agent orchestration with work tracking.
+- **vs. Dolly / WordPress Agent:** WordPress Agent (formerly Dolly) is a general-purpose, WPCOM-hosted chat agent that adopts the personality of a single site and reaches the user through messaging channels (Telegram, Slack, WhatsApp, Email). WooAgent OS is a local-first, kanban-native ops runtime purpose-built for WooCommerce, running a fleet of specialized personas whose work is structured as trackable issues with propose/approve gates and full audit logs. Adjacent problems, different product shapes — the two can coexist on the same store.
 - **vs. Claude Desktop / Cursor / coding agents + MCP:** These are general-purpose agents that can connect to a Woo MCP endpoint. WooAgent OS ships opinionated store-ops personas with domain knowledge, a propose/approve workflow, and a purpose-built kanban UX. You don't have to prompt-engineer a pricing strategy from scratch every session.
 - **vs. AI Engine / plugin-level AI:** AI Engine and similar plugins add AI features within WordPress. WooAgent OS runs externally on the operator's machine and manages a fleet of agents that coordinate across all store concerns.
 - **vs. MainWP / agency tools:** MainWP manages multiple WordPress sites. WooAgent OS could sit alongside MainWP, using MainWP's abilities (MainWP registers abilities) to coordinate across a multi-site agency portfolio.
 
 The positioning is: WordPress built the building blocks. WooAgent OS is the operations layer.
 
-## 20. Glossary
+## 21. Glossary
 
 - **Ability:** A capability registered by a WordPress plugin via `wp_register_ability()` and exposed through MCP. Examples: `woocommerce/products/list`, `yoast-seo/meta/update`.
 - **Agent / Persona:** A configured ADK agent with a mandate, skill set, ability bindings, Agent Skills context, and model preferences.
