@@ -44,7 +44,7 @@ export default function App() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Kanban connection={connection} />} />
-          <Route path="/issues/:id" element={<IssueDetail />} />
+          <Route path="/issues/:id" element={<IssueDetail connection={connection} />} />
           <Route
             path="/settings"
             element={<Settings connection={connection} onDisconnect={() => setConnection(null)} />}
