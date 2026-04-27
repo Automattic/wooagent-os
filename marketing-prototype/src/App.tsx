@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import HostedBanner from './components/HostedBanner';
 import LeftNav from './components/LeftNav';
 import SettingsDrawer from './components/SettingsDrawer';
 import ToastStack from './components/ToastStack';
@@ -77,6 +78,7 @@ export default function App() {
       <div className="flex min-h-screen">
         <LeftNav onOpenSettings={openSettings} />
         <div className="flex-1 min-w-0">
+          <HostedBanner />
           <Routes>
             <Route path="/" element={<Kanban />} />
             <Route path="/issues/:id/content" element={<ContentReview />} />

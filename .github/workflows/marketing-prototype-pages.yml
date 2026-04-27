@@ -1,0 +1,67 @@
+# Builds the marketing-prototype Vite app and publishes the static output to
+# the `gh-pages` branch, which GHES Pages serves at
+# https://github.a8c.com/pages/Automattic/wooagent-os/.
+#
+# Pages build_type is `legacy` on this repo (modern workflow build is not
+# available on this GHES instance), so we push the built `dist/` ourselves
+# instead of using actions/deploy-pages.
+
+name: marketing-prototype · Pages
+
+on:
+  push:
+    branches: [trunk]
+    paths:
+      - 'marketing-prototype/**'
+      - '.github/workflows/marketing-prototype-pages.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing-prototype
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: marketing-prototype/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          PUBLIC_BASE: /pages/Automattic/wooagent-os/
+        run: npm run build
+
+      # Pages serves the gh-pages branch root. Push the build output (only)
+      # there as a single squashed commit so the branch stays small.
+      - name: Publish to gh-pages
+        run: |
+          set -euo pipefail
+          cd dist
+          # SPA fallback so deep links (e.g. /issues/WOO-1033/content) work.
+          cp index.html 404.html
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "deploy: marketing-prototype @ ${GITHUB_SHA::7}"
+          git push -q --force "https://x-access-token:${GITHUB_TOKEN}@${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
