@@ -7,7 +7,13 @@ Demonstrates: kanban board → reviewing proposed changes → approving the plan
 Not wired to the daemon. Talks directly to the WooCommerce REST API on
 `store.example.com` (or any store you point it at).
 
-## Run it
+## Hosted (read-only walkthrough)
+
+https://***REMOVED***/pages/Automattic/wooagent-os/ — gated to anyone with a
+***REMOVED*** login. The "Approve & apply to store" path will throw on the
+hosted build (no proxy); run locally to see the live update.
+
+## Run it locally
 
 ```bash
 cd marketing-prototype
@@ -16,6 +22,19 @@ npm run dev
 ```
 
 Open http://localhost:5174.
+
+## Redeploy the hosted version
+
+GitHub Actions isn't enabled on the Automattic GHES instance, so deploys
+are manual:
+
+```bash
+cd marketing-prototype
+npm run deploy
+```
+
+That builds with the right base path, force-pushes the static output to the
+`gh-pages` branch, and Pages serves it within ~30s.
 
 ## Make the "apply to store" path actually update a product
 
