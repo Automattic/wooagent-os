@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Panel, PanelBody, Notice, Spinner } from '@wordpress/components';
 import { api, type Connection, type Issue } from '../api/client';
 
@@ -58,12 +59,16 @@ export default function Kanban({ connection }: Props) {
                 <div className="empty-hint">No issues.</div>
               ) : (
                 colIssues.map((issue) => (
-                  <div key={issue.id} className="kanban-card">
+                  <Link
+                    key={issue.id}
+                    to={`/issues/${issue.id}`}
+                    className="kanban-card"
+                  >
                     <div className="kanban-card__title">{issue.title}</div>
                     <div className="kanban-card__meta">
                       {issue.persona ?? 'unassigned'} · {issue.priority}
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </PanelBody>

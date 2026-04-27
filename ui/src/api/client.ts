@@ -99,10 +99,34 @@ export interface Issue {
   updated_at: string;
 }
 
+export interface Proposal {
+  type: string;
+  content: string;
+  target?: Record<string, unknown>;
+}
+
+export interface IssueDetail {
+  issue: Issue;
+  runs: unknown[];
+  proposal: Proposal | null;
+}
+
+export interface ApproveResult {
+  id: string;
+  status: 'done' | 'rejected';
+  ability?: string;
+  updated_at: string;
+}
+
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
   issues: (c: Connection) => request<{ issues: Issue[] }>(c, '/v1/issues'),
+  issue: (c: Connection, id: string) => request<IssueDetail>(c, `/v1/issues/${id}`),
   createIssue: (c: Connection, body: Partial<Issue>) =>
     request<Issue>(c, '/v1/issues', { method: 'POST', body: JSON.stringify(body) }),
+  approve: (c: Connection, id: string) =>
+    request<ApproveResult>(c, `/v1/issues/${id}/approve`, { method: 'POST' }),
+  reject: (c: Connection, id: string) =>
+    request<ApproveResult>(c, `/v1/issues/${id}/reject`, { method: 'POST' }),
 };
