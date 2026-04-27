@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #fafafa;
+  color: #09090b;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+  .display {
+    letter-spacing: -0.018em;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #71717a;
+  }
+
+  .card {
+    @apply bg-white border border-border rounded-lg shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium leading-none rounded-md border border-transparent cursor-pointer transition-all duration-100;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white border-primary-hover shadow-btn;
+  }
+  .btn-primary:hover {
+    @apply bg-primary-hover;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-ink border-border-strong;
+  }
+  .btn-secondary:hover {
+    background: #f5f5f5;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-ink-soft border-transparent;
+  }
+  .btn-ghost:hover {
+    background: #f5f5f5;
+  }
+
+  .btn-danger {
+    @apply bg-transparent text-err border-transparent;
+  }
+  .btn-danger:hover {
+    @apply bg-err-bg;
+  }
+
+  .btn-approve {
+    @apply text-white px-4 py-2 text-[13px] font-semibold shadow-btn;
+    background: #16a34a;
+    border-color: #15803d;
+  }
+  .btn-approve:hover {
+    background: #15803d;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium leading-tight;
+  }
+  .tag-ok {
+    @apply bg-ok-bg text-ok;
+  }
+  .tag-warn {
+    @apply bg-warn-bg text-warn-strong;
+  }
+  .tag-err {
+    @apply bg-err-bg text-err;
+  }
+  .tag-info {
+    @apply bg-info-bg text-primary;
+  }
+  .tag-mk {
+    @apply bg-mk-bg text-mk;
+  }
+  .tag-neutral {
+    background: #f4f4f5;
+    @apply text-ink-soft;
+  }
+
+  .content-body {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 14.5px;
+    line-height: 1.65;
+  }
+
+  .score-bar {
+    height: 4px;
+    border-radius: 99px;
+    background: #ececee;
+    overflow: hidden;
+  }
+  .score-bar > div {
+    height: 100%;
+    border-radius: 99px;
+  }
+
+  .variant-card {
+    transition: all 0.14s;
+    cursor: pointer;
+    position: relative;
+  }
+  .variant-card.selected {
+    border-color: #0066cc;
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.16);
+  }
+  .variant-card.recommended::before {
+    content: 'Agent pick';
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    background: #be185d;
+    color: white;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .kbd {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.18);
+    color: currentColor;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    margin-left: 4px;
+  }
+}
