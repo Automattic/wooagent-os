@@ -186,7 +186,6 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
             background: 'transparent',
             border: 'none',
             textAlign: 'left',
-            font: 'inherit',
           }}
         >
           <span
