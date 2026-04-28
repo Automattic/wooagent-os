@@ -1,6 +1,18 @@
 /* WPDS design tokens (the canonical --wpds-* CSS variables). */
 @import '@wordpress/theme/design-tokens.css';
 
+/* Page-level horizontal padding. Defined as a single CSS variable so every
+   page wrapper resolves to the same gutter — see globals.css commentary in
+   marketing-prototype. Drops to 16px on mobile. */
+:root {
+  --wa-page-pad-x: 48px;
+}
+@media (max-width: 767px) {
+  :root {
+    --wa-page-pad-x: 16px;
+  }
+}
+
 /* Documented persona-color exception — see CLAUDE.md. The only non-WPDS color
    tokens allowed in this codebase. Used on agent avatar squares in the sidebar
    and the kind pill on cards. */
@@ -93,7 +105,7 @@ a {
   background: var(--wpds-color-bg-surface-neutral);
   border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
   box-shadow: var(--wpds-elevation-md);
-  padding: var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-lg);
+  padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
   z-index: 10;
 }
 
