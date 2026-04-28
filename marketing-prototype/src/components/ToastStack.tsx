@@ -1,48 +1,99 @@
+import { Card, Stack, Text } from '@wordpress/ui';
 import { useApp } from '../App';
 
+// We render our own stack instead of @wordpress/components Snackbar because
+// Snackbar surfaces a single message at a time; this prototype shows a
+// queue with explicit dismiss buttons.
 export default function ToastStack() {
   const { toasts, dismissToast } = useApp();
   if (toasts.length === 0) return null;
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 w-[360px]">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`card p-3 flex gap-3 items-start shadow-lg ${
-            t.kind === 'success'
-              ? 'border-ok-border'
-              : t.kind === 'error'
-                ? 'border-err-border'
-                : ''
-          }`}
-        >
-          <div
-            className={`mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-none ${
-              t.kind === 'success'
-                ? 'bg-ok'
-                : t.kind === 'error'
-                  ? 'bg-err'
-                  : 'bg-primary'
-            }`}
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 50,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--wpds-dimension-gap-sm)',
+        width: 360,
+      }}
+    >
+      {toasts.map((t) => {
+        const accentBorder =
+          t.kind === 'success'
+            ? 'var(--wpds-color-stroke-surface-success)'
+            : t.kind === 'error'
+              ? 'var(--wpds-color-stroke-surface-error)'
+              : 'var(--wpds-color-stroke-surface-info)';
+        const dotBg =
+          t.kind === 'success'
+            ? 'var(--wpds-color-bg-interactive-brand-strong)'
+            : t.kind === 'error'
+              ? 'var(--wpds-color-bg-interactive-error-strong)'
+              : 'var(--wpds-color-bg-interactive-brand-strong)';
+        return (
+          <Card.Root
+            key={t.id}
+            style={{ borderColor: accentBorder, boxShadow: 'var(--wpds-elevation-md)' }}
           >
-            {t.kind === 'success' ? '✓' : t.kind === 'error' ? '!' : 'i'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold">{t.title}</div>
-            {t.body && (
-              <div className="text-xs text-muted mt-0.5 leading-relaxed">
-                {t.body}
-              </div>
-            )}
-          </div>
-          <button
-            className="text-muted hover:text-ink text-xs"
-            onClick={() => dismissToast(t.id)}
-          >
-            ✕
-          </button>
-        </div>
-      ))}
+            <Card.Content>
+              <Stack direction="row" gap="sm" align="start">
+                <span
+                  style={{
+                    marginTop: 2,
+                    height: 20,
+                    width: 20,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#ffffff',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    flex: 'none',
+                    background: dotBg,
+                  }}
+                >
+                  {t.kind === 'success' ? '✓' : t.kind === 'error' ? '!' : 'i'}
+                </span>
+                <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    variant="body-sm"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                  >
+                    {t.title}
+                  </Text>
+                  {t.body && (
+                    <Text
+                      variant="body-sm"
+                      style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                    >
+                      {t.body}
+                    </Text>
+                  )}
+                </Stack>
+                <button
+                  type="button"
+                  onClick={() => dismissToast(t.id)}
+                  aria-label="Dismiss"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'var(--wpds-cursor-control)',
+                    color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    fontSize: 'var(--wpds-typography-font-size-xs)',
+                    flex: 'none',
+                  }}
+                >
+                  ✕
+                </button>
+              </Stack>
+            </Card.Content>
+          </Card.Root>
+        );
+      })}
     </div>
   );
 }

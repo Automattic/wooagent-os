@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Notice } from '@wordpress/components';
+import { Card, Stack, Text } from '@wordpress/ui';
+import { Button, Notice } from '@wordpress/components';
 import { useApp } from '../App';
 import type { ContentTask } from '../data/types';
 import { loadSettings } from '../lib/settings';
@@ -49,10 +50,16 @@ export default function ContentReview() {
 
   if (!task) {
     return (
-      <main className="max-w-[900px] mx-auto px-6 py-12">
+      <main
+        style={{
+          maxWidth: 900,
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        }}
+      >
         <Notice status="warning" isDismissible={false}>
-          That content task isn’t in the queue.{' '}
-          <Link to="/" className="underline">
+          That content task isn't in the queue.{' '}
+          <Link to="/" style={{ textDecoration: 'underline' }}>
             Back to board
           </Link>
         </Notice>
@@ -62,6 +69,7 @@ export default function ContentReview() {
 
   const variant = task.variants.find((v) => v.id === selected) ?? task.variants[0];
   const newDescription = variant?.body ?? '';
+  const reviewable = task.status !== 'done';
 
   const onApprove = async () => {
     const s = loadSettings();
@@ -91,7 +99,7 @@ export default function ContentReview() {
     } catch (e) {
       pushToast({
         kind: 'error',
-        title: 'Couldn’t apply to store',
+        title: "Couldn't apply to store",
         body: e instanceof WooApiError ? e.message : String(e),
       });
     } finally {
@@ -100,366 +108,665 @@ export default function ContentReview() {
   };
 
   return (
-    <>
-      <div className="bg-white border-b border-border">
-        <div className="max-w-[1500px] mx-auto px-6 h-12 flex items-center gap-3">
-          <Link to="/" className="text-xs text-muted hover:text-ink">
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* Breadcrumb header */}
+      <div
+        style={{
+          background: 'var(--wpds-color-bg-surface-neutral)',
+          borderBottom:
+            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1500,
+            margin: '0 auto',
+            padding: '0 var(--wpds-dimension-padding-lg)',
+            height: 48,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--wpds-dimension-gap-sm)',
+          }}
+        >
+          <Link
+            to="/"
+            style={{
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+            }}
+          >
             ← Board
           </Link>
-          <div className="h-4 w-px bg-border" />
-          <span className="text-xs font-mono tabular text-muted">{task.id}</span>
+          <span
+            style={{
+              height: 16,
+              width: 1,
+              background: 'var(--wpds-color-stroke-surface-neutral)',
+            }}
+          />
+          <span
+            className="wa-mono"
+            style={{
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+            }}
+          >
+            {task.id}
+          </span>
           <StatusBadge status={task.status} />
           <KindBadge kind="content" />
         </div>
       </div>
 
-      <main className="max-w-[1500px] mx-auto px-6 py-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="h-6 w-6 rounded bg-mk-bg text-mk flex items-center justify-center text-[11px] font-bold">
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1500,
+          width: '100%',
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        }}
+      >
+        {/* Persona eyebrow + title */}
+        <Stack direction="column" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Stack direction="row" gap="sm" align="center">
+            <span
+              style={{
+                height: 24,
+                width: 24,
+                borderRadius: 'var(--wpds-border-radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 11,
+                background: 'var(--wa-persona-mk-bg)',
+                color: 'var(--wa-persona-mk-ink)',
+                flex: 'none',
+              }}
+            >
               MK
-            </div>
-            <div className="text-xs text-muted">
-              <span className="font-semibold text-ink">Marketing agent</span>{' '}
+            </span>
+            <Text
+              variant="body-sm"
+              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
+              <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
+                Marketing agent
+              </strong>{' '}
               proposes content
-            </div>
-            <div className="text-xs text-muted-2">·</div>
-            <div className="text-xs tabular font-mono text-muted">
+            </Text>
+            <span
+              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)', fontSize: 'var(--wpds-typography-font-size-xs)' }}
+            >
+              ·
+            </span>
+            <span
+              className="wa-mono"
+              style={{
+                fontSize: 'var(--wpds-typography-font-size-xs)',
+                color: 'var(--wpds-color-fg-content-neutral-weak)',
+              }}
+            >
               {task.surfacedAt} · Claude Sonnet 4.6
-            </div>
-          </div>
-          <h1
-            className="display font-semibold"
-            style={{ fontSize: 26, lineHeight: 1.25 }}
+            </span>
+          </Stack>
+          <Text
+            variant="heading-2xl"
+            render={<h1 style={{ margin: 0 }} />}
           >
             {task.title}
-          </h1>
-          <p className="text-sm mt-2 max-w-2xl text-ink-soft">
+          </Text>
+          <Text
+            variant="body-sm"
+            style={{ maxWidth: 760, color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+          >
             Three voice variants. Pick one, approve, and the agent writes it
             straight to WooCommerce. The previous copy is snapshotted —
             reversible from the Done column.
-          </p>
-        </div>
+          </Text>
+        </Stack>
 
-        {/* Summary tiles */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          <div className="card p-4">
-            <div className="eyebrow">Scope</div>
-            <div className="text-lg font-semibold mt-1 tabular display">
-              {boundProduct?.name ?? task.productName ?? '1 product'}
-            </div>
-            <div className="text-xs tabular text-muted">
-              {task.variants.length} variants generated
-            </div>
-          </div>
-          <div className="card p-4">
-            <div className="eyebrow">Brand voice match</div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="text-lg font-semibold tabular display">
-                {variant?.voice ?? 0}%
-              </div>
-              <div className="flex-1 score-bar">
-                <div
-                  style={{
-                    width: `${variant?.voice ?? 0}%`,
-                    background: '#BE185D',
-                  }}
-                />
-              </div>
-            </div>
-            <div className="text-xs text-muted">vs. your voice model</div>
-          </div>
-          <div className="card p-4">
-            <div className="eyebrow">SEO score</div>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="text-lg font-semibold tabular display">
-                {variant?.seo ?? 0}
-              </div>
-              <div className="flex-1 score-bar">
-                <div
-                  style={{
-                    width: `${variant?.seo ?? 0}%`,
-                    background: '#16A34A',
-                  }}
-                />
-              </div>
-            </div>
-            <div className="text-xs text-muted">Yoast · out of 100</div>
-          </div>
-          <div className="card p-4">
-            <div className="eyebrow">Est. impact</div>
-            <div
-              className="text-lg font-semibold mt-1 tabular font-mono"
-              style={{ color: '#16A34A' }}
-            >
-              +14% CTR
-            </div>
-            <div className="text-xs tabular text-muted">
-              on product listing pages
-            </div>
-          </div>
-        </div>
-
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: '1fr 300px', gap: 20 }}
-        >
-          <main>
-            {/* Current description */}
-            <div className="card mb-4 overflow-hidden">
-              <div
-                className="px-5 py-3 border-b border-border flex items-center justify-between"
-                style={{ background: '#FAFAFA' }}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="eyebrow">Current description</div>
-                  {boundProduct ? (
-                    <span className="tag tag-info text-[10px]">
-                      Live · ID {boundProduct.id}
-                    </span>
-                  ) : (
-                    <span className="tag tag-warn text-[10px]">
-                      No product bound
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs tabular font-mono text-muted">
-                  {boundProduct
-                    ? `${stripHtml(boundProduct.description).length} chars · live`
-                    : `${(task.currentDescription ?? '').length} chars · sample`}
-                </div>
-              </div>
-              <div className="p-5">
-                {loadErr && (
-                  <Notice status="warning" isDismissible={false}>
-                    Couldn’t fetch the live description: {loadErr}
-                  </Notice>
-                )}
-                <p className="content-body text-muted">
-                  {boundProduct
-                    ? stripHtml(boundProduct.description) ||
-                      '(empty — agent will fill this in)'
-                    : task.currentDescription ?? ''}
-                </p>
-              </div>
-            </div>
-
-            {/* Variants */}
-            <div className="flex items-center justify-between mb-3 mt-6">
-              <div>
-                <div className="eyebrow !text-mk">Proposed · Pick one</div>
-                <div
-                  className="display font-semibold mt-1"
-                  style={{ fontSize: 16 }}
+        {/* KPI row */}
+        <Stack direction="row" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Card.Root style={{ flex: 1, minWidth: 0 }}>
+            <Card.Content>
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow">Scope</span>
+                <Text
+                  variant="heading-md"
+                  style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
                 >
-                  Three variants · each with different emphasis
-                </div>
-              </div>
-              <button className="btn btn-secondary text-xs" type="button">
-                <svg
-                  className="h-3.5 w-3.5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                  {boundProduct?.name ?? task.productName ?? '1 product'}
+                </Text>
+                <Text
+                  variant="body-sm"
+                  style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 4v5h5M4 13a8 8 0 108-8v0"
-                  />
-                </svg>
-                Regenerate
-              </button>
-            </div>
+                  {task.variants.length} variants generated
+                </Text>
+              </Stack>
+            </Card.Content>
+          </Card.Root>
 
-            {task.variants.map((v) => (
-              <div
-                key={v.id}
-                onClick={() => setSelected(v.id)}
-                className={`card variant-card ${
-                  selected === v.id ? 'selected' : ''
-                } ${v.recommended ? 'recommended' : ''} p-5 mb-3`}
-              >
-                <div className="flex items-start gap-3 mb-3">
-                  <div
-                    className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold tabular flex-none ${
-                      selected === v.id
-                        ? 'bg-primary text-white'
-                        : 'border border-border-strong text-ink-soft'
-                    }`}
+          <Card.Root style={{ flex: 1, minWidth: 0 }}>
+            <Card.Content>
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow">Brand voice match</span>
+                <Stack direction="row" gap="sm" align="center">
+                  <Text
+                    variant="heading-md"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
                   >
-                    {v.id}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="tag tag-mk text-[10px]">{v.label}</span>
-                      <span
-                        className={`tag text-[10px] ${
-                          v.seo >= 80
-                            ? 'tag-ok'
-                            : v.seo >= 70
-                              ? 'tag-warn'
-                              : 'tag-err'
-                        }`}
-                      >
-                        SEO · {v.seo}
-                      </span>
-                      <span
-                        className={`tag text-[10px] ${
-                          v.voice >= 90 ? 'tag-ok' : 'tag-warn'
-                        }`}
-                      >
-                        Voice · {v.voice}%
-                      </span>
-                      <span className="tag tag-neutral text-[10px] tabular">
-                        {v.charCount} chars
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <p className="content-body">{v.body}</p>
-                {v.note && (
-                  <div className="mt-4 pt-4 border-t border-border text-xs text-muted">
-                    {v.note}
-                  </div>
-                )}
-              </div>
-            ))}
-          </main>
-
-          <aside className="space-y-4">
-            <div className="card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="eyebrow !text-mk">Brand voice check</div>
-                <span className="tag tag-ok tabular text-[10px]">
-                  {variant?.voice ?? 0}%
-                </span>
-              </div>
-              <div className="space-y-2.5 text-xs text-ink-soft">
-                <div className="flex items-start gap-2">
-                  <span className="text-ok mt-0.5">✓</span>
-                  <span>
-                    Avoids{' '}
-                    <span className="font-mono bg-err-bg text-err px-1 rounded">
-                      luxe
-                    </span>{' '}
-                    and{' '}
-                    <span className="font-mono bg-err-bg text-err px-1 rounded">
-                      premium
-                    </span>
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-ok mt-0.5">✓</span>
-                  <span>
-                    Uses preferred terms{' '}
-                    <span className="font-mono bg-ok-bg text-ok px-1 rounded">
-                      small-batch
-                    </span>
-                    ,{' '}
-                    <span className="font-mono bg-ok-bg text-ok px-1 rounded">
-                      handcrafted
-                    </span>
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-ok mt-0.5">✓</span>
-                  <span>Tone lands between warm and sincere — your target</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-5">
-              <div className="eyebrow mb-3">Yoast SEO breakdown</div>
-              <div className="space-y-2 text-xs">
-                {[
-                  ['Keyphrase in first sentence', 'ok'],
-                  ['Text length', 'ok'],
-                  ['Readability', 'ok'],
-                  ['Keyphrase density', 'warn'],
-                  ['Passive voice', 'ok'],
-                ].map(([label, level]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between"
-                  >
-                    <span className="text-ink-soft">{label}</span>
-                    <span
-                      className={`h-2 w-2 rounded-full inline-block ${
-                        level === 'ok' ? 'bg-ok' : 'bg-warn'
-                      }`}
+                    {variant?.voice ?? 0}%
+                  </Text>
+                  <div className="wa-score-bar" style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        width: `${variant?.voice ?? 0}%`,
+                        background: 'var(--wa-persona-mk-ink)',
+                      }}
                     />
                   </div>
-                ))}
-              </div>
-            </div>
+                </Stack>
+                <Text
+                  variant="body-sm"
+                  style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                >
+                  vs. your voice model
+                </Text>
+              </Stack>
+            </Card.Content>
+          </Card.Root>
 
-            <div className="rounded-lg p-4 border bg-ok-bg border-ok-border">
-              <div className="font-semibold text-xs mb-1 text-ok">
-                Reversible · always
-              </div>
-              <div className="text-xs leading-relaxed" style={{ color: '#14532D' }}>
-                The previous copy is snapshotted before write. Revert any
-                product in one click from the Done column.
-              </div>
-            </div>
-          </aside>
-        </div>
+          <Card.Root style={{ flex: 1, minWidth: 0 }}>
+            <Card.Content>
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow">SEO score</span>
+                <Stack direction="row" gap="sm" align="center">
+                  <Text
+                    variant="heading-md"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                  >
+                    {variant?.seo ?? 0}
+                  </Text>
+                  <div className="wa-score-bar" style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        width: `${variant?.seo ?? 0}%`,
+                        background: 'var(--wpds-color-bg-interactive-success-strong, var(--wpds-color-fg-content-success))',
+                      }}
+                    />
+                  </div>
+                </Stack>
+                <Text
+                  variant="body-sm"
+                  style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                >
+                  Yoast · out of 100
+                </Text>
+              </Stack>
+            </Card.Content>
+          </Card.Root>
 
-        {/* Sticky action bar */}
-        <div className="sticky bottom-6 mt-6 z-20">
-          <div className="card p-3 flex items-center gap-3 shadow-sticky">
-            <div className="flex items-center gap-2 pl-2 pr-4 border-r border-border">
-              <div className="h-8 w-8 rounded-md flex items-center justify-center font-bold tabular bg-info-bg text-primary">
-                {variant?.id ?? 'A'}
-              </div>
-              <div className="text-xs">
-                <div className="font-medium">
-                  Variant {variant?.id} selected ·{' '}
+          <Card.Root style={{ flex: 1, minWidth: 0 }}>
+            <Card.Content>
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow">Est. impact</span>
+                <Text
+                  variant="heading-md"
+                  style={{
+                    color: 'var(--wpds-color-fg-content-success)',
+                    fontFamily: 'var(--wpds-typography-font-family-mono)',
+                    fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                  }}
+                >
+                  +14% CTR
+                </Text>
+                <Text
+                  variant="body-sm"
+                  style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                >
+                  on product listing pages
+                </Text>
+              </Stack>
+            </Card.Content>
+          </Card.Root>
+        </Stack>
+
+        {/* Body grid: variants + sidebar */}
+        <Stack direction="row" gap="lg" align="start">
+          <Stack direction="column" gap="md" style={{ flex: 1, minWidth: 0 }}>
+            {/* Current description */}
+            <Card.Root>
+              <Card.Header>
+                <Stack direction="row" justify="space-between" align="center">
+                  <Stack direction="row" gap="sm" align="center">
+                    <span className="wa-eyebrow">Current description</span>
+                    {boundProduct ? (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 8px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                          background: 'var(--wpds-color-bg-surface-info-weak)',
+                          color: 'var(--wpds-color-fg-interactive-brand)',
+                        }}
+                      >
+                        Live · ID {boundProduct.id}
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 8px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                          background: 'var(--wpds-color-bg-surface-warning-weak)',
+                          color: 'var(--wpds-color-fg-content-warning)',
+                        }}
+                      >
+                        No product bound
+                      </span>
+                    )}
+                  </Stack>
+                  <span
+                    className="wa-mono"
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
+                  >
+                    {boundProduct
+                      ? `${stripHtml(boundProduct.description).length} chars · live`
+                      : `${(task.currentDescription ?? '').length} chars · sample`}
+                  </span>
+                </Stack>
+              </Card.Header>
+              <Card.Content>
+                {loadErr && (
+                  <Notice status="warning" isDismissible={false}>
+                    Couldn't fetch the live description: {loadErr}
+                  </Notice>
+                )}
+                <Text
+                  variant="body-md"
+                  style={{
+                    color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    lineHeight: 1.65,
+                  }}
+                >
                   {boundProduct
-                    ? `→ ${boundProduct.name}`
-                    : 'no live product bound'}
-                </div>
-                <div className="text-muted">
-                  Approval will write to WooCommerce via the dev proxy.
-                </div>
-              </div>
-            </div>
-            <button className="btn btn-ghost text-xs" type="button">
-              Ask the agent
-            </button>
-            <button className="btn btn-danger text-xs" type="button">
-              Reject all
-            </button>
-            <div className="flex-1" />
-            <button
-              className="btn btn-secondary text-xs"
-              type="button"
-              onClick={() => nav('/')}
-              disabled={applying}
+                    ? stripHtml(boundProduct.description) || '(empty — agent will fill this in)'
+                    : task.currentDescription ?? ''}
+                </Text>
+              </Card.Content>
+            </Card.Root>
+
+            {/* Variants header */}
+            <Stack direction="row" justify="space-between" align="end" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow wa-eyebrow--persona">Proposed · pick one</span>
+                <Text variant="heading-md">
+                  Three variants · each with different emphasis
+                </Text>
+              </Stack>
+              <Button variant="secondary" type="button">
+                ⟲ Regenerate
+              </Button>
+            </Stack>
+
+            {/* Variant cards */}
+            {task.variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setSelected(v.id)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: 0,
+                  background: 'transparent',
+                  border: 'none',
+                }}
+              >
+                <Card.Root
+                  className={`wa-variant-card${
+                    selected === v.id ? ' wa-variant-card--selected' : ''
+                  }${v.recommended ? ' wa-variant-card--recommended' : ''}`}
+                >
+                  <Card.Content>
+                    <Stack direction="row" gap="md" align="start" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
+                      <span
+                        style={{
+                          height: 24,
+                          width: 24,
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          flex: 'none',
+                          background:
+                            selected === v.id
+                              ? 'var(--wpds-color-bg-interactive-brand-strong)'
+                              : 'transparent',
+                          color:
+                            selected === v.id
+                              ? '#ffffff'
+                              : 'var(--wpds-color-fg-content-neutral)',
+                          border:
+                            selected === v.id
+                              ? 'none'
+                              : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
+                        }}
+                      >
+                        {v.id}
+                      </span>
+                      <Stack direction="row" gap="xs" wrap="wrap" style={{ flex: 1 }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--wpds-border-radius-sm)',
+                            background: 'var(--wa-persona-mk-bg)',
+                            color: 'var(--wa-persona-mk-ink)',
+                          }}
+                        >
+                          {v.label}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--wpds-border-radius-sm)',
+                            background:
+                              v.seo >= 80
+                                ? 'var(--wpds-color-bg-surface-success-weak)'
+                                : v.seo >= 70
+                                  ? 'var(--wpds-color-bg-surface-warning-weak)'
+                                  : 'var(--wpds-color-bg-surface-error-weak)',
+                            color:
+                              v.seo >= 80
+                                ? 'var(--wpds-color-fg-content-success)'
+                                : v.seo >= 70
+                                  ? 'var(--wpds-color-fg-content-warning)'
+                                  : 'var(--wpds-color-fg-content-error)',
+                          }}
+                        >
+                          SEO · {v.seo}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--wpds-border-radius-sm)',
+                            background:
+                              v.voice >= 90
+                                ? 'var(--wpds-color-bg-surface-success-weak)'
+                                : 'var(--wpds-color-bg-surface-warning-weak)',
+                            color:
+                              v.voice >= 90
+                                ? 'var(--wpds-color-fg-content-success)'
+                                : 'var(--wpds-color-fg-content-warning)',
+                          }}
+                        >
+                          Voice · {v.voice}%
+                        </span>
+                        <span
+                          className="wa-mono"
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--wpds-border-radius-sm)',
+                            background: 'var(--wpds-color-bg-surface-neutral-strong)',
+                            color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          }}
+                        >
+                          {v.charCount} chars
+                        </span>
+                      </Stack>
+                    </Stack>
+                    <Text variant="body-md" style={{ lineHeight: 1.65 }}>
+                      {v.body}
+                    </Text>
+                    {v.note && (
+                      <div
+                        style={{
+                          marginTop: 'var(--wpds-dimension-gap-md)',
+                          paddingTop: 'var(--wpds-dimension-padding-md)',
+                          borderTop:
+                            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        }}
+                      >
+                        {v.note}
+                      </div>
+                    )}
+                  </Card.Content>
+                </Card.Root>
+              </button>
+            ))}
+          </Stack>
+
+          {/* Sidebar rail */}
+          <Stack direction="column" gap="md" style={{ width: 320, flex: 'none' }}>
+            <Card.Root>
+              <Card.Header>
+                <Stack direction="row" justify="space-between" align="center">
+                  <span className="wa-eyebrow wa-eyebrow--persona">
+                    Brand voice check
+                  </span>
+                  <span
+                    className="wa-mono"
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--wpds-color-fg-content-success)',
+                    }}
+                  >
+                    {variant?.voice ?? 0}%
+                  </span>
+                </Stack>
+              </Card.Header>
+              <Card.Content>
+                <Stack direction="column" gap="sm">
+                  <Stack direction="row" gap="sm" align="start">
+                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
+                      ✓
+                    </span>
+                    <Text variant="body-sm">
+                      Avoids{' '}
+                      <code
+                        style={{
+                          fontFamily: 'var(--wpds-typography-font-family-mono)',
+                          background: 'var(--wpds-color-bg-surface-error-weak)',
+                          color: 'var(--wpds-color-fg-content-error)',
+                          padding: '1px 6px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                        }}
+                      >
+                        luxe
+                      </code>{' '}
+                      and{' '}
+                      <code
+                        style={{
+                          fontFamily: 'var(--wpds-typography-font-family-mono)',
+                          background: 'var(--wpds-color-bg-surface-error-weak)',
+                          color: 'var(--wpds-color-fg-content-error)',
+                          padding: '1px 6px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                        }}
+                      >
+                        premium
+                      </code>
+                    </Text>
+                  </Stack>
+                  <Stack direction="row" gap="sm" align="start">
+                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
+                      ✓
+                    </span>
+                    <Text variant="body-sm">
+                      Uses preferred terms{' '}
+                      <code
+                        style={{
+                          fontFamily: 'var(--wpds-typography-font-family-mono)',
+                          background: 'var(--wpds-color-bg-surface-success-weak)',
+                          color: 'var(--wpds-color-fg-content-success)',
+                          padding: '1px 6px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                        }}
+                      >
+                        small-batch
+                      </code>
+                      ,{' '}
+                      <code
+                        style={{
+                          fontFamily: 'var(--wpds-typography-font-family-mono)',
+                          background: 'var(--wpds-color-bg-surface-success-weak)',
+                          color: 'var(--wpds-color-fg-content-success)',
+                          padding: '1px 6px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                        }}
+                      >
+                        handcrafted
+                      </code>
+                    </Text>
+                  </Stack>
+                  <Stack direction="row" gap="sm" align="start">
+                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
+                      ✓
+                    </span>
+                    <Text variant="body-sm">
+                      Tone lands between warm and sincere — your target
+                    </Text>
+                  </Stack>
+                </Stack>
+              </Card.Content>
+            </Card.Root>
+
+            <Card.Root>
+              <Card.Header>
+                <span className="wa-eyebrow">Yoast SEO breakdown</span>
+              </Card.Header>
+              <Card.Content>
+                <Stack direction="column" gap="sm">
+                  {(
+                    [
+                      ['Keyphrase in first sentence', 'ok'],
+                      ['Text length', 'ok'],
+                      ['Readability', 'ok'],
+                      ['Keyphrase density', 'warn'],
+                      ['Passive voice', 'ok'],
+                    ] as const
+                  ).map(([label, level]) => (
+                    <Stack key={label} direction="row" justify="space-between" align="center">
+                      <Text variant="body-sm">{label}</Text>
+                      <span
+                        style={{
+                          height: 8,
+                          width: 8,
+                          borderRadius: '50%',
+                          display: 'inline-block',
+                          background:
+                            level === 'ok'
+                              ? 'var(--wpds-color-fg-content-success)'
+                              : 'var(--wpds-color-fg-content-caution)',
+                        }}
+                      />
+                    </Stack>
+                  ))}
+                </Stack>
+              </Card.Content>
+            </Card.Root>
+
+            <Card.Root
+              style={{
+                background: 'var(--wpds-color-bg-surface-success-weak)',
+                borderColor: 'var(--wpds-color-stroke-surface-success)',
+              }}
             >
-              Cancel
-            </button>
-            <button
-              className="btn btn-approve"
-              type="button"
-              onClick={onApprove}
-              disabled={applying || task.status === 'done'}
-            >
-              {applying ? (
-                'Applying…'
-              ) : (
-                <>
-                  ✓ Approve & apply to store
-                  <span className="kbd">⌘↵</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+              <Card.Content>
+                <Stack direction="column" gap="xs">
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                      color: 'var(--wpds-color-fg-content-success)',
+                    }}
+                  >
+                    Reversible · always
+                  </Text>
+                  <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-success-weak)' }}>
+                    The previous copy is snapshotted before write. Revert any
+                    product in one click from the Done column.
+                  </Text>
+                </Stack>
+              </Card.Content>
+            </Card.Root>
+          </Stack>
+        </Stack>
       </main>
-    </>
+
+      {/* Sticky action bar */}
+      <div className="wa-action-bar">
+        <Stack direction="row" gap="md" align="center" justify="space-between">
+          <Stack direction="row" gap="sm" align="center">
+            <span
+              style={{
+                height: 28,
+                width: 28,
+                borderRadius: 'var(--wpds-border-radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 12,
+                background: 'var(--wpds-color-bg-surface-info-weak)',
+                color: 'var(--wpds-color-fg-interactive-brand)',
+                flex: 'none',
+              }}
+            >
+              {variant?.id ?? 'A'}
+            </span>
+            <Stack direction="column" gap="xs">
+              <Text
+                variant="body-sm"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                Variant {variant?.id} selected ·{' '}
+                {boundProduct ? `→ ${boundProduct.name}` : 'no live product bound'}
+              </Text>
+              <Text
+                variant="body-sm"
+                style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              >
+                Approval will write to WooCommerce via the dev proxy.
+              </Text>
+            </Stack>
+          </Stack>
+          <Stack direction="row" gap="sm" align="center">
+            <Button variant="tertiary" disabled>
+              Ask the agent
+            </Button>
+            <Button variant="tertiary" isDestructive>
+              Reject all
+            </Button>
+            <Button variant="tertiary" onClick={() => nav('/')} disabled={applying}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={onApprove}
+              disabled={applying || !reviewable}
+            >
+              {applying ? 'Applying…' : '✓ Approve & apply to store'}
+            </Button>
+          </Stack>
+        </Stack>
+      </div>
+    </div>
   );
 }
 

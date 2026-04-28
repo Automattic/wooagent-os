@@ -1,6 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { Stack, Text } from '@wordpress/ui';
-import { useApp } from '../App';
 
 interface AppItem {
   to: string;
@@ -21,6 +20,7 @@ const APP_ITEMS: AppItem[] = [
   { to: '/', label: 'Board', glyph: '▦' },
   { to: '/activity', label: 'Activity', glyph: '◷' },
   { to: '/abilities', label: 'Abilities', glyph: '◆' },
+  { to: '/settings', label: 'Store settings', glyph: '⚙' },
 ];
 
 const AGENTS: AgentItem[] = [
@@ -83,16 +83,12 @@ const AGENTS: AgentItem[] = [
 ];
 
 interface Props {
-  onOpenSettings: () => void;
+  marketingInReview: number;
+  daemonHostname: string;
 }
 
-export default function LeftNav({ onOpenSettings }: Props) {
+export default function LeftNav({ marketingInReview, daemonHostname }: Props) {
   const loc = useLocation();
-  const { tasks } = useApp();
-  const marketingInReview = tasks.filter((t) => t.status === 'in_review').length;
-  // Marketing agent is "where you are" whenever the operator is on a marketing
-  // route — board, content review, campaign, email — since this prototype is
-  // the marketing slice. Other routes only highlight when explicit.
   const onMarketing =
     loc.pathname === '/' ||
     loc.pathname.startsWith('/issues/') ||
@@ -112,7 +108,6 @@ export default function LeftNav({ onOpenSettings }: Props) {
         flexDirection: 'column',
       }}
     >
-      {/* Brand */}
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
@@ -141,7 +136,6 @@ export default function LeftNav({ onOpenSettings }: Props) {
         </Stack>
       </div>
 
-      {/* App section */}
       <nav
         style={{
           padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
@@ -180,35 +174,8 @@ export default function LeftNav({ onOpenSettings }: Props) {
             <span>{item.label}</span>
           </NavLink>
         ))}
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="wa-navlink"
-          style={{
-            width: '100%',
-            background: 'transparent',
-            border: 'none',
-            textAlign: 'left',
-            font: 'inherit',
-          }}
-        >
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-              width: 16,
-              textAlign: 'center',
-              flex: 'none',
-            }}
-            aria-hidden="true"
-          >
-            ⚙
-          </span>
-          <span>Store settings</span>
-        </button>
       </nav>
 
-      {/* Agents section */}
       <nav
         style={{
           padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
@@ -308,7 +275,6 @@ export default function LeftNav({ onOpenSettings }: Props) {
         })}
       </nav>
 
-      {/* Footer */}
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
@@ -328,8 +294,9 @@ export default function LeftNav({ onOpenSettings }: Props) {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
+          title={daemonHostname}
         >
-          woo-demo-store-99cc5c
+          {daemonHostname}
         </div>
         <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
           <span
@@ -347,7 +314,7 @@ export default function LeftNav({ onOpenSettings }: Props) {
               color: 'var(--wpds-color-fg-content-neutral-weak)',
             }}
           >
-            Pressable staging
+            Daemon connected
           </span>
         </Stack>
       </div>

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Notice } from '@wordpress/components';
+import { Card, Stack, Text } from '@wordpress/ui';
+import { Button, Notice } from '@wordpress/components';
 import { useApp } from '../App';
 import type { EmailTask } from '../data/types';
 import { KindBadge, StatusBadge } from '../components/StatusBadge';
@@ -17,10 +18,16 @@ export default function EmailReview() {
 
   if (!task) {
     return (
-      <main className="max-w-[900px] mx-auto px-6 py-12">
+      <main
+        style={{
+          maxWidth: 900,
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        }}
+      >
         <Notice status="warning" isDismissible={false}>
-          That email isn’t in the queue.{' '}
-          <Link to="/" className="underline">
+          That email isn't in the queue.{' '}
+          <Link to="/" style={{ textDecoration: 'underline' }}>
             Back to board
           </Link>
         </Notice>
@@ -39,79 +46,165 @@ export default function EmailReview() {
   };
 
   return (
-    <>
-      <div className="bg-white border-b border-border">
-        <div className="max-w-[1500px] mx-auto px-6 h-12 flex items-center gap-3">
-          <Link to="/" className="text-xs text-muted hover:text-ink">
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div
+        style={{
+          background: 'var(--wpds-color-bg-surface-neutral)',
+          borderBottom:
+            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1500,
+            margin: '0 auto',
+            padding: '0 var(--wpds-dimension-padding-lg)',
+            height: 48,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--wpds-dimension-gap-sm)',
+          }}
+        >
+          <Link
+            to="/"
+            style={{
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+            }}
+          >
             ← Board
           </Link>
-          <div className="h-4 w-px bg-border" />
-          <span className="text-xs font-mono tabular text-muted">{task.id}</span>
+          <span
+            style={{
+              height: 16,
+              width: 1,
+              background: 'var(--wpds-color-stroke-surface-neutral)',
+            }}
+          />
+          <span
+            className="wa-mono"
+            style={{
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+            }}
+          >
+            {task.id}
+          </span>
           <StatusBadge status={task.status} />
           <KindBadge kind="email" />
         </div>
       </div>
 
-      <main className="max-w-[1100px] mx-auto px-6 py-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="h-6 w-6 rounded bg-mk-bg text-mk flex items-center justify-center text-[11px] font-bold">
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1100,
+          width: '100%',
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        }}
+      >
+        <Stack direction="column" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Stack direction="row" gap="sm" align="center">
+            <span
+              style={{
+                height: 24,
+                width: 24,
+                borderRadius: 'var(--wpds-border-radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 11,
+                background: 'var(--wa-persona-mk-bg)',
+                color: 'var(--wa-persona-mk-ink)',
+                flex: 'none',
+              }}
+            >
               MK
-            </div>
-            <div className="text-xs text-muted">
-              <span className="font-semibold text-ink">Marketing agent</span>{' '}
+            </span>
+            <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+              <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>Marketing agent</strong>{' '}
               drafted an email
-            </div>
-            <div className="text-xs text-muted-2">·</div>
-            <div className="text-xs tabular font-mono text-muted">
+            </Text>
+            <span style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>·</span>
+            <span
+              className="wa-mono"
+              style={{
+                fontSize: 'var(--wpds-typography-font-size-xs)',
+                color: 'var(--wpds-color-fg-content-neutral-weak)',
+              }}
+            >
               {task.surfacedAt}
-            </div>
-          </div>
-          <h1
-            className="display font-semibold"
-            style={{ fontSize: 26, lineHeight: 1.25 }}
-          >
+            </span>
+          </Stack>
+          <Text variant="heading-2xl" render={<h1 style={{ margin: 0 }} />}>
             {task.title}
-          </h1>
-        </div>
+          </Text>
+        </Stack>
 
-        <div className="card overflow-hidden mb-6">
-          <div className="px-5 py-3 border-b border-border bg-neutral-50">
-            <div className="eyebrow mb-1">Subject</div>
-            <div className="text-sm font-semibold">{task.subject}</div>
-            <div className="text-xs text-muted mt-1">{task.preview}</div>
-          </div>
-          <div className="p-8">
-            <pre className="content-body whitespace-pre-wrap text-ink leading-relaxed">
+        <Card.Root style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Card.Header>
+            <Stack direction="column" gap="xs">
+              <span className="wa-eyebrow">Subject</span>
+              <Text
+                variant="body-md"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                {task.subject}
+              </Text>
+              <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+                {task.preview}
+              </Text>
+            </Stack>
+          </Card.Header>
+          <Card.Content>
+            <pre
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontFamily: 'var(--wpds-typography-font-family-body)',
+                fontSize: 'var(--wpds-typography-font-size-md)',
+                lineHeight: 1.65,
+                margin: 0,
+                color: 'var(--wpds-color-fg-content-neutral)',
+              }}
+            >
               {task.body}
             </pre>
-          </div>
-        </div>
+          </Card.Content>
+        </Card.Root>
+      </main>
 
-        <div className="sticky bottom-6 z-20">
-          <div className="card p-3 flex items-center gap-3 shadow-sticky">
-            <div className="text-xs pl-2 pr-4 border-r border-border">
-              <div className="font-medium">Approve & queue for send</div>
-              <div className="text-muted">
-                Adds to the welcome series; first send 9am tomorrow.
-              </div>
-            </div>
-            <div className="flex-1" />
-            <button className="btn btn-danger text-xs" type="button">
+      <div className="wa-action-bar">
+        <Stack direction="row" gap="md" align="center" justify="space-between">
+          <Stack direction="column" gap="xs">
+            <Text
+              variant="body-sm"
+              style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+            >
+              Approve & queue for send
+            </Text>
+            <Text
+              variant="body-sm"
+              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
+              Adds to the welcome series; first send 9am tomorrow.
+            </Text>
+          </Stack>
+          <Stack direction="row" gap="sm" align="center">
+            <Button variant="tertiary" isDestructive>
               Reject
-            </button>
-            <button
-              className="btn btn-approve"
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={onApprove}
               disabled={task.status !== 'in_review'}
             >
               ✓ Approve email
-              <span className="kbd">⌘↵</span>
-            </button>
-          </div>
-        </div>
-      </main>
-    </>
+            </Button>
+          </Stack>
+        </Stack>
+      </div>
+    </div>
   );
 }

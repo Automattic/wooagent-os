@@ -1,160 +1,120 @@
+/* WPDS design tokens (the canonical --wpds-* CSS variables). */
+@import '@wordpress/theme/design-tokens.css';
+
+/* Documented persona-color exception — see CLAUDE.md. The only non-WPDS color
+   tokens allowed in this codebase. Used on agent avatar squares in the sidebar
+   and the kind pill on cards. */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  color: #1e1e1e;
-  background: #f0f0f1;
+  --wa-persona-mk-bg: #fce7f3;
+  --wa-persona-mk-ink: #be185d;
+  --wa-persona-pr-bg: #dbeafe;
+  --wa-persona-pr-ink: #1d4ed8;
+  --wa-persona-in-bg: #fef3c7;
+  --wa-persona-in-ink: #b45309;
+  --wa-persona-ac-bg: #dcfce7;
+  --wa-persona-ac-ink: #15803d;
+  --wa-persona-rp-bg: #ede9fe;
+  --wa-persona-rp-ink: #6d28d9;
+  --wa-persona-ss-bg: #ccfbf1;
+  --wa-persona-ss-ink: #0f766e;
+  --wa-persona-cs-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --wa-persona-cs-ink: #ffffff;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
 
-.app-shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+html, body, #root {
+  height: 100%;
 }
 
-.app-topbar {
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  align-items: center;
-  gap: 24px;
+body {
+  margin: 0;
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  color: var(--wpds-color-fg-content-neutral);
+  font-family: var(--wpds-typography-font-family-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.app-topbar__brand { font-weight: 600; font-size: 16px; }
-.app-topbar nav { display: flex; gap: 16px; }
-.app-topbar nav a { color: #1e1e1e; text-decoration: none; font-size: 14px; }
-.app-topbar nav a.active { color: #3858e9; font-weight: 600; }
-
-.app-main { padding: 24px; flex: 1; }
-
-.connect-shell {
-  max-width: 480px;
-  margin: 80px auto;
-  padding: 32px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
-.kanban-board {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
-  gap: 16px;
-  overflow-x: auto;
-}
-
-.kanban-column {
-  min-height: 300px;
-}
-
-.kanban-column__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.kanban-card {
-  display: block;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 8px;
+a {
   color: inherit;
   text-decoration: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
-}
-.kanban-card:hover {
-  border-color: #3858e9;
-  box-shadow: 0 1px 4px rgba(56, 88, 233, 0.12);
 }
 
-.kanban-card__title { font-weight: 600; margin-bottom: 4px; }
-.kanban-card__meta { font-size: 12px; color: #757575; }
-
-/* Issue detail */
-.issue-detail { max-width: 1100px; margin: 0 auto; }
-.issue-detail__header {
+/* Sidebar nav items — see globals.css commentary in marketing-prototype. */
+.wa-navlink {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: #757575;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  border-radius: var(--wpds-border-radius-md);
+  font-size: var(--wpds-typography-font-size-sm);
+  color: var(--wpds-color-fg-content-neutral);
+  cursor: var(--wpds-cursor-control);
+  transition: background-color 0.1s;
 }
-.issue-detail__back { color: #757575; text-decoration: none; }
-.issue-detail__back:hover { color: #3858e9; }
-.issue-detail__id { font-family: ui-monospace, Menlo, monospace; }
-.issue-detail__status,
-.issue-detail__persona {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+.wa-navlink:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+}
+.wa-navlink--active {
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-navlink--paused {
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+
+.wa-eyebrow {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--wpds-color-fg-content-neutral-weak);
 }
-.issue-detail__status { background: #fefce8; color: #a16207; }
-.issue-detail__status[data-status="done"] { background: #f0fdf4; color: #15803d; }
-.issue-detail__status[data-status="rejected"] { background: #fef2f2; color: #b91c1c; }
-.issue-detail__persona { background: #fce7f3; color: #be185d; }
-.issue-detail__title { font-size: 24px; margin: 8px 0 24px; letter-spacing: -0.018em; }
-
-.proposal {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  margin-bottom: 16px;
-}
-.proposal__head {
-  padding: 12px 16px;
-  border-bottom: 1px solid #ececee;
-  background: #fafafa;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #757575;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.proposal__type {
-  font-family: ui-monospace, Menlo, monospace;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12px;
-  color: #3858e9;
-}
-.proposal__body {
-  padding: 16px 20px;
-  font-family: 'Source Serif 4', Georgia, serif;
-  font-size: 15px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-.proposal--previous .proposal__body { color: #757575; }
-.proposal__target {
-  padding: 12px 16px;
-  border-top: 1px solid #ececee;
-  font-size: 12px;
-  color: #757575;
-  font-family: ui-monospace, Menlo, monospace;
+.wa-eyebrow--persona {
+  color: var(--wa-persona-mk-ink);
 }
 
-.issue-detail__actions {
-  margin-top: 16px;
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
+.wa-tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-.empty-hint {
-  color: #757575;
-  font-size: 13px;
-  padding: 8px 0;
+.wa-mono {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sticky bottom action bar on IssueDetail. */
+.wa-action-bar {
+  position: sticky;
+  bottom: 0;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
+  box-shadow: var(--wpds-elevation-md);
+  padding: var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-lg);
+  z-index: 10;
+}
+
+/* Score bars on KPI cards. */
+.wa-score-bar {
+  height: 4px;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-surface-neutral-strong);
+  overflow: hidden;
+}
+.wa-score-bar > div {
+  height: 100%;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-interactive-brand-strong);
+}
+
+.wa-variant-card {
+  position: relative;
+  cursor: var(--wpds-cursor-control);
+  transition: box-shadow 0.14s, border-color 0.14s;
+}
+.wa-variant-card--selected {
+  border-color: var(--wpds-color-stroke-interactive-brand) !important;
+  box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
