@@ -75,8 +75,6 @@ Phase 1 close to wrapping. Live as of 2026-04-27:
 
 Up next:
 
-- **Apr 28** — first end-to-end demo recording on the daemon UI.
-- **Apr 29–30** — design refinement pass with Nevena. The build is rough; visual fidelity is the priority before more screens land on top.
 - **Phase 2 (Apr 29 – May 5)** — Pricing agent (numeric diff) and Sales Support agent (customer-reply draft) so all three Phase-1 personas are writing through Approve. Review/run-log panel covering every model call, ability call, and state change. Numeric-diff and message-diff variants of IssueDetail.
 - **Phase 3 (May 6–12)** — onboarding flow (welcome → store URL → auth → pairing → model provider → fleet deploy). Companion Plugin v0.2 with native device-pair (replaces the App Password path).
 - **Backstage** — PEP follow-on phases: schema validation + policy-predicate DSL + per-persona budgets (Phase 2), then capability tokens verified by the companion plugin + tamper-evident audit log + drift-detection wiring (Phase 3). Plus daemon schema for multi-variant proposals, and embedding the built UI in the daemon binary as static assets.
