@@ -22,7 +22,7 @@ export default function EmailReview() {
         style={{
           maxWidth: 900,
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
         }}
       >
         <Notice status="warning" isDismissible={false}>
@@ -101,7 +101,7 @@ export default function EmailReview() {
           maxWidth: 1100,
           width: '100%',
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
         }}
       >
         <Stack direction="column" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>

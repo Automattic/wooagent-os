@@ -24,7 +24,7 @@ export default function Kanban() {
       style={{
         maxWidth: 1500,
         margin: '0 auto',
-        padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
       }}
     >
       <div className="wa-page-header" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>

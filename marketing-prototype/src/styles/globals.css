@@ -144,6 +144,23 @@ a {
   font-weight: var(--wpds-typography-font-weight-medium);
 }
 
+/* Brand-voice / Yoast checklist row. Plain CSS because flexbox `align-items:
+   start` was unreliable here — the WPDS Text component renders as a flow
+   element whose first-line top isn't always at the box top. Aligning by
+   baseline puts the ✓ glyph next to the first line of body text regardless
+   of how many lines it wraps to. */
+.wa-check-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-sm);
+  align-items: baseline;
+}
+.wa-check-row > .wa-check-mark {
+  flex: none;
+  color: var(--wpds-color-fg-content-success);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+
 /* ---------- Responsive ---------- */
 /* See /ui/src/styles/app.css for the equivalent rules in the daemon UI; this
    file mirrors them so both apps share the same breakpoint behavior. */

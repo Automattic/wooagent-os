@@ -54,7 +54,7 @@ export default function ContentReview() {
         style={{
           maxWidth: 900,
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
         }}
       >
         <Notice status="warning" isDismissible={false}>
@@ -164,7 +164,7 @@ export default function ContentReview() {
           maxWidth: 1500,
           width: '100%',
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
         }}
       >
         {/* Persona eyebrow + title */}
@@ -572,10 +572,8 @@ export default function ContentReview() {
               </Card.Header>
               <Card.Content>
                 <Stack direction="column" gap="sm">
-                  <Stack direction="row" gap="sm" align="start">
-                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
-                      ✓
-                    </span>
+                  <div className="wa-check-row">
+                    <span className="wa-check-mark">✓</span>
                     <Text variant="body-sm">
                       Avoids{' '}
                       <code
@@ -602,11 +600,9 @@ export default function ContentReview() {
                         premium
                       </code>
                     </Text>
-                  </Stack>
-                  <Stack direction="row" gap="sm" align="start">
-                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
-                      ✓
-                    </span>
+                  </div>
+                  <div className="wa-check-row">
+                    <span className="wa-check-mark">✓</span>
                     <Text variant="body-sm">
                       Uses preferred terms{' '}
                       <code
@@ -633,15 +629,13 @@ export default function ContentReview() {
                         handcrafted
                       </code>
                     </Text>
-                  </Stack>
-                  <Stack direction="row" gap="sm" align="start">
-                    <span style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}>
-                      ✓
-                    </span>
+                  </div>
+                  <div className="wa-check-row">
+                    <span className="wa-check-mark">✓</span>
                     <Text variant="body-sm">
                       Tone lands between warm and sincere — your target
                     </Text>
-                  </Stack>
+                  </div>
                 </Stack>
               </Card.Content>
             </Card.Root>
