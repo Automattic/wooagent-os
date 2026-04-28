@@ -5,8 +5,10 @@ import { Notice, Spinner } from '@wordpress/components';
 import {
   ApiError,
   api,
+  variantsFromProposal,
   type Connection,
   type IssueDetail as IssueDetailPayload,
+  type Variant,
 } from '../api/client';
 import { KindBadge, StatusBadge, kindFromIssue } from '../components/StatusBadge';
 import Kpi from '../components/Kpi';
@@ -24,6 +26,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
   const [data, setData] = useState<IssueDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<{
     kind: 'success' | 'error';
     text: string;
@@ -35,7 +38,12 @@ export default function IssueDetail({ connection, onChanged }: Props) {
     api
       .issue(connection, id)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (cancelled) return;
+        setData(res);
+        const vs = variantsFromProposal(res.proposal);
+        if (vs && vs.length > 0) {
+          setSelectedVariant(vs.find((v) => v.recommended)?.id ?? vs[0].id);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -50,7 +58,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
     setBusy('approve');
     setActionMsg(null);
     try {
-      const res = await api.approve(connection, id);
+      const res = await api.approve(connection, id, selectedVariant ?? undefined);
       setActionMsg({
         kind: 'success',
         text: `Applied via ${res.ability ?? 'MCP'} — issue moved to ${res.status}.`,
@@ -132,9 +140,9 @@ export default function IssueDetail({ connection, onChanged }: Props) {
   const persona = issue.persona ?? 'unassigned';
   const reviewable = issue.status === 'in_review';
 
-  // Phase-1 placeholders: scoring data isn't emitted by the daemon yet.
-  // SidebarRail and Kpi tiles render fixed content so the layout reads
-  // correctly. Wire to real data when the daemon ships scorers.
+  const variants = variantsFromProposal(proposal);
+  const activeVariant: Variant | null =
+    variants?.find((v) => v.id === selectedVariant) ?? variants?.[0] ?? null;
 
   return (
     <div
@@ -224,11 +232,34 @@ export default function IssueDetail({ connection, onChanged }: Props) {
             'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
         </Text>
 
-        {/* KPI row */}
+        {/* KPI row — when the proposal carries variants, voice/SEO bind to
+            the currently selected variant so the tiles update as the operator
+            clicks between cards. Single-proposal issues fall back to zeros
+            (no scorer in phase 1). */}
         <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
-          <Kpi label="Scope" value={scope} hint={productBound ? '1 variant generated' : '0 variants generated'} />
-          <Kpi label="Brand voice match" value="0%" score={0} hint="vs. your voice model" />
-          <Kpi label="SEO score" value="0" score={0} hint="Yoast · out of 100" />
+          <Kpi
+            label="Scope"
+            value={scope}
+            hint={
+              variants
+                ? `${variants.length} variants generated`
+                : productBound
+                  ? '1 variant generated'
+                  : '0 variants generated'
+            }
+          />
+          <Kpi
+            label="Brand voice match"
+            value={`${activeVariant?.voice ?? 0}%`}
+            score={activeVariant?.voice ?? 0}
+            hint="vs. your voice model"
+          />
+          <Kpi
+            label="SEO score"
+            value={String(activeVariant?.seo ?? 0)}
+            score={activeVariant?.seo ?? 0}
+            hint="Yoast · out of 100"
+          />
           <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
         </div>
 
@@ -299,9 +330,11 @@ export default function IssueDetail({ connection, onChanged }: Props) {
               <Stack direction="column" gap="xs">
                 <span className="wa-eyebrow wa-eyebrow--persona">Proposed · pick one</span>
                 <Text variant="heading-md">
-                  {proposal
-                    ? '1 variant · phase-1 single proposal'
-                    : 'No proposal attached yet'}
+                  {variants
+                    ? `${variants.length} variants · each with different emphasis`
+                    : proposal
+                      ? '1 variant · phase-1 single proposal'
+                      : 'No proposal attached yet'}
                 </Text>
               </Stack>
             </Stack>
@@ -310,6 +343,158 @@ export default function IssueDetail({ connection, onChanged }: Props) {
               <Notice status="info" isDismissible={false}>
                 The agent hasn't produced a proposal for this issue yet.
               </Notice>
+            ) : variants ? (
+              variants.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setSelectedVariant(v.id)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    minWidth: 0,
+                    textAlign: 'left',
+                    padding: 0,
+                    background: 'transparent',
+                    border: 'none',
+                  }}
+                >
+                  <Card.Root
+                    className={`wa-variant-card${
+                      selectedVariant === v.id ? ' wa-variant-card--selected' : ''
+                    }`}
+                  >
+                    <Card.Content>
+                      {v.recommended && <span className="wa-agent-pick">Agent pick</span>}
+                      <Stack
+                        direction="row"
+                        gap="md"
+                        align="start"
+                        style={{
+                          marginBottom: 'var(--wpds-dimension-gap-sm)',
+                          minWidth: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            height: 24,
+                            width: 24,
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            flex: 'none',
+                            background:
+                              selectedVariant === v.id
+                                ? 'var(--wpds-color-bg-interactive-brand-strong)'
+                                : 'transparent',
+                            color:
+                              selectedVariant === v.id
+                                ? '#ffffff'
+                                : 'var(--wpds-color-fg-content-neutral)',
+                            border:
+                              selectedVariant === v.id
+                                ? 'none'
+                                : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
+                          }}
+                        >
+                          {v.id}
+                        </span>
+                        <Stack
+                          direction="row"
+                          gap="xs"
+                          wrap="wrap"
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 'var(--wpds-border-radius-sm)',
+                              background: 'var(--wa-persona-mk-bg)',
+                              color: 'var(--wa-persona-mk-ink)',
+                            }}
+                          >
+                            {v.label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 'var(--wpds-border-radius-sm)',
+                              background:
+                                v.seo >= 80
+                                  ? 'var(--wpds-color-bg-surface-success-weak)'
+                                  : v.seo >= 70
+                                    ? 'var(--wpds-color-bg-surface-warning-weak)'
+                                    : 'var(--wpds-color-bg-surface-error-weak)',
+                              color:
+                                v.seo >= 80
+                                  ? 'var(--wpds-color-fg-content-success)'
+                                  : v.seo >= 70
+                                    ? 'var(--wpds-color-fg-content-warning)'
+                                    : 'var(--wpds-color-fg-content-error)',
+                            }}
+                          >
+                            SEO · {v.seo}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 'var(--wpds-border-radius-sm)',
+                              background:
+                                v.voice >= 90
+                                  ? 'var(--wpds-color-bg-surface-success-weak)'
+                                  : 'var(--wpds-color-bg-surface-warning-weak)',
+                              color:
+                                v.voice >= 90
+                                  ? 'var(--wpds-color-fg-content-success)'
+                                  : 'var(--wpds-color-fg-content-warning)',
+                            }}
+                          >
+                            Voice · {v.voice}%
+                          </span>
+                          <span
+                            className="wa-mono"
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 'var(--wpds-border-radius-sm)',
+                              background: 'var(--wpds-color-bg-surface-neutral-strong)',
+                              color: 'var(--wpds-color-fg-content-neutral-weak)',
+                            }}
+                          >
+                            {v.charCount} chars
+                          </span>
+                        </Stack>
+                      </Stack>
+                      <Text
+                        variant="body-md"
+                        style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}
+                      >
+                        {v.body}
+                      </Text>
+                      {v.note && (
+                        <div
+                          style={{
+                            marginTop: 'var(--wpds-dimension-gap-md)',
+                            paddingTop: 'var(--wpds-dimension-padding-md)',
+                            borderTop:
+                              'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+                            fontSize: 'var(--wpds-typography-font-size-xs)',
+                            color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          }}
+                        >
+                          {v.note}
+                        </div>
+                      )}
+                    </Card.Content>
+                  </Card.Root>
+                </button>
+              ))
             ) : (
               <Card.Root
                 className="wa-variant-card wa-variant-card--selected"
@@ -380,6 +565,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
         productBound={productBound}
         busy={busy}
         disabled={!reviewable || !proposal}
+        selectedVariantId={activeVariant?.id ?? null}
         onApprove={onApprove}
         onReject={onReject}
         onCancel={() => nav('/')}
