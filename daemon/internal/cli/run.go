@@ -13,7 +13,9 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/httpapi"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
@@ -63,7 +65,27 @@ func newRunCmd() *cobra.Command {
 			// — secrets storage lands with the keychain integration in Phase 3.
 			mcpClient := loadMCPClient(cmd.OutOrStdout())
 
-			srv := httpapi.New(st, am, mcpClient)
+			// Build the PEP. The manifest is the trust allowlist; the PEP wraps
+			// the MCP client so callers can never reach MCP directly. When the
+			// MCP client is nil (UI-only daemon run), we still build the PEP so
+			// audit rows are written for denials and so the no-shortcut rule
+			// doesn't quietly turn off.
+			defaultManifest, err := manifest.Default()
+			if err != nil {
+				return fmt.Errorf("load default manifest: %w", err)
+			}
+			lookup, err := manifest.NewLookup(defaultManifest)
+			if err != nil {
+				return fmt.Errorf("index manifest: %w", err)
+			}
+			var pepInstance *pep.PEP
+			if mcpClient != nil {
+				pepInstance = pep.New(lookup, mcpClient, st.DB)
+			} else {
+				pepInstance = pep.New(lookup, nil, st.DB)
+			}
+
+			srv := httpapi.New(st, am, pepInstance)
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)

@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
-	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
@@ -19,18 +19,20 @@ import (
 // Server wraps a chi router configured with the v1 API, CORS, and bearer-token
 // auth. Callers pass it to http.Server.
 //
-// `mcp` is optional: nil means approve returns 503 because no store is wired.
-// We keep it optional so the daemon can run for UI-only walkthroughs without
-// MCP credentials.
+// `pep` is the gate every store-mutating call routes through (PRD §8.4.2).
+// It carries the MCP client internally; the Server does not hold one
+// directly because the rule "no orchestrator → MCP shortcut" is enforced by
+// having pep.Invoke be the only path. pep may be nil for UI-only daemon
+// runs; approve returns 503 in that case.
 type Server struct {
 	router chi.Router
 	store  *store.Store
 	auth   *auth.Manager
-	mcp    *mcp.Client
+	pep    *pep.PEP
 }
 
-func New(st *store.Store, am *auth.Manager, mcpClient *mcp.Client) *Server {
-	s := &Server{store: st, auth: am, mcp: mcpClient}
+func New(st *store.Store, am *auth.Manager, p *pep.PEP) *Server {
+	s := &Server{store: st, auth: am, pep: p}
 	s.router = s.buildRouter()
 	return s
 }
