@@ -1,15 +1,21 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 )
 
 // Persona is the v0.1 agent-persona wire shape. Mirrors docs/api-contract-v1.md.
@@ -245,7 +251,7 @@ type approveIssueReq struct {
 }
 
 func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
-	if s.mcp == nil {
+	if s.pep == nil {
 		writeError(w, http.StatusServiceUnavailable, "mcp_not_configured",
 			"daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart")
 		return
@@ -320,24 +326,36 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the MCP session is alive. Initialize is idempotent — if we already
-	// have a session, the client returns the cached server info.
-	if _, err := s.mcp.Initialize(ctx); err != nil {
-		writeError(w, http.StatusBadGateway, "mcp_init_failed", err.Error())
+	// Route through the Policy Enforcement Point. The PEP runs the trust
+	// state + persona scope checks (V1), writes a chain-of-identity audit
+	// row, and dispatches to MCP. There is no direct s.mcp call site here
+	// or anywhere else in the daemon — that's the §8.4.2 invariant.
+	persona := manifest.PersonaMarketing
+	if issuePersona := strings.TrimSpace(loadIssuePersona(ctx, s, id)); issuePersona != "" {
+		persona = manifest.Persona(issuePersona)
+	}
+	decision, mcpRes, invokeErr := s.pep.Invoke(ctx, pep.Request{
+		Persona: persona,
+		Ability: dispatch.ability,
+		Args:    params,
+		Intent:  pep.IntentApply,
+		IssueID: id,
+	})
+	if !decision.Allowed {
+		if invokeErr != nil {
+			if errors.Is(invokeErr, pep.ErrMCPNotConfigured) {
+				writeError(w, http.StatusServiceUnavailable, "mcp_not_configured",
+					"daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart")
+				return
+			}
+			writeError(w, http.StatusBadGateway, "mcp_call_failed", invokeErr.Error())
+			return
+		}
+		writePEPDenial(w, decision.Reason)
 		return
 	}
 
-	// Route through the WordPress MCP Adapter's three-meta-tool pattern, the
-	// same shape spike-mcp + persona-marketing use.
-	res, err := s.mcp.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
-		"ability_name": dispatch.ability,
-		"parameters":   params,
-	})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "mcp_call_failed", err.Error())
-		return
-	}
-	if len(res.Content) == 0 {
+	if len(mcpRes.Content) == 0 {
 		writeError(w, http.StatusBadGateway, "mcp_empty", "MCP returned no content")
 		return
 	}
@@ -345,7 +363,7 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := json.Unmarshal([]byte(res.Content[0].Text), &envelope); err != nil {
+	if err := json.Unmarshal([]byte(mcpRes.Content[0].Text), &envelope); err != nil {
 		writeError(w, http.StatusBadGateway, "mcp_decode", err.Error())
 		return
 	}
@@ -366,8 +384,60 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		"id":         id,
 		"status":     "done",
 		"ability":    dispatch.ability,
+		"audit_id":   decision.AuditID,
 		"updated_at": now,
 	})
+}
+
+// loadIssuePersona reads the persona slug off an issue. Used by the approve
+// handler to pass the right Persona into the PEP. Returns "" if the issue
+// has no persona set, in which case the caller falls back to a default.
+func loadIssuePersona(ctx context.Context, s *Server, id string) string {
+	var persona sql.NullString
+	if err := s.store.DB.QueryRowContext(ctx,
+		`SELECT persona FROM issues WHERE id = ?`, id,
+	).Scan(&persona); err != nil {
+		return ""
+	}
+	if !persona.Valid {
+		return ""
+	}
+	return persona.String
+}
+
+// writePEPDenial maps a typed PEP reason code to an HTTP status. Status
+// choices follow the spirit of the codes: forbidden for trust/persona,
+// unprocessable for schema/policy, too-many-requests for budget.
+func writePEPDenial(w http.ResponseWriter, reason pep.ReasonCode) {
+	switch reason {
+	case pep.ReasonAbilityUnapproved, pep.ReasonPersonaForbidden, pep.ReasonScopeInsufficient:
+		writeError(w, http.StatusForbidden, string(reason), pepDenialMessage(reason))
+	case pep.ReasonInvalidArguments, pep.ReasonPolicyViolation:
+		writeError(w, http.StatusUnprocessableEntity, string(reason), pepDenialMessage(reason))
+	case pep.ReasonBudgetExceeded:
+		writeError(w, http.StatusTooManyRequests, string(reason), pepDenialMessage(reason))
+	default:
+		writeError(w, http.StatusForbidden, "permission_denied", "PEP denied the call")
+	}
+}
+
+func pepDenialMessage(reason pep.ReasonCode) string {
+	switch reason {
+	case pep.ReasonAbilityUnapproved:
+		return "ability is not in the trusted manifest"
+	case pep.ReasonPersonaForbidden:
+		return "this persona is not permitted to invoke this ability"
+	case pep.ReasonScopeInsufficient:
+		return "intended action exceeds the ability's authorized scope"
+	case pep.ReasonInvalidArguments:
+		return "arguments did not validate against the ability's input schema"
+	case pep.ReasonPolicyViolation:
+		return "arguments tripped an operator-configured policy"
+	case pep.ReasonBudgetExceeded:
+		return "persona is over its daily budget"
+	default:
+		return "PEP denied the call"
+	}
 }
 
 func (s *Server) handleRejectIssue(w http.ResponseWriter, r *http.Request) {
