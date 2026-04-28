@@ -87,7 +87,7 @@ function dotStyle(state: SeoLine['state']): React.CSSProperties {
 
 export default function SidebarRail() {
   return (
-    <Stack direction="column" gap="md" style={{ width: 320, flex: 'none' }}>
+    <Stack direction="column" gap="md" style={{ width: '100%', flex: 'none' }}>
       <Card.Root>
         <Card.Header>
           <Stack direction="row" justify="space-between" align="center">

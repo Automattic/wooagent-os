@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Text } from '@wordpress/ui';
 import HostedBanner from './components/HostedBanner';
 import LeftNav from './components/LeftNav';
 import SettingsDrawer from './components/SettingsDrawer';
@@ -11,6 +12,7 @@ import EmailReview from './screens/EmailReview';
 import Placeholder from './screens/Placeholder';
 import { SEED_TASKS } from './data/mockTasks';
 import type { Task, TaskStatus } from './data/types';
+import { useIsMobile } from './lib/useMediaQuery';
 
 interface Toast {
   id: string;
@@ -75,11 +77,35 @@ export default function App() {
 
   return (
     <Ctx.Provider value={ctx}>
-      <div style={{ display: 'flex', minHeight: '100vh' }}>
-        <LeftNav onOpenSettings={openSettings} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <HostedBanner />
-          <Routes>
+      <Shell>
+        {(drawer) => (
+          <>
+            <LeftNav
+              onOpenSettings={openSettings}
+              isOpen={drawer.isOpen}
+              onItemClick={drawer.close}
+            />
+            <div
+              className={`wa-sidebar-backdrop${drawer.isOpen ? ' is-open' : ''}`}
+              onClick={drawer.close}
+              aria-hidden="true"
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <header className="wa-mobile-bar">
+                <button
+                  type="button"
+                  className="wa-icon-btn"
+                  aria-label={drawer.isOpen ? 'Close menu' : 'Open menu'}
+                  onClick={drawer.toggle}
+                >
+                  <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                    ☰
+                  </span>
+                </button>
+                <Text variant="heading-sm">WooAgent OS</Text>
+              </header>
+              <HostedBanner />
+              <Routes>
             <Route path="/" element={<Kanban />} />
             <Route path="/issues/:id/content" element={<ContentReview />} />
             <Route path="/issues/:id/campaign" element={<CampaignPlanner />} />
@@ -162,15 +188,56 @@ export default function App() {
                 />
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </div>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </>
+        )}
+      </Shell>
       <SettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
       <ToastStack />
     </Ctx.Provider>
+  );
+}
+
+interface DrawerControls {
+  isOpen: boolean;
+  open: () => void;
+  close: () => void;
+  toggle: () => void;
+}
+
+interface ShellProps {
+  children: (drawer: DrawerControls) => React.ReactNode;
+}
+
+// Shell owns the mobile-drawer state and closes it whenever the route
+// changes. Lives inside the BrowserRouter (declared in main.tsx) so
+// useLocation works.
+function Shell({ children }: ShellProps) {
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isMobile) setIsOpen(false);
+  }, [isMobile]);
+
+  const drawer: DrawerControls = {
+    isOpen,
+    open: () => setIsOpen(true),
+    close: () => setIsOpen(false),
+    toggle: () => setIsOpen((v) => !v),
+  };
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh' }}>{children(drawer)}</div>
   );
 }

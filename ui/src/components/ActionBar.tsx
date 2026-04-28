@@ -22,7 +22,7 @@ export default function ActionBar({
 }: Props) {
   return (
     <div className="wa-action-bar">
-      <Stack direction="row" justify="space-between" align="center" gap="md">
+      <div className="wa-action-bar-row">
         <Stack direction="row" gap="sm" align="center">
           <span
             style={{
@@ -58,7 +58,7 @@ export default function ActionBar({
             </Text>
           </Stack>
         </Stack>
-        <Stack direction="row" gap="sm" align="center">
+        <div className="wa-action-bar-actions">
           <Button variant="tertiary" disabled>
             Ask the agent
           </Button>
@@ -80,8 +80,8 @@ export default function ActionBar({
           >
             {busy === 'approve' ? 'Applying to store…' : '✓ Approve & apply to store'}
           </Button>
-        </Stack>
-      </Stack>
+        </div>
+      </div>
     </div>
   );
 }
