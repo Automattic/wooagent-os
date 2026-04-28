@@ -61,16 +61,24 @@ Upload the zip via **wp-admin → Plugins → Add New → Upload Plugin**. Authe
 
 ## Status
 
-Early development. What's live:
+Phase 1 close to wrapping. Live as of 2026-04-27:
 
 - **Go daemon** — CLI surface, SQLite store + migrations, REST API with bearer auth, agents/issues/runs schemas, embedded prompt + skill registry, telemetry scaffolding.
-- **React UI** — Vite + `@wordpress/components` shell, connection flow, kanban skeleton.
-- **Companion plugin v0.1** — `wooagent-products/*`, `wooagent-orders/*`, `wooagent-customers/*` CRUD abilities, verified end-to-end against a real WooCommerce store over MCP.
-- **Agent runtime, end-to-end** — ADK Go agent loop verified against a live WooCommerce store: model → ADK orchestrator → MCP client → `mcp-adapter-execute-ability` → `wooagent-products/list` → real product data → grounded text (no hallucination). Driven by local `gemma-4-e4b-it` on LM Studio; Anthropic and other providers slot in via config.
 - **MCP client** — Streamable HTTP + JSON-RPC 2.0 client with session-id tracking, Basic Auth, and pass-through to the WP MCP Adapter's three-meta-tool pattern (`discover-abilities`, `get-ability-info`, `execute-ability`).
+- **Companion plugin v0.1** — `wooagent-products/*`, `wooagent-orders/*`, `wooagent-customers/*` CRUD abilities, verified end-to-end against a real WooCommerce store over MCP.
 - **Pre-signed ability manifest** — shipped default with 25 real entries covering the Companion Plugin baseline, the WooCommerce AI plugin's local abilities, Jetpack Forms, and WP core — every entry with a SHA-256 schema hash computed from live schemas, so drift detection is live from day one. Operator overlay support at `~/.wooagent/manifest.json`. A `manifest-compute` dev tool refreshes the seed as plugin schemas change.
+- **Agent runtime, end-to-end** — ADK Go agent loop verified against a live WooCommerce store: model → ADK orchestrator → MCP client → `mcp-adapter-execute-ability` → real product data → grounded text. Driven by local `gemma-4-e4b-it` on LM Studio; Anthropic and other providers slot in via config.
+- **Marketing persona, propose → review → approve → write** — first production persona ships an end-to-end loop. The agent reads products via `wooagent-products/{list,get}`, generates a rewrite proposal, surfaces it as an `in_review` issue, and on operator approval writes the new copy back to the store via `wooagent-products/update`. The previous copy is snapshotted before write so the change is reversible from the Done column.
+- **Daemon UI** (`/ui/`) — sidebar layout (App / Agents / Connected store), 4-column kanban backed by live `/v1/issues`, IssueDetail with KPI row + variant card + brand-voice/Yoast right rail + sticky Approve/Reject action bar wired to the daemon. Built on the WordPress Design System (`@wordpress/ui` + `@wordpress/components`, see `CLAUDE.md`). Mobile-responsive: sidebar collapses to an off-canvas drawer at <768px, kanban scrolls horizontally with snap, IssueDetail stacks at <1024px.
+- **Marketing-prototype** (`/marketing-prototype/`) — standalone WPDS-based demo deployed to GHES Pages at https://***REMOVED***/pages/Automattic/wooagent-os/. Same component primitives as the daemon UI; mock data lets teammates click through ContentReview / CampaignPlanner / EmailReview without spinning up the daemon.
 
-Up next: Policy Enforcement Point middleware (the deterministic gate between orchestrator and MCP client), first production persona (Marketing), kanban React translated from design.
+Up next:
+
+- **Apr 28** — first end-to-end demo recording on the daemon UI.
+- **Apr 29–30** — design refinement pass with Nevena. The build is rough; visual fidelity is the priority before more screens land on top.
+- **Phase 2 (Apr 29 – May 5)** — Pricing agent (numeric diff) and Sales Support agent (customer-reply draft) so all three Phase-1 personas are writing through Approve. Review/run-log panel covering every model call, ability call, and state change. Numeric-diff and message-diff variants of IssueDetail.
+- **Phase 3 (May 6–12)** — onboarding flow (welcome → store URL → auth → pairing → model provider → fleet deploy). Companion Plugin v0.2 with native device-pair (replaces the App Password path).
+- **Backstage** — Policy Enforcement Point middleware (the deterministic gate between orchestrator and MCP client), daemon schema for multi-variant proposals, embedding the built UI in the daemon binary as static assets.
 
 ## License
 
