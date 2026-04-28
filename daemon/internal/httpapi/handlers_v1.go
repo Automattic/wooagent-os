@@ -235,6 +235,15 @@ var approveDispatchByType = map[string]approveDispatch{
 	},
 }
 
+// approveIssueReq is the optional body for POST /v1/issues/:id/approve. When
+// a proposal carries multiple variants in target.variants[], the operator can
+// pick one with variant_id and that variant's body becomes the description
+// shipped to MCP. Empty body keeps the legacy single-proposal path: ship
+// proposal_content as-is.
+type approveIssueReq struct {
+	VariantID string `json:"variant_id,omitempty"`
+}
+
 func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 	if s.mcp == nil {
 		writeError(w, http.StatusServiceUnavailable, "mcp_not_configured",
@@ -244,6 +253,14 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
+
+	var req approveIssueReq
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+			return
+		}
+	}
 
 	// Load the issue + proposal in one shot. Status check happens against the
 	// just-loaded value so two concurrent approves can't both fire (the second
@@ -287,7 +304,17 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	params, err := dispatch.buildParams(proposalContent, target)
+	contentToShip := proposalContent
+	if req.VariantID != "" {
+		body, err := resolveVariantBody(target, req.VariantID)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "bad_variant_id", err.Error())
+			return
+		}
+		contentToShip = body
+	}
+
+	params, err := dispatch.buildParams(contentToShip, target)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "bad_proposal_target", err.Error())
 		return
@@ -378,6 +405,36 @@ func (s *Server) handleRejectIssue(w http.ResponseWriter, r *http.Request) {
 		"status":     "rejected",
 		"updated_at": now,
 	})
+}
+
+// resolveVariantBody finds a variant by id inside target.variants[] and
+// returns its body text. The shape mirrors the prototype's Variant type:
+// each entry is a map with at least {id: string, body: string}.
+func resolveVariantBody(target map[string]any, variantID string) (string, error) {
+	raw, ok := target["variants"]
+	if !ok {
+		return "", fmt.Errorf("proposal target has no variants array")
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return "", fmt.Errorf("variants is not an array")
+	}
+	for _, v := range list {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		idStr, _ := m["id"].(string)
+		if idStr != variantID {
+			continue
+		}
+		body, ok := m["body"].(string)
+		if !ok || body == "" {
+			return "", fmt.Errorf("variant %s has no body", variantID)
+		}
+		return body, nil
+	}
+	return "", fmt.Errorf("variant_id %s not found in proposal target", variantID)
 }
 
 // requireIntFromTarget reads an integer value out of a JSON-decoded target
