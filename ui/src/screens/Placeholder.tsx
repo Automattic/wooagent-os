@@ -23,7 +23,7 @@ export default function Placeholder({
       style={{
         maxWidth: 900,
         margin: '0 auto',
-        padding: 'var(--wpds-dimension-padding-3xl) var(--wpds-dimension-padding-lg)',
+        padding: 'var(--wpds-dimension-padding-3xl) var(--wa-page-pad-x)',
       }}
     >
       <Card.Root

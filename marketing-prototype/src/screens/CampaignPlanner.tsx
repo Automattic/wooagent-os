@@ -22,7 +22,7 @@ export default function CampaignPlanner() {
         style={{
           maxWidth: 900,
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
         }}
       >
         <Notice status="warning" isDismissible={false}>
@@ -58,7 +58,7 @@ export default function CampaignPlanner() {
           style={{
             maxWidth: 1500,
             margin: '0 auto',
-            padding: '0 var(--wpds-dimension-padding-lg)',
+            padding: '0 var(--wa-page-pad-x)',
             height: 48,
             display: 'flex',
             alignItems: 'center',
@@ -101,7 +101,7 @@ export default function CampaignPlanner() {
           maxWidth: 1200,
           width: '100%',
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
         }}
       >
         <Stack direction="column" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>

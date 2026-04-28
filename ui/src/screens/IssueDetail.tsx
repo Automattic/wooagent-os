@@ -150,7 +150,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
           maxWidth: 1500,
           width: '100%',
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-xl) var(--wpds-dimension-padding-2xl)',
+          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
         }}
       >
         {/* Breadcrumb */}

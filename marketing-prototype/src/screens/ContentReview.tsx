@@ -54,7 +54,7 @@ export default function ContentReview() {
         style={{
           maxWidth: 900,
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
         }}
       >
         <Notice status="warning" isDismissible={false}>
@@ -121,7 +121,7 @@ export default function ContentReview() {
           style={{
             maxWidth: 1500,
             margin: '0 auto',
-            padding: '0 var(--wpds-dimension-padding-lg)',
+            padding: '0 var(--wa-page-pad-x)',
             height: 48,
             display: 'flex',
             alignItems: 'center',
@@ -164,7 +164,7 @@ export default function ContentReview() {
           maxWidth: 1500,
           width: '100%',
           margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
         }}
       >
         {/* Persona eyebrow + title */}
@@ -424,6 +424,7 @@ export default function ContentReview() {
                 style={{
                   display: 'block',
                   width: '100%',
+                  minWidth: 0,
                   textAlign: 'left',
                   padding: 0,
                   background: 'transparent',
@@ -433,10 +434,11 @@ export default function ContentReview() {
                 <Card.Root
                   className={`wa-variant-card${
                     selected === v.id ? ' wa-variant-card--selected' : ''
-                  }${v.recommended ? ' wa-variant-card--recommended' : ''}`}
+                  }`}
                 >
                   <Card.Content>
-                    <Stack direction="row" gap="md" align="start" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
+                    {v.recommended && <span className="wa-agent-pick">Agent pick</span>}
+                    <Stack direction="row" gap="md" align="start" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)', minWidth: 0 }}>
                       <span
                         style={{
                           height: 24,
@@ -464,7 +466,7 @@ export default function ContentReview() {
                       >
                         {v.id}
                       </span>
-                      <Stack direction="row" gap="xs" wrap="wrap" style={{ flex: 1 }}>
+                      <Stack direction="row" gap="xs" wrap="wrap" style={{ flex: 1, minWidth: 0 }}>
                         <span
                           style={{
                             fontSize: 10,

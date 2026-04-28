@@ -1,6 +1,22 @@
 /* WPDS design tokens (the canonical --wpds-* CSS variables). */
 @import '@wordpress/theme/design-tokens.css';
 
+/* Page-level horizontal padding. Defined as a single CSS variable so every
+   page wrapper resolves to the same gutter — bumping this in one place is
+   enough to give the whole app more breathing room. WPDS dimension tokens
+   max out at ~32-40px (padding-3xl), which doesn't read as breathing room
+   on a wide dashboard layout, so we use a custom value here. Drops to 16px
+   on mobile (<768px) so cramped phone widths don't lose half the screen
+   to gutters. */
+:root {
+  --wa-page-pad-x: 48px;
+}
+@media (max-width: 767px) {
+  :root {
+    --wa-page-pad-x: 16px;
+  }
+}
+
 /* Documented persona-color exception — see CLAUDE.md. The only non-WPDS color
    tokens allowed in this codebase. Used on agent avatar squares in the sidebar
    and the kind pill on cards. */
@@ -99,7 +115,7 @@ a {
   background: var(--wpds-color-bg-surface-neutral);
   border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
   box-shadow: var(--wpds-elevation-md);
-  padding: var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-lg);
+  padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
   z-index: 10;
 }
 
@@ -128,11 +144,12 @@ a {
   border-color: var(--wpds-color-stroke-interactive-brand) !important;
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
-.wa-variant-card--recommended::before {
-  content: 'Agent pick';
-  position: absolute;
-  top: -10px;
-  left: 16px;
+/* "Agent pick" chip rendered inline at the top of the variant card. The
+   previous ::before pseudo-element approach got clipped by Card.Root's
+   `overflow: clip`. Inline placement avoids the clip and survives narrow
+   viewports without overflowing. */
+.wa-agent-pick {
+  display: inline-block;
   font-family: var(--wpds-typography-font-family-mono);
   font-size: var(--wpds-typography-font-size-xs);
   letter-spacing: 0.08em;
@@ -142,6 +159,7 @@ a {
   border-radius: var(--wpds-border-radius-sm);
   text-transform: uppercase;
   font-weight: var(--wpds-typography-font-weight-medium);
+  margin-bottom: var(--wpds-dimension-gap-sm);
 }
 
 /* Brand-voice / Yoast checklist row. Plain CSS because flexbox `align-items:
