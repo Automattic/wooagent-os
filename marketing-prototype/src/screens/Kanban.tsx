@@ -124,7 +124,7 @@ export default function Kanban() {
                               <Text variant="body-sm" style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}>
                                 {t.title}
                               </Text>
-                              <Stack direction="row" justify="space-between" align="center" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)', fontSize: 11 }}>
+                              <div className="wa-card-meta">
                                 <span>
                                   {t.kind === 'content' &&
                                     (t.variants.length > 0
@@ -135,7 +135,7 @@ export default function Kanban() {
                                   {t.kind === 'email' && t.subject}
                                 </span>
                                 <span className="wa-mono">{t.surfacedAt}</span>
-                              </Stack>
+                              </div>
                             </Stack>
                           </Card.Content>
                         </Card.Root>

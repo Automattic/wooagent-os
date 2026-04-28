@@ -213,20 +213,12 @@ export default function Kanban({ issues, error }: Props) {
                                 >
                                   {issue.title}
                                 </Text>
-                                <Stack
-                                  direction="row"
-                                  justify="space-between"
-                                  align="center"
-                                  style={{
-                                    color: 'var(--wpds-color-fg-content-neutral-weak)',
-                                    fontSize: 11,
-                                  }}
-                                >
+                                <div className="wa-card-meta">
                                   <span>{issue.persona ?? 'unassigned'}</span>
                                   <span className="wa-mono">
                                     {relativeTime(issue.updated_at)}
                                   </span>
-                                </Stack>
+                                </div>
                               </Stack>
                             </Card.Content>
                           </Card.Root>

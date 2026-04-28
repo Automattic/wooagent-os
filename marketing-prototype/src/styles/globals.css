@@ -162,6 +162,27 @@ a {
   margin-bottom: var(--wpds-dimension-gap-sm);
 }
 
+/* Bottom subline of a kanban card (persona / variant count + timestamp).
+   With justify-content: space-between and flex-wrap: wrap, the items push
+   to opposite ends when there's room and stack onto separate lines when
+   there isn't — instead of overlapping or truncating mid-word. Each child
+   uses overflow-wrap: anywhere so long subjects (email kind) break instead
+   of pushing past the card edge. */
+.wa-card-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wpds-dimension-gap-xs);
+  font-size: 11px;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-card-meta > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Brand-voice / Yoast checklist row. Plain CSS because flexbox `align-items:
    start` was unreliable here — the WPDS Text component renders as a flow
    element whose first-line top isn't always at the box top. Aligning by
