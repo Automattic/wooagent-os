@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Button, Notice, Spinner } from '@wordpress/components';
+import { Card, Stack, Text } from '@wordpress/ui';
+import { Notice, Spinner } from '@wordpress/components';
 import {
   ApiError,
   api,
   type Connection,
   type IssueDetail as IssueDetailPayload,
 } from '../api/client';
+import { KindBadge, StatusBadge, kindFromIssue } from '../components/StatusBadge';
+import Kpi from '../components/Kpi';
+import SidebarRail from '../components/SidebarRail';
+import ActionBar from '../components/ActionBar';
 
 interface Props {
   connection: Connection;
+  onChanged?: () => void;
 }
 
-export default function IssueDetail({ connection }: Props) {
+export default function IssueDetail({ connection, onChanged }: Props) {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
   const [data, setData] = useState<IssueDetailPayload | null>(null);
@@ -49,9 +55,8 @@ export default function IssueDetail({ connection }: Props) {
         kind: 'success',
         text: `Applied via ${res.ability ?? 'MCP'} — issue moved to ${res.status}.`,
       });
-      // Reflect new status locally so the buttons disable; navigate back to
-      // the board after a beat so the operator sees the card move to Done.
       setData((d) => (d ? { ...d, issue: { ...d.issue, status: res.status } } : d));
+      onChanged?.();
       setTimeout(() => nav('/'), 1200);
     } catch (e) {
       setActionMsg({
@@ -79,6 +84,7 @@ export default function IssueDetail({ connection }: Props) {
         text: `Rejected — issue moved to ${res.status}.`,
       });
       setData((d) => (d ? { ...d, issue: { ...d.issue, status: res.status } } : d));
+      onChanged?.();
       setTimeout(() => nav('/'), 1200);
     } catch (e) {
       setActionMsg({
@@ -97,119 +103,287 @@ export default function IssueDetail({ connection }: Props) {
 
   if (error) {
     return (
-      <Notice status="error" isDismissible={false}>
-        Failed to load issue: {error}{' '}
-        <Link to="/">Back to board</Link>
-      </Notice>
+      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+        <Notice status="error" isDismissible={false}>
+          Failed to load issue: {error} <Link to="/">Back to board</Link>
+        </Notice>
+      </main>
     );
   }
   if (!data) {
     return (
-      <div>
-        <Spinner /> Loading issue…
-      </div>
+      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+        <Stack direction="row" gap="sm" align="center">
+          <Spinner /> <Text variant="body-sm">Loading issue…</Text>
+        </Stack>
+      </main>
     );
   }
 
   const { issue, proposal } = data;
-  // Pull the `previous` blob out of the proposal target so we can render a
-  // before/after pair. Other target fields (product_id/sku/name) render
-  // separately as kv metadata so it's clear what the agent is acting on.
+  const kind = kindFromIssue(issue);
   const target = (proposal?.target ?? {}) as Record<string, unknown>;
   const previous = typeof target.previous === 'string' ? target.previous : undefined;
-  const otherTarget = Object.fromEntries(
-    Object.entries(target).filter(([k]) => k !== 'previous'),
-  );
+  const productSku = typeof target.sku === 'string' ? target.sku : undefined;
+  const productName =
+    typeof target.product_name === 'string' ? target.product_name : undefined;
+  const productBound = typeof target.product_id === 'number' || !!productSku;
+  const scope = productName ?? productSku ?? '—';
+  const persona = issue.persona ?? 'unassigned';
+  const reviewable = issue.status === 'in_review';
+
+  // Phase-1 placeholders: scoring data isn't emitted by the daemon yet.
+  // SidebarRail and Kpi tiles render fixed content so the layout reads
+  // correctly. Wire to real data when the daemon ships scorers.
 
   return (
-    <div className="issue-detail">
-      <div className="issue-detail__header">
-        <Link to="/" className="issue-detail__back">
-          ← Board
-        </Link>
-        <span>·</span>
-        <span className="issue-detail__id">{issue.id.slice(0, 8)}</span>
-        <span className="issue-detail__status" data-status={issue.status}>
-          {issue.status.replace('_', ' ')}
-        </span>
-        {issue.persona && (
-          <span className="issue-detail__persona">{issue.persona}</span>
-        )}
-      </div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+      }}
+    >
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1500,
+          width: '100%',
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
+        }}
+      >
+        {/* Breadcrumb */}
+        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
+          <Link
+            to="/"
+            style={{
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              fontSize: 'var(--wpds-typography-font-size-sm)',
+            }}
+          >
+            ← Board
+          </Link>
+          <span
+            className="wa-mono"
+            style={{
+              fontSize: 'var(--wpds-typography-font-size-sm)',
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+            }}
+          >
+            {issue.id.slice(0, 8)}
+          </span>
+          <StatusBadge status={issue.status} />
+          <KindBadge kind={kind} />
+        </Stack>
 
-      <h1 className="issue-detail__title">{issue.title}</h1>
+        {/* Persona eyebrow */}
+        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
+          <span
+            style={{
+              height: 24,
+              width: 24,
+              borderRadius: 'var(--wpds-border-radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: 10,
+              background: 'var(--wa-persona-mk-bg)',
+              color: 'var(--wa-persona-mk-ink)',
+              flex: 'none',
+            }}
+          >
+            MK
+          </span>
+          <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+            <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
+              {persona === 'marketing' ? 'Marketing agent' : `${persona} agent`}
+            </strong>{' '}
+            proposes content · {issue.status.replace('_', ' ')} ·{' '}
+            <span className="wa-mono">Claude Sonnet 4.6</span>
+          </Text>
+        </Stack>
 
-      {issue.description && (
-        <p style={{ color: '#4b5563', marginBottom: 24 }}>{issue.description}</p>
-      )}
+        {/* Title + subhead */}
+        <Text
+          variant="heading-2xl"
+          render={<h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+        >
+          {issue.title}
+        </Text>
+        <Text
+          variant="body-md"
+          style={{
+            color: 'var(--wpds-color-fg-content-neutral-weak)',
+            maxWidth: 760,
+            marginBottom: 'var(--wpds-dimension-gap-xl)',
+          }}
+        >
+          {issue.description ??
+            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
+        </Text>
 
-      {!proposal ? (
-        <Notice status="info" isDismissible={false}>
-          No proposal attached to this issue yet.
-        </Notice>
-      ) : (
-        <>
-          {previous && (
-            <div className="proposal proposal--previous">
-              <div className="proposal__head">
-                <span>Current</span>
-                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                  {previous.length} chars
-                </span>
-              </div>
-              <div className="proposal__body">{previous}</div>
-            </div>
-          )}
+        {/* KPI row */}
+        <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Kpi label="Scope" value={scope} hint={productBound ? '1 variant generated' : '0 variants generated'} />
+          <Kpi label="Brand voice match" value="0%" score={0} hint="vs. your voice model" />
+          <Kpi label="SEO score" value="0" score={0} hint="Yoast · out of 100" />
+          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
+        </div>
 
-          <div className="proposal">
-            <div className="proposal__head">
-              <span>Proposed</span>
-              <span className="proposal__type">{proposal.type}</span>
-            </div>
-            <div className="proposal__body">{proposal.content}</div>
-            {Object.keys(otherTarget).length > 0 && (
-              <div className="proposal__target">
-                {Object.entries(otherTarget)
-                  .map(([k, v]) => `${k}=${formatVal(v)}`)
-                  .join(' · ')}
-              </div>
+        {/* Body: main column + sidebar rail */}
+        <div className="wa-detail-body">
+          <div className="wa-detail-main">
+            {/* Current description */}
+            <Card.Root>
+              <Card.Header>
+                <Stack direction="row" justify="space-between" align="center">
+                  <Stack direction="row" gap="sm" align="center">
+                    <span className="wa-eyebrow">Current description</span>
+                    {productBound ? (
+                      <span
+                        style={{
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                          background: 'var(--wpds-color-bg-surface-success-weak)',
+                          color: 'var(--wpds-color-fg-content-success)',
+                        }}
+                      >
+                        Bound: {productSku}
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          padding: '2px 8px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                          background: 'var(--wpds-color-bg-surface-warning-weak)',
+                          color: 'var(--wpds-color-fg-content-warning)',
+                        }}
+                      >
+                        No product bound
+                      </span>
+                    )}
+                  </Stack>
+                  <span
+                    className="wa-mono"
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
+                  >
+                    {previous ? `${previous.length} chars` : '0 chars · sample'}
+                  </span>
+                </Stack>
+              </Card.Header>
+              <Card.Content>
+                <Text
+                  variant="body-sm"
+                  style={{
+                    color: previous
+                      ? 'var(--wpds-color-fg-content-neutral)'
+                      : 'var(--wpds-color-fg-content-neutral-weak)',
+                    whiteSpace: 'pre-wrap',
+                    minHeight: 60,
+                  }}
+                >
+                  {previous ?? '— no current copy on this product —'}
+                </Text>
+              </Card.Content>
+            </Card.Root>
+
+            {/* Proposed section */}
+            <Stack direction="row" justify="space-between" align="end">
+              <Stack direction="column" gap="xs">
+                <span className="wa-eyebrow wa-eyebrow--persona">Proposed · pick one</span>
+                <Text variant="heading-md">
+                  {proposal
+                    ? '1 variant · phase-1 single proposal'
+                    : 'No proposal attached yet'}
+                </Text>
+              </Stack>
+            </Stack>
+
+            {!proposal ? (
+              <Notice status="info" isDismissible={false}>
+                The agent hasn't produced a proposal for this issue yet.
+              </Notice>
+            ) : (
+              <Card.Root
+                className="wa-variant-card wa-variant-card--selected"
+                style={{ borderWidth: 'var(--wpds-border-width-md)' }}
+              >
+                <Card.Header>
+                  <Stack direction="row" justify="space-between" align="center">
+                    <Stack direction="row" gap="sm" align="center">
+                      <span
+                        style={{
+                          fontFamily: 'var(--wpds-typography-font-family-mono)',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 'var(--wpds-border-radius-sm)',
+                          background: 'var(--wpds-color-bg-interactive-brand-strong)',
+                          color: '#ffffff',
+                        }}
+                      >
+                        A
+                      </span>
+                      <Text
+                        variant="body-sm"
+                        style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                      >
+                        {proposal.type}
+                      </Text>
+                    </Stack>
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {proposal.content.length} chars
+                    </span>
+                  </Stack>
+                </Card.Header>
+                <Card.Content>
+                  <Text
+                    variant="body-md"
+                    style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}
+                  >
+                    {proposal.content}
+                  </Text>
+                </Card.Content>
+              </Card.Root>
+            )}
+
+            {actionMsg && (
+              <Notice
+                status={actionMsg.kind === 'success' ? 'success' : 'error'}
+                isDismissible={false}
+              >
+                {actionMsg.text}
+              </Notice>
             )}
           </div>
 
-          {actionMsg && (
-            <Notice
-              status={actionMsg.kind === 'success' ? 'success' : 'error'}
-              isDismissible={false}
-            >
-              {actionMsg.text}
-            </Notice>
-          )}
-
-          <div className="issue-detail__actions">
-            <Button
-              variant="secondary"
-              isDestructive
-              onClick={onReject}
-              disabled={busy !== null || data.issue.status !== 'in_review'}
-            >
-              {busy === 'reject' ? 'Rejecting…' : 'Reject'}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={onApprove}
-              disabled={busy !== null || data.issue.status !== 'in_review'}
-            >
-              {busy === 'approve' ? 'Applying to store…' : 'Approve & apply'}
-            </Button>
+          <div className="wa-detail-rail">
+            <SidebarRail />
           </div>
-        </>
-      )}
+        </div>
+      </main>
+
+      <ActionBar
+        productBound={productBound}
+        busy={busy}
+        disabled={!reviewable || !proposal}
+        onApprove={onApprove}
+        onReject={onReject}
+        onCancel={() => nav('/')}
+      />
     </div>
   );
-}
-
-function formatVal(v: unknown): string {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'string') return v;
-  return JSON.stringify(v);
 }

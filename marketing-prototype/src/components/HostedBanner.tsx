@@ -1,23 +1,29 @@
 // On the hosted version (GHES Pages or any non-dev build) the Vite dev proxy
-// doesn't exist, so the Approve & apply path will fail. This banner is the
-// cheapest way to set the right expectation without disabling the button —
-// teammates can still see and click through the full flow.
+// doesn't exist, so the Approve & apply path will fail. This banner sets the
+// right expectation without disabling the button — teammates can still see
+// and click through the full flow.
 
 export default function HostedBanner() {
   if (import.meta.env.DEV) return null;
   return (
     <div
-      className="text-xs text-center py-1.5 border-b"
       style={{
-        background: '#FEFCE8',
-        borderColor: '#FDE68A',
-        color: '#713F12',
+        fontSize: 'var(--wpds-typography-font-size-xs)',
+        textAlign: 'center',
+        padding: 'var(--wpds-dimension-padding-xs)',
+        background: 'var(--wpds-color-bg-surface-warning-weak)',
+        borderBottom:
+          'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-warning)',
+        color: 'var(--wpds-color-fg-content-warning)',
       }}
     >
-      <span className="font-semibold">Read-only demo</span> — Approve & apply
-      writes to the live store only when you run locally
-      (<code className="font-mono">npm run dev</code>). Click through to see the
-      flow; the apply step will throw on this hosted build.
+      <strong>Read-only demo</strong> — Approve & apply writes to the live store
+      only when you run locally (
+      <code style={{ fontFamily: 'var(--wpds-typography-font-family-mono)' }}>
+        npm run dev
+      </code>
+      ). Click through to see the flow; the apply step will throw on this hosted
+      build.
     </div>
   );
 }

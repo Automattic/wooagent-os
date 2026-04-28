@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Notice } from '@wordpress/components';
+import { Card, Stack, Text } from '@wordpress/ui';
+import { Button, Notice } from '@wordpress/components';
 import { useApp } from '../App';
 import type { CampaignTask } from '../data/types';
 import { KindBadge, StatusBadge } from '../components/StatusBadge';
@@ -17,10 +18,16 @@ export default function CampaignPlanner() {
 
   if (!task) {
     return (
-      <main className="max-w-[900px] mx-auto px-6 py-12">
+      <main
+        style={{
+          maxWidth: 900,
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
+        }}
+      >
         <Notice status="warning" isDismissible={false}>
-          That campaign isn’t in the queue.{' '}
-          <Link to="/" className="underline">
+          That campaign isn't in the queue.{' '}
+          <Link to="/" style={{ textDecoration: 'underline' }}>
             Back to board
           </Link>
         </Notice>
@@ -39,166 +46,302 @@ export default function CampaignPlanner() {
   };
 
   return (
-    <>
-      <div className="bg-white border-b border-border">
-        <div className="max-w-[1500px] mx-auto px-6 h-12 flex items-center gap-3">
-          <Link to="/" className="text-xs text-muted hover:text-ink">
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <div
+        style={{
+          background: 'var(--wpds-color-bg-surface-neutral)',
+          borderBottom:
+            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1500,
+            margin: '0 auto',
+            padding: '0 var(--wa-page-pad-x)',
+            height: 48,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--wpds-dimension-gap-sm)',
+          }}
+        >
+          <Link
+            to="/"
+            style={{
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+            }}
+          >
             ← Board
           </Link>
-          <div className="h-4 w-px bg-border" />
-          <span className="text-xs font-mono tabular text-muted">{task.id}</span>
+          <span
+            style={{
+              height: 16,
+              width: 1,
+              background: 'var(--wpds-color-stroke-surface-neutral)',
+            }}
+          />
+          <span
+            className="wa-mono"
+            style={{
+              fontSize: 'var(--wpds-typography-font-size-xs)',
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+            }}
+          >
+            {task.id}
+          </span>
           <StatusBadge status={task.status} />
           <KindBadge kind="campaign" />
         </div>
       </div>
 
-      <main className="max-w-[1200px] mx-auto px-6 py-8">
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="h-6 w-6 rounded bg-mk-bg text-mk flex items-center justify-center text-[11px] font-bold">
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1200,
+          width: '100%',
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
+        }}
+      >
+        <Stack direction="column" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+          <Stack direction="row" gap="sm" align="center">
+            <span
+              style={{
+                height: 24,
+                width: 24,
+                borderRadius: 'var(--wpds-border-radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 11,
+                background: 'var(--wa-persona-mk-bg)',
+                color: 'var(--wa-persona-mk-ink)',
+                flex: 'none',
+              }}
+            >
               MK
-            </div>
-            <div className="text-xs text-muted">
-              <span className="font-semibold text-ink">Marketing agent</span>{' '}
+            </span>
+            <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+              <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>Marketing agent</strong>{' '}
               proposes a plan
-            </div>
-            <div className="text-xs text-muted-2">·</div>
-            <div className="text-xs tabular font-mono text-muted">
+            </Text>
+            <span style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>·</span>
+            <span
+              className="wa-mono"
+              style={{ fontSize: 'var(--wpds-typography-font-size-xs)', color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
               {task.surfacedAt}
-            </div>
-          </div>
-          <h1
-            className="display font-semibold"
-            style={{ fontSize: 26, lineHeight: 1.25 }}
-          >
+            </span>
+          </Stack>
+          <Text variant="heading-2xl" render={<h1 style={{ margin: 0 }} />}>
             {task.title}
-          </h1>
-          <p className="text-sm mt-2 max-w-2xl text-ink-soft">
+          </Text>
+          <Text variant="body-sm" style={{ maxWidth: 760, color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
             One strategic decision: is this the right plan? If yes, the agent
             schedules the components and brings each one back through Review as
-            it’s drafted.
-          </p>
-        </div>
+            it's drafted.
+          </Text>
+        </Stack>
 
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: '1fr 320px', gap: 20 }}
-        >
-          <main>
-            <div className="card p-5 mb-4">
-              <div className="eyebrow mb-3">Brief</div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <div className="text-xs text-muted mb-1">Goal</div>
-                  <div className="text-ink-soft leading-relaxed">
-                    {task.goal}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted mb-1">Audience</div>
-                  <div className="text-ink-soft leading-relaxed">
-                    {task.audience}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted mb-1">Window</div>
-                  <div className="text-ink-soft font-mono tabular">
-                    {task.startsOn} → {task.endsOn}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted mb-1">Budget</div>
-                  <div className="text-ink-soft font-mono tabular">
-                    {task.budget}
-                  </div>
-                </div>
-              </div>
-            </div>
+        <div className="wa-detail-body">
+          <div className="wa-detail-main">
+            <Card.Root>
+              <Card.Header>
+                <span className="wa-eyebrow">Brief</span>
+              </Card.Header>
+              <Card.Content>
+                <Stack direction="row" gap="md" wrap="wrap">
+                  {(
+                    [
+                      ['Goal', task.goal],
+                      ['Audience', task.audience],
+                      ['Window', `${task.startsOn} → ${task.endsOn}`],
+                      ['Budget', task.budget],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <Stack
+                      key={label}
+                      direction="column"
+                      gap="xs"
+                      style={{ flex: '1 1 240px', minWidth: 0 }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        }}
+                      >
+                        {label}
+                      </span>
+                      <Text variant="body-sm">{value}</Text>
+                    </Stack>
+                  ))}
+                </Stack>
+              </Card.Content>
+            </Card.Root>
 
-            <div className="card overflow-hidden">
-              <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-neutral-50">
-                <div className="eyebrow">Proposed components · {task.children.length}</div>
-                <div className="text-xs text-muted">
-                  Each drafts on its own schedule, returns to In Review.
-                </div>
-              </div>
-              <div className="divide-y divide-border">
-                {task.children.map((c, i) => (
-                  <div
-                    key={c.id}
-                    className="px-5 py-3.5 flex items-center gap-3 hover:bg-neutral-50"
+            <Card.Root>
+              <Card.Header>
+                <Stack direction="row" justify="space-between" align="center">
+                  <span className="wa-eyebrow">
+                    Proposed components · {task.children.length}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
                   >
-                    <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold tabular bg-mk-bg text-mk flex-none">
-                      {i + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink">
-                        {c.title}
-                      </div>
-                      <div className="text-[11px] tabular font-mono text-muted">
-                        {c.id} · {c.scheduledFor}
-                      </div>
-                    </div>
-                    <StatusBadge status={c.status} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </main>
+                    Each drafts on its own schedule, returns to In Review.
+                  </span>
+                </Stack>
+              </Card.Header>
+              <Card.Content>
+                <Stack direction="column" gap="sm">
+                  {task.children.map((c, i) => (
+                    <Stack
+                      key={c.id}
+                      direction="row"
+                      gap="sm"
+                      align="center"
+                      style={{
+                        padding:
+                          'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
+                        borderBottom:
+                          i === task.children.length - 1
+                            ? 'none'
+                            : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          height: 28,
+                          width: 28,
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          background: 'var(--wa-persona-mk-bg)',
+                          color: 'var(--wa-persona-mk-ink)',
+                          flex: 'none',
+                        }}
+                      >
+                        {i + 1}
+                      </span>
+                      <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                        <Text
+                          variant="body-sm"
+                          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                        >
+                          {c.title}
+                        </Text>
+                        <span
+                          className="wa-mono"
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          }}
+                        >
+                          {c.id} · {c.scheduledFor}
+                        </span>
+                      </Stack>
+                      <StatusBadge status={c.status} />
+                    </Stack>
+                  ))}
+                </Stack>
+              </Card.Content>
+            </Card.Root>
+          </div>
 
-          <aside className="space-y-4">
-            <div className="card p-5">
-              <div className="eyebrow mb-2 !text-primary">Why split like this</div>
-              <p className="text-sm text-ink-soft leading-relaxed">
-                A campaign has many pieces but you only make one strategic
-                decision: <span className="font-semibold">is this the right plan?</span>{' '}
-                The rest are executions.
-              </p>
-            </div>
+          <div className="wa-detail-rail">
+          <Stack direction="column" gap="md" style={{ width: '100%' }}>
+            <Card.Root>
+              <Card.Header>
+                <span
+                  className="wa-eyebrow"
+                  style={{ color: 'var(--wpds-color-fg-interactive-brand)' }}
+                >
+                  Why split like this
+                </span>
+              </Card.Header>
+              <Card.Content>
+                <Text variant="body-sm">
+                  A campaign has many pieces but you only make one strategic
+                  decision:{' '}
+                  <strong>is this the right plan?</strong> The rest are
+                  executions.
+                </Text>
+              </Card.Content>
+            </Card.Root>
 
-            <div className="rounded-lg p-4 border bg-warn-bg border-warn-border">
-              <div className="font-semibold text-xs mb-1 text-warn-strong">
-                Failsafe
-              </div>
-              <div
-                className="text-xs leading-relaxed"
-                style={{ color: '#713F12' }}
-              >
-                Approving the plan doesn’t auto-ship anything. Every child
-                returns through In Review when drafted.
-              </div>
-            </div>
-          </aside>
+            <Card.Root
+              style={{
+                background: 'var(--wpds-color-bg-surface-warning-weak)',
+                borderColor: 'var(--wpds-color-stroke-surface-warning)',
+              }}
+            >
+              <Card.Content>
+                <Stack direction="column" gap="xs">
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                      color: 'var(--wpds-color-fg-content-warning)',
+                    }}
+                  >
+                    Failsafe
+                  </Text>
+                  <Text
+                    variant="body-sm"
+                    style={{ color: 'var(--wpds-color-fg-content-warning-weak)' }}
+                  >
+                    Approving the plan doesn't auto-ship anything. Every child
+                    returns through In Review when drafted.
+                  </Text>
+                </Stack>
+              </Card.Content>
+            </Card.Root>
+          </Stack>
+          </div>
         </div>
+      </main>
 
-        <div className="sticky bottom-6 mt-6 z-20">
-          <div className="card p-3 flex items-center gap-3 shadow-sticky">
-            <div className="text-xs pl-2 pr-4 border-r border-border">
-              <div className="font-medium">Approve the plan</div>
-              <div className="text-muted">
-                Schedules {task.children.length} child tasks · no content ships
-                without your review.
-              </div>
-            </div>
-            <div className="flex-1" />
-            <button className="btn btn-ghost text-xs" type="button">
-              Modify
-            </button>
-            <button className="btn btn-danger text-xs" type="button">
+      <div className="wa-action-bar">
+        <div className="wa-action-bar-row">
+          <Stack direction="column" gap="xs">
+            <Text
+              variant="body-sm"
+              style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+            >
+              Approve the plan
+            </Text>
+            <Text
+              variant="body-sm"
+              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
+              Schedules {task.children.length} child tasks · no content ships
+              without your review.
+            </Text>
+          </Stack>
+          <div className="wa-action-bar-actions">
+            <Button variant="tertiary">Modify</Button>
+            <Button variant="tertiary" isDestructive>
               Reject
-            </button>
-            <button
-              className="btn btn-approve"
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={onApprovePlan}
               disabled={task.status !== 'in_review'}
             >
               ✓ Approve plan
-              <span className="kbd">⌘↵</span>
-            </button>
+            </Button>
           </div>
         </div>
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

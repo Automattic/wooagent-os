@@ -33,7 +33,12 @@ export default function Placeholder({
         }}
       >
         <Card.Content>
-          <Stack direction="column" gap="md" align="center" style={{ padding: 'var(--wpds-dimension-padding-2xl) 0', textAlign: 'center' }}>
+          <Stack
+            direction="column"
+            gap="md"
+            align="center"
+            style={{ padding: 'var(--wpds-dimension-padding-2xl) 0', textAlign: 'center' }}
+          >
             <div
               className="wa-eyebrow"
               style={{
@@ -43,12 +48,15 @@ export default function Placeholder({
                     : 'var(--wpds-color-fg-interactive-brand)',
               }}
             >
-              {status === 'soon' ? 'Out of scope · prototype' : 'Reference area'}
+              {status === 'soon' ? 'Out of scope · phase 1' : 'Reference area'}
             </div>
             <Text variant="heading-xl" render={<h1 />}>
               {area}
             </Text>
-            <Text variant="body-md" style={{ maxWidth: 560, color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+            <Text
+              variant="body-md"
+              style={{ maxWidth: 560, color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
               {description}
             </Text>
             <Button variant="primary" onClick={() => nav(ctaTo)}>

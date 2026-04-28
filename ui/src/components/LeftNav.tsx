@@ -1,6 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { Stack, Text } from '@wordpress/ui';
-import { useApp } from '../App';
 
 interface AppItem {
   to: string;
@@ -21,6 +20,7 @@ const APP_ITEMS: AppItem[] = [
   { to: '/', label: 'Board', glyph: '▦' },
   { to: '/activity', label: 'Activity', glyph: '◷' },
   { to: '/abilities', label: 'Abilities', glyph: '◆' },
+  { to: '/settings', label: 'Store settings', glyph: '⚙' },
 ];
 
 const AGENTS: AgentItem[] = [
@@ -83,21 +83,23 @@ const AGENTS: AgentItem[] = [
 ];
 
 interface Props {
-  onOpenSettings: () => void;
-  /** When true, the sidebar is open in mobile drawer mode. CSS hides this on
-      desktop. */
+  marketingInReview: number;
+  daemonHostname: string;
+  /** When true, the sidebar is open in mobile drawer mode. Has no effect on
+      desktop (the desktop layout is sticky-positioned via CSS). */
   isOpen?: boolean;
-  /** Called when an item is clicked — used to close the drawer on mobile. */
+  /** Called when an item inside the sidebar is selected — used to close the
+      drawer on mobile. */
   onItemClick?: () => void;
 }
 
-export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }: Props) {
+export default function LeftNav({
+  marketingInReview,
+  daemonHostname,
+  isOpen = false,
+  onItemClick,
+}: Props) {
   const loc = useLocation();
-  const { tasks } = useApp();
-  const marketingInReview = tasks.filter((t) => t.status === 'in_review').length;
-  // Marketing agent is "where you are" whenever the operator is on a marketing
-  // route — board, content review, campaign, email — since this prototype is
-  // the marketing slice. Other routes only highlight when explicit.
   const onMarketing =
     loc.pathname === '/' ||
     loc.pathname.startsWith('/issues/') ||
@@ -105,7 +107,6 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
 
   return (
     <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
-      {/* Brand */}
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
@@ -134,7 +135,6 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
         </Stack>
       </div>
 
-      {/* App section */}
       <nav
         style={{
           padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
@@ -174,37 +174,8 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
             <span>{item.label}</span>
           </NavLink>
         ))}
-        <button
-          type="button"
-          onClick={() => {
-            onOpenSettings();
-            onItemClick?.();
-          }}
-          className="wa-navlink"
-          style={{
-            width: '100%',
-            background: 'transparent',
-            border: 'none',
-            textAlign: 'left',
-          }}
-        >
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-              width: 16,
-              textAlign: 'center',
-              flex: 'none',
-            }}
-            aria-hidden="true"
-          >
-            ⚙
-          </span>
-          <span>Store settings</span>
-        </button>
       </nav>
 
-      {/* Agents section */}
       <nav
         style={{
           padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
@@ -305,7 +276,6 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
         })}
       </nav>
 
-      {/* Footer */}
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
@@ -325,8 +295,9 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
+          title={daemonHostname}
         >
-          store-example
+          {daemonHostname}
         </div>
         <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
           <span
@@ -344,7 +315,7 @@ export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }:
               color: 'var(--wpds-color-fg-content-neutral-weak)',
             }}
           >
-            Pressable staging
+            Daemon connected
           </span>
         </Stack>
       </div>

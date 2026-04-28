@@ -1,154 +1,394 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* WPDS design tokens (the canonical --wpds-* CSS variables). */
+@import '@wordpress/theme/design-tokens.css';
 
+/* Page-level horizontal padding. Defined as a single CSS variable so every
+   page wrapper resolves to the same gutter — bumping this in one place is
+   enough to give the whole app more breathing room. WPDS dimension tokens
+   max out at ~32-40px (padding-3xl), which doesn't read as breathing room
+   on a wide dashboard layout, so we use a custom value here. Drops to 16px
+   on mobile (<768px) so cramped phone widths don't lose half the screen
+   to gutters. */
 :root {
-  color-scheme: light;
+  --wa-page-pad-x: 48px;
+}
+@media (max-width: 767px) {
+  :root {
+    --wa-page-pad-x: 16px;
+  }
+}
+
+/* Documented persona-color exception — see CLAUDE.md. The only non-WPDS color
+   tokens allowed in this codebase. Used on agent avatar squares in the sidebar
+   and the kind pill on cards. */
+:root {
+  --wa-persona-mk-bg: #fce7f3;
+  --wa-persona-mk-ink: #be185d;
+  --wa-persona-pr-bg: #dbeafe;
+  --wa-persona-pr-ink: #1d4ed8;
+  --wa-persona-in-bg: #fef3c7;
+  --wa-persona-in-ink: #b45309;
+  --wa-persona-ac-bg: #dcfce7;
+  --wa-persona-ac-ink: #15803d;
+  --wa-persona-rp-bg: #ede9fe;
+  --wa-persona-rp-ink: #6d28d9;
+  --wa-persona-ss-bg: #ccfbf1;
+  --wa-persona-ss-ink: #0f766e;
+  --wa-persona-cs-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --wa-persona-cs-ink: #ffffff;
+}
+
+html, body, #root {
+  height: 100%;
 }
 
 body {
-  background: #fafafa;
-  color: #09090b;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  color: var(--wpds-color-fg-content-neutral);
+  font-family: var(--wpds-typography-font-family-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-@layer components {
-  .display {
-    letter-spacing: -0.018em;
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Sidebar nav items. Expressed in CSS because the hover/active interplay with
+   NavLink isn't ergonomic via inline styles. font-family is set explicitly so
+   `<button>` elements (Store settings) match the `<a>` NavLinks — buttons
+   don't inherit font-family from their parent by default. */
+.wa-navlink {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  border-radius: var(--wpds-border-radius-md);
+  font-family: var(--wpds-typography-font-family-body);
+  font-size: var(--wpds-typography-font-size-sm);
+  color: var(--wpds-color-fg-content-neutral);
+  cursor: var(--wpds-cursor-control);
+  transition: background-color 0.1s;
+}
+.wa-navlink:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+}
+.wa-navlink--active {
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-navlink--paused {
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+
+/* Eyebrows — small uppercase labels above section headers. Expressed in CSS
+   because every screen uses them and a class is more legible than repeating
+   the inline style on every render. */
+.wa-eyebrow {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+
+.wa-eyebrow--persona {
+  color: var(--wa-persona-mk-ink);
+}
+
+.wa-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.wa-mono {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sticky bottom action bar used on IssueDetail / ContentReview / etc. WPDS
+   has no equivalent layout primitive for this. */
+.wa-action-bar {
+  position: sticky;
+  bottom: 0;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
+  box-shadow: var(--wpds-elevation-md);
+  padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
+  z-index: 10;
+}
+
+/* Score bars on the IssueDetail KPI row. Small enough that a class beats
+   inline styles when reused. */
+.wa-score-bar {
+  height: 4px;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-surface-neutral-strong);
+  overflow: hidden;
+}
+.wa-score-bar > div {
+  height: 100%;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-interactive-brand-strong);
+}
+
+/* Variant cards on ContentReview — selected and "agent pick" pseudo-label.
+   Plain CSS because the visual treatment composes onto a WPDS Card. */
+.wa-variant-card {
+  position: relative;
+  cursor: var(--wpds-cursor-control);
+  transition: box-shadow 0.14s, border-color 0.14s;
+}
+.wa-variant-card--selected {
+  border-color: var(--wpds-color-stroke-interactive-brand) !important;
+  box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
+}
+/* "Agent pick" chip rendered inline at the top of the variant card. The
+   previous ::before pseudo-element approach got clipped by Card.Root's
+   `overflow: clip`. Inline placement avoids the clip and survives narrow
+   viewports without overflowing. */
+.wa-agent-pick {
+  display: inline-block;
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: var(--wa-persona-mk-ink);
+  color: #ffffff;
+  border-radius: var(--wpds-border-radius-sm);
+  text-transform: uppercase;
+  font-weight: var(--wpds-typography-font-weight-medium);
+  margin-bottom: var(--wpds-dimension-gap-sm);
+}
+
+/* Bottom subline of a kanban card (persona / variant count + timestamp).
+   With justify-content: space-between and flex-wrap: wrap, the items push
+   to opposite ends when there's room and stack onto separate lines when
+   there isn't — instead of overlapping or truncating mid-word. Each child
+   uses overflow-wrap: anywhere so long subjects (email kind) break instead
+   of pushing past the card edge. */
+.wa-card-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wpds-dimension-gap-xs);
+  font-size: 11px;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-card-meta > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Brand-voice / Yoast checklist row. Plain CSS because flexbox `align-items:
+   start` was unreliable here — the WPDS Text component renders as a flow
+   element whose first-line top isn't always at the box top. Aligning by
+   baseline puts the ✓ glyph next to the first line of body text regardless
+   of how many lines it wraps to. */
+.wa-check-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-sm);
+  align-items: baseline;
+}
+.wa-check-row > .wa-check-mark {
+  flex: none;
+  color: var(--wpds-color-fg-content-success);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+
+/* ---------- Responsive ---------- */
+/* See /ui/src/styles/app.css for the equivalent rules in the daemon UI; this
+   file mirrors them so both apps share the same breakpoint behavior. */
+
+.wa-sidebar {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  flex: none;
+  width: 240px;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-right:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
+  display: flex;
+  flex-direction: column;
+}
+
+.wa-mobile-bar {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral);
+  border-bottom:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
+}
+
+.wa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: var(--wpds-border-radius-md);
+  cursor: var(--wpds-cursor-control);
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-icon-btn:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+}
+
+.wa-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
+}
+
+.wa-kanban-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--wpds-dimension-gap-md);
+}
+.wa-kanban-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 60vh;
+}
+
+.wa-detail-body {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-rail {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+.wa-kpi-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+.wa-page-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-lg);
+}
+
+.wa-action-bar-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-md);
+}
+.wa-action-bar-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1023px) {
+  .wa-detail-body {
+    flex-direction: column;
+  }
+  .wa-detail-rail {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .wa-mobile-bar {
+    display: flex;
+  }
+  .wa-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--wpds-elevation-lg);
+  }
+  .wa-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .wa-sidebar-backdrop.is-open {
+    display: block;
   }
 
-  .tabular {
-    font-variant-numeric: tabular-nums;
+  .wa-kanban-row {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: var(--wpds-dimension-padding-sm);
+    margin-left: calc(-1 * var(--wpds-dimension-padding-md));
+    margin-right: calc(-1 * var(--wpds-dimension-padding-md));
+    padding-left: var(--wpds-dimension-padding-md);
+    padding-right: var(--wpds-dimension-padding-md);
+  }
+  .wa-kanban-col {
+    flex: 0 0 auto;
+    min-width: 280px;
+    width: 280px;
+    scroll-snap-align: start;
   }
 
-  .eyebrow {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #71717a;
+  .wa-kpi-row {
+    flex-wrap: wrap;
+  }
+  .wa-kpi-row > * {
+    flex: 1 1 calc(50% - var(--wpds-dimension-gap-md));
+    min-width: 140px;
   }
 
-  .card {
-    @apply bg-white border border-border rounded-lg shadow-card;
+  .wa-page-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .btn {
-    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium leading-none rounded-md border border-transparent cursor-pointer transition-all duration-100;
+  .wa-action-bar {
+    padding:
+      var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
   }
-
-  .btn-primary {
-    @apply bg-primary text-white border-primary-hover shadow-btn;
+  .wa-action-bar-row {
+    flex-direction: column;
+    align-items: stretch;
   }
-  .btn-primary:hover {
-    @apply bg-primary-hover;
+  .wa-action-bar-actions {
+    justify-content: stretch;
   }
-
-  .btn-secondary {
-    @apply bg-white text-ink border-border-strong;
-  }
-  .btn-secondary:hover {
-    background: #f5f5f5;
-  }
-
-  .btn-ghost {
-    @apply bg-transparent text-ink-soft border-transparent;
-  }
-  .btn-ghost:hover {
-    background: #f5f5f5;
-  }
-
-  .btn-danger {
-    @apply bg-transparent text-err border-transparent;
-  }
-  .btn-danger:hover {
-    @apply bg-err-bg;
-  }
-
-  .btn-approve {
-    @apply text-white px-4 py-2 text-[13px] font-semibold shadow-btn;
-    background: #16a34a;
-    border-color: #15803d;
-  }
-  .btn-approve:hover {
-    background: #15803d;
-  }
-
-  .tag {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium leading-tight;
-  }
-  .tag-ok {
-    @apply bg-ok-bg text-ok;
-  }
-  .tag-warn {
-    @apply bg-warn-bg text-warn-strong;
-  }
-  .tag-err {
-    @apply bg-err-bg text-err;
-  }
-  .tag-info {
-    @apply bg-info-bg text-primary;
-  }
-  .tag-mk {
-    @apply bg-mk-bg text-mk;
-  }
-  .tag-neutral {
-    background: #f4f4f5;
-    @apply text-ink-soft;
-  }
-
-  .content-body {
-    font-family: 'Source Serif 4', Georgia, serif;
-    font-size: 14.5px;
-    line-height: 1.65;
-  }
-
-  .score-bar {
-    height: 4px;
-    border-radius: 99px;
-    background: #ececee;
-    overflow: hidden;
-  }
-  .score-bar > div {
-    height: 100%;
-    border-radius: 99px;
-  }
-
-  .variant-card {
-    transition: all 0.14s;
-    cursor: pointer;
-    position: relative;
-  }
-  .variant-card.selected {
-    border-color: #0066cc;
-    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.16);
-  }
-  .variant-card.recommended::before {
-    content: 'Agent pick';
-    position: absolute;
-    top: -10px;
-    left: 16px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    padding: 3px 8px;
-    background: #be185d;
-    color: white;
-    border-radius: 4px;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-
-  .kbd {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.18);
-    color: currentColor;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    margin-left: 4px;
+  .wa-action-bar-actions > * {
+    flex: 1 1 auto;
   }
 }
