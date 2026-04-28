@@ -75,9 +75,9 @@ export default function App() {
 
   return (
     <Ctx.Provider value={ctx}>
-      <div className="flex min-h-screen">
+      <div style={{ display: 'flex', minHeight: '100vh' }}>
         <LeftNav onOpenSettings={openSettings} />
-        <div className="flex-1 min-w-0">
+        <div style={{ flex: 1, minWidth: 0 }}>
           <HostedBanner />
           <Routes>
             <Route path="/" element={<Kanban />} />
