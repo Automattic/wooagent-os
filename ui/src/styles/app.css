@@ -132,6 +132,23 @@ a {
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
 
+/* Bottom subline of a kanban card — see globals.css commentary in
+   marketing-prototype for the why. */
+.wa-card-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wpds-dimension-gap-xs);
+  font-size: 11px;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-card-meta > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Brand-voice / Yoast checklist row — see globals.css commentary in
    marketing-prototype for the why. */
 .wa-check-row {
