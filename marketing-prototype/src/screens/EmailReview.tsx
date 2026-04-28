@@ -176,7 +176,7 @@ export default function EmailReview() {
       </main>
 
       <div className="wa-action-bar">
-        <Stack direction="row" gap="md" align="center" justify="space-between">
+        <div className="wa-action-bar-row">
           <Stack direction="column" gap="xs">
             <Text
               variant="body-sm"
@@ -191,7 +191,7 @@ export default function EmailReview() {
               Adds to the welcome series; first send 9am tomorrow.
             </Text>
           </Stack>
-          <Stack direction="row" gap="sm" align="center">
+          <div className="wa-action-bar-actions">
             <Button variant="tertiary" isDestructive>
               Reject
             </Button>
@@ -202,8 +202,8 @@ export default function EmailReview() {
             >
               ✓ Approve email
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       </div>
     </div>
   );

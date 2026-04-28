@@ -118,3 +118,208 @@ a {
   border-color: var(--wpds-color-stroke-interactive-brand) !important;
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
+
+/* ---------- Responsive ---------- */
+/* Mobile breakpoint (<768px): sidebar becomes an off-canvas drawer triggered
+   by a hamburger in a top bar. Tablet breakpoint (<1024px): IssueDetail's
+   two-column body collapses to a single column so the right rail drops below
+   the main content. WPDS Stack uses inline flex props that we can't override
+   with media queries, so the responsive layouts use plain divs with these
+   class names instead. */
+
+.wa-sidebar {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  flex: none;
+  width: 240px;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-right:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
+  display: flex;
+  flex-direction: column;
+}
+
+.wa-mobile-bar {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral);
+  border-bottom:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
+}
+
+.wa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: var(--wpds-border-radius-md);
+  cursor: var(--wpds-cursor-control);
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-icon-btn:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+}
+
+.wa-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
+}
+
+/* Kanban columns row */
+.wa-kanban-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--wpds-dimension-gap-md);
+}
+.wa-kanban-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 60vh;
+}
+
+/* IssueDetail body — main column + right rail */
+.wa-detail-body {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-rail {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+/* IssueDetail KPI row */
+.wa-kpi-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+/* IssueDetail page header — title block + status block side by side */
+.wa-page-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-lg);
+}
+
+/* Sticky action bar inner row */
+.wa-action-bar-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-md);
+}
+.wa-action-bar-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* <1024px: drop the right rail under the main column. */
+@media (max-width: 1023px) {
+  .wa-detail-body {
+    flex-direction: column;
+  }
+  .wa-detail-rail {
+    width: 100%;
+  }
+}
+
+/* <768px: sidebar becomes off-canvas drawer; kanban scrolls horizontally;
+   KPI row wraps to 2x2; action bar stacks; page header stacks. */
+@media (max-width: 767px) {
+  .wa-mobile-bar {
+    display: flex;
+  }
+  .wa-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--wpds-elevation-lg);
+  }
+  .wa-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .wa-sidebar-backdrop.is-open {
+    display: block;
+  }
+
+  .wa-kanban-row {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: var(--wpds-dimension-padding-sm);
+    margin-left: calc(-1 * var(--wpds-dimension-padding-md));
+    margin-right: calc(-1 * var(--wpds-dimension-padding-md));
+    padding-left: var(--wpds-dimension-padding-md);
+    padding-right: var(--wpds-dimension-padding-md);
+  }
+  .wa-kanban-col {
+    flex: 0 0 auto;
+    min-width: 280px;
+    width: 280px;
+    scroll-snap-align: start;
+  }
+
+  .wa-kpi-row {
+    flex-wrap: wrap;
+  }
+  .wa-kpi-row > * {
+    flex: 1 1 calc(50% - var(--wpds-dimension-gap-md));
+    min-width: 140px;
+  }
+
+  .wa-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wa-action-bar {
+    padding:
+      var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  }
+  .wa-action-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wa-action-bar-actions {
+    justify-content: stretch;
+  }
+  .wa-action-bar-actions > * {
+    flex: 1 1 auto;
+  }
+}

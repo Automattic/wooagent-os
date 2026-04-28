@@ -85,11 +85,8 @@ export default function Kanban({ issues, error }: Props) {
         padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
       }}
     >
-      <Stack
-        direction="row"
-        justify="space-between"
-        align="end"
-        gap="lg"
+      <div
+        className="wa-page-header"
         style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}
       >
         <Stack direction="column" gap="xs">
@@ -135,13 +132,13 @@ export default function Kanban({ issues, error }: Props) {
             {lastUpdate ? `last scan · ${relativeTime(lastUpdate)}` : 'no activity yet'}
           </span>
         </Stack>
-      </Stack>
+      </div>
 
-      <Stack direction="row" gap="md" align="stretch">
+      <div className="wa-kanban-row">
         {COLUMNS.map((col) => {
           const colIssues = issues.filter((i) => columnFor(i.status) === col.key);
           return (
-            <div key={col.key} style={{ flex: 1, minWidth: 0, minHeight: '60vh' }}>
+            <div key={col.key} className="wa-kanban-col">
               <Card.Root
                 style={{
                   height: '100%',
@@ -242,7 +239,7 @@ export default function Kanban({ issues, error }: Props) {
             </div>
           );
         })}
-      </Stack>
+      </div>
     </main>
   );
 }

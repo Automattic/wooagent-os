@@ -228,7 +228,7 @@ export default function ContentReview() {
         </Stack>
 
         {/* KPI row */}
-        <Stack direction="row" gap="sm" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+        <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
           <Card.Root style={{ flex: 1, minWidth: 0 }}>
             <Card.Content>
               <Stack direction="column" gap="xs">
@@ -332,11 +332,11 @@ export default function ContentReview() {
               </Stack>
             </Card.Content>
           </Card.Root>
-        </Stack>
+        </div>
 
         {/* Body grid: variants + sidebar */}
-        <Stack direction="row" gap="lg" align="start">
-          <Stack direction="column" gap="md" style={{ flex: 1, minWidth: 0 }}>
+        <div className="wa-detail-body">
+          <div className="wa-detail-main">
             {/* Current description */}
             <Card.Root>
               <Card.Header>
@@ -549,10 +549,10 @@ export default function ContentReview() {
                 </Card.Root>
               </button>
             ))}
-          </Stack>
+          </div>
 
           {/* Sidebar rail */}
-          <Stack direction="column" gap="md" style={{ width: 320, flex: 'none' }}>
+          <div className="wa-detail-rail">
             <Card.Root>
               <Card.Header>
                 <Stack direction="row" justify="space-between" align="center">
@@ -705,13 +705,13 @@ export default function ContentReview() {
                 </Stack>
               </Card.Content>
             </Card.Root>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       </main>
 
       {/* Sticky action bar */}
       <div className="wa-action-bar">
-        <Stack direction="row" gap="md" align="center" justify="space-between">
+        <div className="wa-action-bar-row">
           <Stack direction="row" gap="sm" align="center">
             <span
               style={{
@@ -746,7 +746,7 @@ export default function ContentReview() {
               </Text>
             </Stack>
           </Stack>
-          <Stack direction="row" gap="sm" align="center">
+          <div className="wa-action-bar-actions">
             <Button variant="tertiary" disabled>
               Ask the agent
             </Button>
@@ -763,8 +763,8 @@ export default function ContentReview() {
             >
               {applying ? 'Applying…' : '✓ Approve & apply to store'}
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       </div>
     </div>
   );

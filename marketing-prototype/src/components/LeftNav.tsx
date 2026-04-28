@@ -84,9 +84,14 @@ const AGENTS: AgentItem[] = [
 
 interface Props {
   onOpenSettings: () => void;
+  /** When true, the sidebar is open in mobile drawer mode. CSS hides this on
+      desktop. */
+  isOpen?: boolean;
+  /** Called when an item is clicked — used to close the drawer on mobile. */
+  onItemClick?: () => void;
 }
 
-export default function LeftNav({ onOpenSettings }: Props) {
+export default function LeftNav({ onOpenSettings, isOpen = false, onItemClick }: Props) {
   const loc = useLocation();
   const { tasks } = useApp();
   const marketingInReview = tasks.filter((t) => t.status === 'in_review').length;
@@ -99,19 +104,7 @@ export default function LeftNav({ onOpenSettings }: Props) {
     loc.pathname === '/agents/marketing';
 
   return (
-    <aside
-      style={{
-        height: '100vh',
-        position: 'sticky',
-        top: 0,
-        flex: 'none',
-        width: 240,
-        background: 'var(--wpds-color-bg-surface-neutral)',
-        borderRight: 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
       {/* Brand */}
       <div
         style={{
@@ -161,6 +154,7 @@ export default function LeftNav({ onOpenSettings }: Props) {
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            onClick={onItemClick}
             className={({ isActive }) =>
               `wa-navlink${isActive ? ' wa-navlink--active' : ''}`
             }
@@ -182,7 +176,10 @@ export default function LeftNav({ onOpenSettings }: Props) {
         ))}
         <button
           type="button"
-          onClick={onOpenSettings}
+          onClick={() => {
+            onOpenSettings();
+            onItemClick?.();
+          }}
           className="wa-navlink"
           style={{
             width: '100%',
@@ -239,6 +236,7 @@ export default function LeftNav({ onOpenSettings }: Props) {
             <NavLink
               key={a.to}
               to={a.to}
+              onClick={onItemClick}
               className={() => {
                 const cls = ['wa-navlink'];
                 if (here) cls.push('wa-navlink--active');

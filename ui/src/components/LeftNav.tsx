@@ -85,9 +85,20 @@ const AGENTS: AgentItem[] = [
 interface Props {
   marketingInReview: number;
   daemonHostname: string;
+  /** When true, the sidebar is open in mobile drawer mode. Has no effect on
+      desktop (the desktop layout is sticky-positioned via CSS). */
+  isOpen?: boolean;
+  /** Called when an item inside the sidebar is selected — used to close the
+      drawer on mobile. */
+  onItemClick?: () => void;
 }
 
-export default function LeftNav({ marketingInReview, daemonHostname }: Props) {
+export default function LeftNav({
+  marketingInReview,
+  daemonHostname,
+  isOpen = false,
+  onItemClick,
+}: Props) {
   const loc = useLocation();
   const onMarketing =
     loc.pathname === '/' ||
@@ -95,19 +106,7 @@ export default function LeftNav({ marketingInReview, daemonHostname }: Props) {
     loc.pathname === '/agents/marketing';
 
   return (
-    <aside
-      style={{
-        height: '100vh',
-        position: 'sticky',
-        top: 0,
-        flex: 'none',
-        width: 240,
-        background: 'var(--wpds-color-bg-surface-neutral)',
-        borderRight: 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
@@ -155,6 +154,7 @@ export default function LeftNav({ marketingInReview, daemonHostname }: Props) {
             key={item.to}
             to={item.to}
             end={item.to === '/'}
+            onClick={onItemClick}
             className={({ isActive }) =>
               `wa-navlink${isActive ? ' wa-navlink--active' : ''}`
             }
@@ -206,6 +206,7 @@ export default function LeftNav({ marketingInReview, daemonHostname }: Props) {
             <NavLink
               key={a.to}
               to={a.to}
+              onClick={onItemClick}
               className={() => {
                 const cls = ['wa-navlink'];
                 if (here) cls.push('wa-navlink--active');

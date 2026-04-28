@@ -145,8 +145,8 @@ export default function CampaignPlanner() {
           </Text>
         </Stack>
 
-        <Stack direction="row" gap="lg" align="start">
-          <Stack direction="column" gap="md" style={{ flex: 1, minWidth: 0 }}>
+        <div className="wa-detail-body">
+          <div className="wa-detail-main">
             <Card.Root>
               <Card.Header>
                 <span className="wa-eyebrow">Brief</span>
@@ -255,9 +255,10 @@ export default function CampaignPlanner() {
                 </Stack>
               </Card.Content>
             </Card.Root>
-          </Stack>
+          </div>
 
-          <Stack direction="column" gap="md" style={{ width: 320, flex: 'none' }}>
+          <div className="wa-detail-rail">
+          <Stack direction="column" gap="md" style={{ width: '100%' }}>
             <Card.Root>
               <Card.Header>
                 <span
@@ -305,11 +306,12 @@ export default function CampaignPlanner() {
               </Card.Content>
             </Card.Root>
           </Stack>
-        </Stack>
+          </div>
+        </div>
       </main>
 
       <div className="wa-action-bar">
-        <Stack direction="row" gap="md" align="center" justify="space-between">
+        <div className="wa-action-bar-row">
           <Stack direction="column" gap="xs">
             <Text
               variant="body-sm"
@@ -325,7 +327,7 @@ export default function CampaignPlanner() {
               without your review.
             </Text>
           </Stack>
-          <Stack direction="row" gap="sm" align="center">
+          <div className="wa-action-bar-actions">
             <Button variant="tertiary">Modify</Button>
             <Button variant="tertiary" isDestructive>
               Reject
@@ -337,8 +339,8 @@ export default function CampaignPlanner() {
             >
               ✓ Approve plan
             </Button>
-          </Stack>
-        </Stack>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -225,16 +225,16 @@ export default function IssueDetail({ connection, onChanged }: Props) {
         </Text>
 
         {/* KPI row */}
-        <Stack direction="row" gap="md" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+        <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
           <Kpi label="Scope" value={scope} hint={productBound ? '1 variant generated' : '0 variants generated'} />
           <Kpi label="Brand voice match" value="0%" score={0} hint="vs. your voice model" />
           <Kpi label="SEO score" value="0" score={0} hint="Yoast · out of 100" />
           <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
-        </Stack>
+        </div>
 
         {/* Body: main column + sidebar rail */}
-        <Stack direction="row" gap="lg" align="start">
-          <Stack direction="column" gap="lg" style={{ flex: 1, minWidth: 0 }}>
+        <div className="wa-detail-body">
+          <div className="wa-detail-main">
             {/* Current description */}
             <Card.Root>
               <Card.Header>
@@ -368,10 +368,12 @@ export default function IssueDetail({ connection, onChanged }: Props) {
                 {actionMsg.text}
               </Notice>
             )}
-          </Stack>
+          </div>
 
-          <SidebarRail />
-        </Stack>
+          <div className="wa-detail-rail">
+            <SidebarRail />
+          </div>
+        </div>
       </main>
 
       <ActionBar

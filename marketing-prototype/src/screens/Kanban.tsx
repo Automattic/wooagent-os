@@ -27,7 +27,7 @@ export default function Kanban() {
         padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
       }}
     >
-      <Stack direction="row" justify="space-between" align="end" gap="lg" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
+      <div className="wa-page-header" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
         <Stack direction="column" gap="xs">
           <span className="wa-eyebrow wa-eyebrow--persona">Marketing agent · Today</span>
           <Text variant="heading-2xl" render={<h1 />}>
@@ -59,20 +59,13 @@ export default function Kanban() {
           </Stack>
           <span className="wa-mono">last scan · 8 min ago</span>
         </Stack>
-      </Stack>
+      </div>
 
-      <Stack direction="row" gap="md" align="stretch">
+      <div className="wa-kanban-row">
         {COLUMNS.map((col) => {
           const colTasks = tasks.filter((t) => t.status === col.status);
           return (
-            <div
-              key={col.status}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                minHeight: '60vh',
-              }}
-            >
+            <div key={col.status} className="wa-kanban-col">
               <Card.Root style={{ height: '100%', background: 'var(--wpds-color-bg-surface-neutral-weak)' }}>
                 <Card.Header>
                   <Stack direction="row" justify="space-between" align="end">
@@ -154,7 +147,7 @@ export default function Kanban() {
             </div>
           );
         })}
-      </Stack>
+      </div>
     </main>
   );
 }
