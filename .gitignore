@@ -36,3 +36,8 @@ yarn-error.log*
 
 # Build artifacts
 /dist/
+
+# Personal scratch / drafts (not part of the project)
+/April 22 - wooagent-mockups/
+/blog-2026-04-27.md
+/uxtesting.md
