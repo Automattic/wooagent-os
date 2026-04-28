@@ -99,10 +99,48 @@ export interface Issue {
   updated_at: string;
 }
 
+export interface Variant {
+  id: string;
+  label: string;
+  body: string;
+  seo: number;
+  voice: number;
+  charCount: number;
+  recommended?: boolean;
+  note?: string;
+}
+
 export interface Proposal {
   type: string;
   content: string;
   target?: Record<string, unknown>;
+}
+
+// Pull a typed variants list out of proposal.target.variants. Returns null
+// when the proposal is single-shot (no variants array). Filters out
+// malformed entries so the UI never has to defensively check shape.
+export function variantsFromProposal(p: Proposal | null | undefined): Variant[] | null {
+  if (!p?.target) return null;
+  const raw = (p.target as Record<string, unknown>).variants;
+  if (!Array.isArray(raw)) return null;
+  const out: Variant[] = [];
+  for (const v of raw) {
+    if (!v || typeof v !== 'object') continue;
+    const r = v as Record<string, unknown>;
+    if (typeof r.id !== 'string' || typeof r.body !== 'string') continue;
+    out.push({
+      id: r.id,
+      label: typeof r.label === 'string' ? r.label : r.id,
+      body: r.body,
+      seo: typeof r.seo === 'number' ? r.seo : 0,
+      voice: typeof r.voice === 'number' ? r.voice : 0,
+      charCount:
+        typeof r.charCount === 'number' ? r.charCount : r.body.length,
+      recommended: r.recommended === true,
+      note: typeof r.note === 'string' ? r.note : undefined,
+    });
+  }
+  return out.length > 0 ? out : null;
 }
 
 export interface IssueDetail {
@@ -125,8 +163,11 @@ export const api = {
   issue: (c: Connection, id: string) => request<IssueDetail>(c, `/v1/issues/${id}`),
   createIssue: (c: Connection, body: Partial<Issue>) =>
     request<Issue>(c, '/v1/issues', { method: 'POST', body: JSON.stringify(body) }),
-  approve: (c: Connection, id: string) =>
-    request<ApproveResult>(c, `/v1/issues/${id}/approve`, { method: 'POST' }),
+  approve: (c: Connection, id: string, variantId?: string) =>
+    request<ApproveResult>(c, `/v1/issues/${id}/approve`, {
+      method: 'POST',
+      body: variantId ? JSON.stringify({ variant_id: variantId }) : undefined,
+    }),
   reject: (c: Connection, id: string) =>
     request<ApproveResult>(c, `/v1/issues/${id}/reject`, { method: 'POST' }),
 };

@@ -132,6 +132,22 @@ a {
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
 
+/* "Agent pick" chip rendered inline at the top of the recommended variant
+   card — same shape as the prototype. */
+.wa-agent-pick {
+  display: inline-block;
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: var(--wa-persona-mk-ink);
+  color: #ffffff;
+  border-radius: var(--wpds-border-radius-sm);
+  text-transform: uppercase;
+  font-weight: var(--wpds-typography-font-weight-medium);
+  margin-bottom: var(--wpds-dimension-gap-sm);
+}
+
 /* Bottom subline of a kanban card — see globals.css commentary in
    marketing-prototype for the why. */
 .wa-card-meta {
