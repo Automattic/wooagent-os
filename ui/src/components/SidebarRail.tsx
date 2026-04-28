@@ -103,11 +103,8 @@ export default function SidebarRail() {
         <Card.Content>
           <Stack direction="column" gap="sm">
             {SAMPLE_VOICE.map((line, i) => (
-              <Stack key={i} direction="row" gap="sm" align="start">
-                <span
-                  aria-hidden="true"
-                  style={{ color: 'var(--wpds-color-fg-content-success)', flex: 'none', marginTop: 2 }}
-                >
+              <div key={i} className="wa-check-row">
+                <span aria-hidden="true" className="wa-check-mark">
                   ✓
                 </span>
                 <Text variant="body-sm">
@@ -120,7 +117,7 @@ export default function SidebarRail() {
                     </span>
                   ))}
                 </Text>
-              </Stack>
+              </div>
             ))}
           </Stack>
         </Card.Content>

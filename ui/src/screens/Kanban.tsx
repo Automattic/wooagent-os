@@ -82,7 +82,7 @@ export default function Kanban({ issues, error }: Props) {
       style={{
         maxWidth: 1500,
         margin: '0 auto',
-        padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-lg)',
+        padding: 'var(--wpds-dimension-padding-2xl) var(--wpds-dimension-padding-2xl)',
       }}
     >
       <div

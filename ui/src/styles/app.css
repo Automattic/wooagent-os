@@ -120,6 +120,20 @@ a {
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
 
+/* Brand-voice / Yoast checklist row — see globals.css commentary in
+   marketing-prototype for the why. */
+.wa-check-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-sm);
+  align-items: baseline;
+}
+.wa-check-row > .wa-check-mark {
+  flex: none;
+  color: var(--wpds-color-fg-content-success);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+
 /* ---------- Responsive ---------- */
 /* Mobile breakpoint (<768px): sidebar becomes an off-canvas drawer triggered
    by a hamburger in a top bar. Tablet breakpoint (<1024px): IssueDetail's
