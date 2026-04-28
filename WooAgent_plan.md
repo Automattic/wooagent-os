@@ -134,29 +134,41 @@ Aggressive — this phase combines what was originally two phases of work into o
 - **Wed (Apr 22) — remaining:** formal delivery of API contract v1 to Nevena (the doc itself, `docs/api-contract-v1.md`, shipped with Pre-Phase 1).
 - **Thu (Apr 23) — pulled forward from Mon Apr 27:** **MCP client in daemon** — connect to the test store, discover the `wooagent-*` ability surface, cache schemas. Starts from a known-good endpoint (Companion Plugin already serving data). Readiness gates are all green: MCP endpoint live, schema verified end-to-end on Apr 21, `github.com/modelcontextprotocol/go-sdk` available in the Go ecosystem. Hard stop: talking to the store by EOD.
 - **Fri (Apr 24) — pulled forward from Mon–Tue Apr 27–28:** **Begin Marketing agent persona.** Reads products via `wooagent-products/list` + `wooagent-products/get`, generates a rewrite proposal, lands in `In Review` via `GET /issues`, `POST /issues/:id/approve`, `POST /issues/:id/reject`. If MCP client slips into Friday, Marketing starts Monday on the original slot; Phase 4 testing buffer absorbs the slack.
-- **Mon–Tue (Apr 27–28):** Finish Marketing agent. Translate kanban board React from Nevena's designs as they land. **Reclaimed-time options** if Marketing is done early: kanban polish, run-log panel headstart, or pull a Phase 2 item (Pricing agent skeleton) forward.
+- **Mon (Apr 27) — done:**
+  - ✅ **WPDS as the single design source.** New `CLAUDE.md` at the repo root codifies it for future sessions: `@wordpress/ui` + `@wordpress/components` only, `--wpds-*` design tokens (no Tailwind, no Inter / Roboto / system-font defaults), `Stack`/flexbox for layout, the seven persona-color CSS variables (`--wa-persona-*`) as the only documented exception. Skills to invoke for UI work named (`wpds`, `frontend-design`, `wordpress-mockups`).
+  - ✅ **Daemon UI reskinned on WPDS** (`feat/wpds-bridge-ui` — committed locally, not pushed). Top navbar replaced by a left sidebar with WooAgent OS branding, App / Agents groups, persona-color avatars, "Marketing N in review" badge wired to live `/v1/issues` data, connected-store footer derived from `connection.daemonUrl`. Kanban became a 4-column `Card`-based board (daemon's `todo`+`in_progress` collapse to drafting; `rejected` drops off). `IssueDetail.tsx` rebuilt from scratch to match the prototype's content-review screenshot: breadcrumb → persona eyebrow → 4 KPI Cards → two-column body (Current description card from `proposal.target.previous`; single-variant card; right rail with sample Brand voice / Yoast / Reversible) → sticky bottom action bar wired to existing `api.approve` / `api.reject`. New components: `LeftNav`, `KindBadge`/`StatusBadge`, `Kpi`, `SidebarRail`, `ActionBar`, `Placeholder`. Six `/agents/*` placeholder routes so sidebar links don't 404.
+  - ✅ **Marketing-prototype migrated to WPDS for parity.** Tailwind, PostCSS, autoprefixer, `tailwind.config.js`, `postcss.config.js` removed. All seven components and five screens (Kanban, ContentReview at 471 lines, CampaignPlanner, EmailReview, Placeholder, plus SettingsDrawer + ToastStack + HostedBanner) ported to `Stack` / `Card` / `Text` / `Badge` from `@wordpress/ui` with `--wpds-*` tokens. Mock `SEED_TASKS` data preserved; real Woo API integration (`lib/woo.ts`) untouched. Both apps build clean (`tsc -b && vite build`); audit grep is zero on `tailwind` / `Inter` / banned fonts.
+  - ✅ **GHES Pages redeploy.** Force-pushed to `gh-pages` on `github.a8c.com:Automattic/wooagent-os`. Live at https://github.a8c.com/pages/Automattic/wooagent-os/.
+- **Tue (Apr 28) — first demo recording day.** Record an end-to-end walkthrough on the daemon UI (board → IssueDetail → Approve → card moves to Done) and share progress so far. **No new code shipping today.** The build is rough — visual fidelity is at the "shape is right, polish is missing" stage — so Tue + the first day or two of Phase 2 are reserved for design refinement with Nevena (see Phase 2 below).
 
 **Nevena (Wed Apr 22 → Tue Apr 28)**
 - **Wed–Thu (Apr 22–23):** lightweight style tile (colors, type, spacing — persona avatars can slip to Phase 2) so Elizabeth isn't blocked on visual tokens.
-- **Fri–Mon (Apr 24, 27):** kanban card anatomy + board layout wireframes delivered by end of Mon so Elizabeth can start building Tuesday.
-- **Tue (Apr 28):** full kanban board mockups (all 5 columns, card states, interaction spec) + first pass on the review/approval prose diff layout.
+- **Fri–Mon (Apr 24, 27):** kanban card anatomy + board layout wireframes — superseded on Mon Apr 27 by the WPDS migration of the existing prototype designs (commit `972c711` content-review layout was used as the visual target rather than producing fresh wireframes). Net effect: Elizabeth was unblocked, Nevena's Phase-1 work is freed up to iterate on the rough build instead of starting from scratch.
+- **Tue (Apr 28):** review the demo recording with Elizabeth and identify the first batch of refinement targets (board card density, IssueDetail KPI/sidebar treatment, persona-eyebrow weight, sticky-bar interactions). Carries into the first 1–2 days of Phase 2.
 
 **Phase 1 exit criteria**
 - Marketing agent produces a real issue against the test store.
 - The issue appears on a kanban board at rough fidelity to Nevena's designs.
 - Daemon + React app + test store + MCP are all working end-to-end.
 
-### Phase 2 — Apr 29 – May 5 (Wed → Tue, 5 work days): Multi-persona + review
+### Phase 2 — Apr 29 – May 5 (Wed → Tue, 5 work days): Design refinement + multi-persona + review
 
-**Elizabeth**
+The Phase 1 build landed on Apr 27 but is visually rough. The first 1–2 days of Phase 2 absorb design-refinement work — pairing on what to fix in the daemon UI before more screens are built on top of a rough foundation. Multi-persona work compresses into the back half of the week; if it slips, Phase 4 absorbs.
+
+**Both (Apr 29–30) — design refinement on the rough build**
+- Walk the demo recording from Apr 28 together. Pick refinement targets: board card density, IssueDetail KPI row, sidebar rail copy density, sticky-bar interactions, persona eyebrow weight, empty-state treatments, focus / hover polish.
+- Nevena delivers refined screens (Figma updates or annotated screenshots); Elizabeth applies them to the daemon UI without breaking the WPDS-token discipline. Anything that conflicts with WPDS (e.g. a custom shadow scale) gets a quick "WPDS or exception?" call before it lands.
+- Persona avatar treatment confirmed (or revised) — current treatment uses the seven `--wa-persona-*` literal-hex pairs as the documented exception. If Nevena wants different colors, update `CLAUDE.md`'s exception list at the same time.
+
+**Elizabeth (May 1–5)**
 - Ship **Pricing agent** (structured numeric diff) and **Sales Support agent** (customer-reply draft).
 - Propose-mode for all three (no ability writes until approved).
-- Wire the `Approve` button to actually invoke the staged ability via MCP.
+- Wire the `Approve` button to actually invoke the staged ability via MCP. *(Approve already lands a write via the existing `/v1/issues/:id/approve` path — Phase 2 work is making it do the right thing per persona type.)*
 - Review log: store every model call, every ability call, every state change.
-- Build the **review/approval screen** React from Nevena's Phase 1/Phase 2 designs (prose diff first; numeric and message as they land).
+- Build the **review/approval screen** React from Nevena's refined designs (prose diff is the current IssueDetail; numeric + message variants land as Nevena delivers).
 
-**Nevena**
-- Finish **review/approval screen** mockups covering all three diff shapes (prose, numeric, message), including approve/reject flow and run-log peek.
+**Nevena (May 1–5)**
+- Finish **review/approval screen** mockups covering all three diff shapes (prose, numeric, message), including approve/reject flow and run-log peek. Prose layout is already implemented at rough fidelity from the WPDS migration — refinement, not from-scratch.
 - Start **onboarding flow** mockups (welcome → store URL → auth picker → pairing code → model provider → fleet deploy → done).
 
 **Phase 2 exit criteria**

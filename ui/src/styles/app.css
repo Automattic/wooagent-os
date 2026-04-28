@@ -1,160 +1,369 @@
+/* WPDS design tokens (the canonical --wpds-* CSS variables). */
+@import '@wordpress/theme/design-tokens.css';
+
+/* Page-level horizontal padding. Defined as a single CSS variable so every
+   page wrapper resolves to the same gutter — see globals.css commentary in
+   marketing-prototype. Drops to 16px on mobile. */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  color: #1e1e1e;
-  background: #f0f0f1;
+  --wa-page-pad-x: 48px;
+}
+@media (max-width: 767px) {
+  :root {
+    --wa-page-pad-x: 16px;
+  }
+}
+
+/* Documented persona-color exception — see CLAUDE.md. The only non-WPDS color
+   tokens allowed in this codebase. Used on agent avatar squares in the sidebar
+   and the kind pill on cards. */
+:root {
+  --wa-persona-mk-bg: #fce7f3;
+  --wa-persona-mk-ink: #be185d;
+  --wa-persona-pr-bg: #dbeafe;
+  --wa-persona-pr-ink: #1d4ed8;
+  --wa-persona-in-bg: #fef3c7;
+  --wa-persona-in-ink: #b45309;
+  --wa-persona-ac-bg: #dcfce7;
+  --wa-persona-ac-ink: #15803d;
+  --wa-persona-rp-bg: #ede9fe;
+  --wa-persona-rp-ink: #6d28d9;
+  --wa-persona-ss-bg: #ccfbf1;
+  --wa-persona-ss-ink: #0f766e;
+  --wa-persona-cs-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --wa-persona-cs-ink: #ffffff;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; }
 
-.app-shell {
-  min-height: 100vh;
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  color: var(--wpds-color-fg-content-neutral);
+  font-family: var(--wpds-typography-font-family-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Sidebar nav items — see globals.css commentary in marketing-prototype. */
+.wa-navlink {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  border-radius: var(--wpds-border-radius-md);
+  font-family: var(--wpds-typography-font-family-body);
+  font-size: var(--wpds-typography-font-size-sm);
+  color: var(--wpds-color-fg-content-neutral);
+  cursor: var(--wpds-cursor-control);
+  transition: background-color 0.1s;
+}
+.wa-navlink:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+}
+.wa-navlink--active {
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-navlink--paused {
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+
+.wa-eyebrow {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-eyebrow--persona {
+  color: var(--wa-persona-mk-ink);
+}
+
+.wa-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.wa-mono {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sticky bottom action bar on IssueDetail. */
+.wa-action-bar {
+  position: sticky;
+  bottom: 0;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
+  box-shadow: var(--wpds-elevation-md);
+  padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
+  z-index: 10;
+}
+
+/* Score bars on KPI cards. */
+.wa-score-bar {
+  height: 4px;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-surface-neutral-strong);
+  overflow: hidden;
+}
+.wa-score-bar > div {
+  height: 100%;
+  border-radius: var(--wpds-border-radius-sm);
+  background: var(--wpds-color-bg-interactive-brand-strong);
+}
+
+.wa-variant-card {
+  position: relative;
+  cursor: var(--wpds-cursor-control);
+  transition: box-shadow 0.14s, border-color 0.14s;
+}
+.wa-variant-card--selected {
+  border-color: var(--wpds-color-stroke-interactive-brand) !important;
+  box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
+}
+
+/* Bottom subline of a kanban card — see globals.css commentary in
+   marketing-prototype for the why. */
+.wa-card-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--wpds-dimension-gap-xs);
+  font-size: 11px;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-card-meta > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Brand-voice / Yoast checklist row — see globals.css commentary in
+   marketing-prototype for the why. */
+.wa-check-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-sm);
+  align-items: baseline;
+}
+.wa-check-row > .wa-check-mark {
+  flex: none;
+  color: var(--wpds-color-fg-content-success);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+
+/* ---------- Responsive ---------- */
+/* Mobile breakpoint (<768px): sidebar becomes an off-canvas drawer triggered
+   by a hamburger in a top bar. Tablet breakpoint (<1024px): IssueDetail's
+   two-column body collapses to a single column so the right rail drops below
+   the main content. WPDS Stack uses inline flex props that we can't override
+   with media queries, so the responsive layouts use plain divs with these
+   class names instead. */
+
+.wa-sidebar {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  flex: none;
+  width: 240px;
+  background: var(--wpds-color-bg-surface-neutral);
+  border-right:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   display: flex;
   flex-direction: column;
 }
 
-.app-topbar {
-  padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  display: flex;
+.wa-mobile-bar {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 30;
   align-items: center;
-  gap: 24px;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral);
+  border-bottom:
+    var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
 }
 
-.app-topbar__brand { font-weight: 600; font-size: 16px; }
-.app-topbar nav { display: flex; gap: 16px; }
-.app-topbar nav a { color: #1e1e1e; text-decoration: none; font-size: 14px; }
-.app-topbar nav a.active { color: #3858e9; font-weight: 600; }
-
-.app-main { padding: 24px; flex: 1; }
-
-.connect-shell {
-  max-width: 480px;
-  margin: 80px auto;
-  padding: 32px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+.wa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: var(--wpds-border-radius-md);
+  cursor: var(--wpds-cursor-control);
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-icon-btn:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-active);
 }
 
-.kanban-board {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
-  gap: 16px;
-  overflow-x: auto;
+.wa-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 40;
 }
 
-.kanban-column {
-  min-height: 300px;
-}
-
-.kanban-column__header {
+/* Kanban columns row */
+.wa-kanban-row {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--wpds-dimension-gap-md);
+}
+.wa-kanban-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 60vh;
+}
+
+/* IssueDetail body — main column + right rail */
+.wa-detail-body {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-lg);
+}
+.wa-detail-rail {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+/* IssueDetail KPI row */
+.wa-kpi-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--wpds-dimension-gap-md);
+}
+
+/* IssueDetail page header — title block + status block side by side */
+.wa-page-header {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
+  gap: var(--wpds-dimension-gap-lg);
 }
 
-.kanban-card {
-  display: block;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 8px;
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
-}
-.kanban-card:hover {
-  border-color: #3858e9;
-  box-shadow: 0 1px 4px rgba(56, 88, 233, 0.12);
-}
-
-.kanban-card__title { font-weight: 600; margin-bottom: 4px; }
-.kanban-card__meta { font-size: 12px; color: #757575; }
-
-/* Issue detail */
-.issue-detail { max-width: 1100px; margin: 0 auto; }
-.issue-detail__header {
+/* Sticky action bar inner row */
+.wa-action-bar-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: #757575;
-}
-.issue-detail__back { color: #757575; text-decoration: none; }
-.issue-detail__back:hover { color: #3858e9; }
-.issue-detail__id { font-family: ui-monospace, Menlo, monospace; }
-.issue-detail__status,
-.issue-detail__persona {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.issue-detail__status { background: #fefce8; color: #a16207; }
-.issue-detail__status[data-status="done"] { background: #f0fdf4; color: #15803d; }
-.issue-detail__status[data-status="rejected"] { background: #fef2f2; color: #b91c1c; }
-.issue-detail__persona { background: #fce7f3; color: #be185d; }
-.issue-detail__title { font-size: 24px; margin: 8px 0 24px; letter-spacing: -0.018em; }
-
-.proposal {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  margin-bottom: 16px;
-}
-.proposal__head {
-  padding: 12px 16px;
-  border-bottom: 1px solid #ececee;
-  background: #fafafa;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: #757575;
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  gap: var(--wpds-dimension-gap-md);
 }
-.proposal__type {
-  font-family: ui-monospace, Menlo, monospace;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12px;
-  color: #3858e9;
-}
-.proposal__body {
-  padding: 16px 20px;
-  font-family: 'Source Serif 4', Georgia, serif;
-  font-size: 15px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-}
-.proposal--previous .proposal__body { color: #757575; }
-.proposal__target {
-  padding: 12px 16px;
-  border-top: 1px solid #ececee;
-  font-size: 12px;
-  color: #757575;
-  font-family: ui-monospace, Menlo, monospace;
-}
-
-.issue-detail__actions {
-  margin-top: 16px;
+.wa-action-bar-actions {
   display: flex;
-  gap: 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.empty-hint {
-  color: #757575;
-  font-size: 13px;
-  padding: 8px 0;
+/* <1024px: drop the right rail under the main column. */
+@media (max-width: 1023px) {
+  .wa-detail-body {
+    flex-direction: column;
+  }
+  .wa-detail-rail {
+    width: 100%;
+  }
+}
+
+/* <768px: sidebar becomes off-canvas drawer; kanban scrolls horizontally;
+   KPI row wraps to 2x2; action bar stacks; page header stacks. */
+@media (max-width: 767px) {
+  .wa-mobile-bar {
+    display: flex;
+  }
+  .wa-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--wpds-elevation-lg);
+  }
+  .wa-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .wa-sidebar-backdrop.is-open {
+    display: block;
+  }
+
+  .wa-kanban-row {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: var(--wpds-dimension-padding-sm);
+    margin-left: calc(-1 * var(--wpds-dimension-padding-md));
+    margin-right: calc(-1 * var(--wpds-dimension-padding-md));
+    padding-left: var(--wpds-dimension-padding-md);
+    padding-right: var(--wpds-dimension-padding-md);
+  }
+  .wa-kanban-col {
+    flex: 0 0 auto;
+    min-width: 280px;
+    width: 280px;
+    scroll-snap-align: start;
+  }
+
+  .wa-kpi-row {
+    flex-wrap: wrap;
+  }
+  .wa-kpi-row > * {
+    flex: 1 1 calc(50% - var(--wpds-dimension-gap-md));
+    min-width: 140px;
+  }
+
+  .wa-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wa-action-bar {
+    padding:
+      var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  }
+  .wa-action-bar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .wa-action-bar-actions {
+    justify-content: stretch;
+  }
+  .wa-action-bar-actions > * {
+    flex: 1 1 auto;
+  }
 }
