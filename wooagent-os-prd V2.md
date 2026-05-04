@@ -439,13 +439,21 @@ The primary interface is a kanban board modeled on modern issue trackers. Every 
 
 ### 9.3 Left Nav
 
-- **Inbox.** New webhooks, new customer inquiries, newly-flagged items.
-- **My Issues.** Items assigned to the operator for review.
-- **Issues.** Board view, the main screen.
-- **Agents.** Fleet roster: status, model, last-run, abilities/skills enabled.
-- **Abilities.** Browser for all discovered MCP abilities and local skills. Shows which store plugin provides each ability, the schema, and which personas have access. Toggle on/off per agent.
-- **Runtimes.** Which model endpoints are configured and healthy.
-- **Settings.** Store connections, model providers, guardrails, secrets.
+The sidebar groups destinations into three labelled clusters. Items prefixed *(v2)* are rendered as visible-but-paused placeholders so the operator sees the full breadth of the surface without expecting them to function.
+
+- **INBOX**
+  - *(v2)* **My issues.** Items assigned to the operator for review or originated by the operator. V2 — render-only in v1.
+  - **Board.** The kanban board (the main screen). Carries an "in review" count badge.
+- **FLEET**
+  - **Agents.** Fleet roster: status, model, last-run, abilities/skills enabled. Replaces per-persona sidebar items — the agent list is the single entry point into a persona's profile and edit modal.
+  - **Abilities.** Browser for all discovered MCP abilities and local skills. Shows which store plugin provides each ability, the schema, and which personas have access. Toggle on/off per agent.
+  - **Runtimes.** Which model endpoints are configured and healthy.
+- **SETTINGS**
+  - **Stores.** Store connections (MCP endpoint, Companion Plugin pairing, Application Password fallback). See §11.
+  - **Guardrails.** Per-persona policy predicates, reversibility thresholds, daily budgets. See §10.5 + §8.4.
+  - **Secrets.** API keys and model-provider credentials. Shown masked; rotated, scoped, audited.
+
+A connected-store footer at the bottom of the sidebar shows the current MCP endpoint hostname + environment label (e.g. "Pressable staging") with a health-state indicator dot.
 
 ### 9.4 Key Interactions
 
@@ -454,6 +462,34 @@ The primary interface is a kanban board modeled on modern issue trackers. Every 
 - Issue `@mention` routing (`@pricing audit holiday sale margins`) from anywhere in the UI or via CLI.
 - One-click rerun of any past run with same or different model.
 - **Ability explorer.** Click any discovered ability to see its schema, try a test invocation, and see which agents use it.
+
+### 9.5 Batches
+
+A **batch** is a lightweight parent grouping N sibling issues that share a generation prompt — e.g. one "rewrite metadata for these 7 products" run produces seven child issues, all tagged with the same `batch_id`. The operator reviews the batch as a set rather than seven separate kanban cards.
+
+Batches and variants are **orthogonal** axes:
+
+- A **variant** is one of N alternative bodies *for the same proposal* on a single issue (`proposal.target.variants[]`). Issues commonly carry 3 variants (A / B / C) with different voice or SEO trade-offs; the operator picks one before approving.
+- A **batch** is N sibling issues sharing a parent. Each child can independently carry its own variants. A 7-product batch where each product has 3 voice variants is `7 × 3` = 21 candidate bodies; the operator picks one variant per child, then approves the batch.
+
+The lightweight grouping is a deliberate scope decision: batches are a metadata table + an `issues.batch_id` foreign key. Counters (Pending / Approved / Rejected) are derived at read time from joined children; batches have no separate lifecycle and can never drift out of sync. This avoids a duplicate state machine on top of the per-issue one already in §9.1.
+
+**Review surface.** Batches open at `/batches/:id` (not on the kanban itself; kanban cards with a `batch_id` route into the batch view rather than the single-issue detail view). The screen renders:
+
+- A title + counter strip showing approved / rejected / pending children with a progress bar.
+- Per-child accordion rows. Each header shows the child's product name, slug, best variant scores, and pending/approved/rejected pill. Expanded body lays out the current copy alongside the variant columns, with per-row variant pick + per-row approve/reject buttons (uses the single-issue endpoints).
+- A sticky bottom bar with batch-level **Approve all** + **Reject all**. Approve-all carries the per-child variant picks (`{children: [{issue_id, variant_id}, ...]}`) and runs each child through PEP independently.
+
+**Best-effort approve-all.** Batch approve-all is a multistatus operation: it loops sequentially over children, runs each through the full Policy Enforcement Point (§8.4.2), and always returns `200` with a per-child `{ok, status?, error?}` array — never rolls back successful children when a sibling denies. This keeps the per-child audit story granular (one audit row per `pep.Invoke` call, identical to single-issue approve) and matches operator intuition that one bad row shouldn't stall the rest.
+
+**Creation in v1.** Batches are created by `POST /v1/batches` from seed scripts, the persona-marketing CLI, or future agent runs; v1 has no in-UI "compose a batch" affordance. An autonomous agent loop that produces N issues from a single prompt is a separate post-v1 concern.
+
+### 9.6 Top bar
+
+A persistent top bar runs above the main content column on all screens (collapses into the mobile hamburger bar below 768px). It carries:
+
+- **Search.** Global search input. Stub in v1 — rendered to lock the layout for when search lands.
+- **Ask agent.** Opens a right-anchored command-palette drawer (⌘K toggle, Esc to close). The drawer shows a context chip naming the current page ("Board · Today's marketing queue · 9 items"), a static "Suggested for this page" list with four queries, and a "Recent" list. V1 ships the affordance shell; the actual NL routing of asks into agent runs is v2.
 
 ## 10. Insights, Planning, and Background Execution
 
@@ -524,6 +560,8 @@ Every task starts in one of two approval states, determined by its **provenance*
 Within an approved task, individual steps may still surface for review based on **reversibility**. A step whose primary ability has `reversibility < 0.5` (storewide price change, refund issuance, bulk deletion) transitions the task to Kanban's **In Review** column and waits for per-step approval, even though the task as a whole is approved. This keeps the "approve once" ergonomics of a plan without opening the door to irreversible damage from a misread step.
 
 Operators can override the reversibility threshold per persona in settings. The default threshold for v1 is 0.5.
+
+**Batch approve-all is a multistatus shape**, distinct from per-step gates above. When the operator approves a batch (§9.5), each child runs through PEP independently and gets its own audit row; the call always returns success with a per-child `{ok, error?}` array, never rolling back successful children on a sibling denial. This preserves the granular per-step audit story while letting the operator dispatch a whole batch in one click.
 
 ### 10.6 Background execution
 

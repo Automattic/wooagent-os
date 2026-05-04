@@ -95,8 +95,52 @@ export interface Issue {
   persona?: string;
   status: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'rejected';
   priority: 'urgent' | 'high' | 'medium' | 'low' | 'none';
+  /** Set when this issue is part of a batch. Cards in the kanban that
+   *  carry a batch_id route to /batches/:id instead of /issues/:id. */
+  batch_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Batch {
+  id: string;
+  title: string;
+  persona?: string;
+  intent?: string;
+  source_run_id?: string;
+  /** Counts derived at read-time on the daemon. Always reflects the
+   *  children's current statuses — never stored, never out of sync. */
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BatchDetail {
+  batch: Batch;
+  issues: { issue: Issue; proposal: Proposal | null }[];
+}
+
+export interface BatchApproveChild {
+  issue_id: string;
+  variant_id?: string;
+}
+
+export interface BatchOperationResult {
+  /** Per-child outcome from a batch approve-all / reject-all. The daemon
+   *  always returns 200 even if some children failed PEP — the per-child
+   *  ok flag drives the UI. */
+  results: Array<{
+    issue_id: string;
+    ok: boolean;
+    status?: string;
+    ability?: string;
+    audit_id?: number;
+    updated_at?: string;
+    error?: { code: string; message: string };
+  }>;
 }
 
 export interface Variant {
@@ -170,4 +214,17 @@ export const api = {
     }),
   reject: (c: Connection, id: string) =>
     request<ApproveResult>(c, `/v1/issues/${id}/reject`, { method: 'POST' }),
+  batches: {
+    list: (c: Connection) => request<{ batches: Batch[] }>(c, '/v1/batches'),
+    get: (c: Connection, id: string) => request<BatchDetail>(c, `/v1/batches/${id}`),
+    approveAll: (c: Connection, id: string, children: BatchApproveChild[]) =>
+      request<BatchOperationResult>(c, `/v1/batches/${id}/approve-all`, {
+        method: 'POST',
+        body: JSON.stringify({ children }),
+      }),
+    rejectAll: (c: Connection, id: string) =>
+      request<BatchOperationResult>(c, `/v1/batches/${id}/reject-all`, {
+        method: 'POST',
+      }),
+  },
 };

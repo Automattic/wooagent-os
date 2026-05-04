@@ -1,0 +1,797 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Card, Stack, Text } from '@wordpress/ui';
+import { Notice, Spinner, Button } from '@wordpress/components';
+import { Icon, chevronDown, chevronUp, check } from '@wordpress/icons';
+import {
+  ApiError,
+  api,
+  variantsFromProposal,
+  type BatchApproveChild,
+  type BatchDetail,
+  type Connection,
+} from '../api/client';
+import { KindBadge } from '../components/StatusBadge';
+import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import Kpi from '../components/Kpi';
+
+interface Props {
+  connection: Connection;
+  onChanged?: () => void;
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '—';
+  const diffMs = Date.now() - then;
+  const min = Math.round(diffMs / 60_000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} minutes ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hours ago`;
+  const days = Math.round(hr / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function seoColorClass(score: number): string {
+  if (score >= 80) return 'wa-score-label__value--good';
+  if (score >= 70) return 'wa-score-label__value--caution';
+  return 'wa-score-label__value--warning';
+}
+function voiceColorClass(score: number): string {
+  if (score >= 90) return 'wa-score-label__value--good';
+  if (score >= 75) return 'wa-score-label__value--caution';
+  return 'wa-score-label__value--warning';
+}
+
+export default function BatchReview({ connection, onChanged }: Props) {
+  const { id } = useParams<{ id: string }>();
+  const nav = useNavigate();
+  const [data, setData] = useState<BatchDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<'approve-all' | 'reject-all' | string | null>(null);
+  const [actionMsg, setActionMsg] = useState<{
+    kind: 'success' | 'error';
+    text: string;
+  } | null>(null);
+
+  const refresh = async () => {
+    if (!id) return;
+    try {
+      const res = await api.batches.get(connection, id);
+      setData(res);
+      // Pre-select recommended variant per child the first time we see them.
+      setSelectedVariants((prev) => {
+        const next = { ...prev };
+        for (const { issue, proposal } of res.issues) {
+          if (next[issue.id]) continue;
+          const vs = variantsFromProposal(proposal);
+          if (vs && vs.length > 0) {
+            next[issue.id] = vs.find((v) => v.recommended)?.id ?? vs[0].id;
+          }
+        }
+        return next;
+      });
+      // Default expansion: in_review children expanded; others collapsed.
+      setExpanded((prev) => {
+        const next = { ...prev };
+        for (const { issue } of res.issues) {
+          if (issue.id in next) continue;
+          next[issue.id] = issue.status === 'in_review';
+        }
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, id]);
+
+  const approveRow = async (issueID: string) => {
+    const variantID = selectedVariants[issueID];
+    setBusy(`approve-row:${issueID}`);
+    setActionMsg(null);
+    try {
+      await api.approve(connection, issueID, variantID);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setActionMsg({
+        kind: 'error',
+        text:
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rejectRow = async (issueID: string) => {
+    setBusy(`reject-row:${issueID}`);
+    setActionMsg(null);
+    try {
+      await api.reject(connection, issueID);
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setActionMsg({
+        kind: 'error',
+        text:
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const approveAll = async () => {
+    if (!id || !data) return;
+    const pendingChildren: BatchApproveChild[] = data.issues
+      .filter(({ issue }) => issue.status === 'in_review')
+      .map(({ issue }) => ({
+        issue_id: issue.id,
+        variant_id: selectedVariants[issue.id],
+      }));
+    if (pendingChildren.length === 0) return;
+    setBusy('approve-all');
+    setActionMsg(null);
+    try {
+      const res = await api.batches.approveAll(connection, id, pendingChildren);
+      const okCount = res.results.filter((r) => r.ok).length;
+      const failed = res.results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        setActionMsg({
+          kind: 'success',
+          text: `Approved ${okCount} of ${pendingChildren.length}.`,
+        });
+      } else {
+        setActionMsg({
+          kind: 'error',
+          text: `Approved ${okCount} · ${failed.length} failed (${failed
+            .map((f) => f.error?.code ?? 'unknown')
+            .join(', ')})`,
+        });
+      }
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setActionMsg({
+        kind: 'error',
+        text:
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rejectAll = async () => {
+    if (!id) return;
+    setBusy('reject-all');
+    setActionMsg(null);
+    try {
+      const res = await api.batches.rejectAll(connection, id);
+      const okCount = res.results.filter((r) => r.ok).length;
+      setActionMsg({
+        kind: 'success',
+        text: `Rejected ${okCount} ${okCount === 1 ? 'child' : 'children'}.`,
+      });
+      await refresh();
+      onChanged?.();
+    } catch (e) {
+      setActionMsg({
+        kind: 'error',
+        text:
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const totalProgress = useMemo(() => {
+    if (!data) return { settled: 0, total: 0 };
+    return {
+      settled: data.batch.approved + data.batch.rejected,
+      total: data.batch.total,
+    };
+  }, [data]);
+
+  if (error) {
+    return (
+      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+        <Notice status="error" isDismissible={false}>
+          Failed to load batch: {error} <Link to="/">Back to board</Link>
+        </Notice>
+      </main>
+    );
+  }
+  if (!data) {
+    return (
+      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+        <Stack direction="row" gap="sm" align="center">
+          <Spinner /> <Text variant="body-sm">Loading batch…</Text>
+        </Stack>
+      </main>
+    );
+  }
+
+  const { batch, issues } = data;
+  const personaKey = personaKeyFrom(batch.persona);
+  const personaLabel =
+    batch.persona === 'marketing' ? 'Marketing agent' : `${batch.persona ?? 'unassigned'} agent`;
+  const pendingCount = batch.pending;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <main
+        style={{
+          flex: 1,
+          maxWidth: 1100,
+          width: '100%',
+          margin: '0 auto',
+          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
+        }}
+      >
+        {/* Breadcrumb */}
+        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
+          <Link
+            to="/"
+            style={{
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              fontSize: 'var(--wpds-typography-font-size-sm)',
+            }}
+          >
+            ← Board
+          </Link>
+          <span
+            className="wa-mono"
+            style={{
+              fontSize: 'var(--wpds-typography-font-size-sm)',
+              color: 'var(--wpds-color-fg-content-neutral-weak)',
+            }}
+          >
+            BATCH·{batch.id.slice(0, 6).toUpperCase()}
+          </span>
+          {batch.intent && (
+            <span
+              style={{
+                fontSize: 'var(--wpds-typography-font-size-xs)',
+                padding: '2px 8px',
+                borderRadius: 'var(--wpds-border-radius-sm)',
+                background: 'var(--wpds-color-bg-surface-info-weak)',
+                color: 'var(--wpds-color-fg-interactive-brand)',
+              }}
+            >
+              {batch.intent}
+            </span>
+          )}
+          {/* Marketing-content kind pill — phase-1 default. */}
+          <KindBadge kind="content" />
+        </Stack>
+
+        {/* Persona eyebrow */}
+        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
+          <PersonaAvatar persona={personaKey} size="md" />
+          <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+            <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
+              {personaLabel}
+            </strong>{' '}
+            proposes content · {relativeTime(batch.updated_at)} ·{' '}
+            <span className="wa-mono">Claude Sonnet 4.6</span>
+          </Text>
+        </Stack>
+
+        {/* Title + subhead */}
+        <Text
+          variant="heading-2xl"
+          render={<h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+        >
+          {batch.title}
+        </Text>
+        <Text
+          variant="body-md"
+          style={{
+            color: 'var(--wpds-color-fg-content-neutral-weak)',
+            maxWidth: 760,
+            marginBottom: 'var(--wpds-dimension-gap-xl)',
+          }}
+        >
+          Three voice variants per product. Pick one, approve, and the agent
+          writes it straight to WooCommerce. The previous copy is snapshotted
+          — reversible from the Done column.
+        </Text>
+
+        {/* KPI row */}
+        <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
+          <Kpi
+            label="Scope"
+            value={`${batch.total} products selected`}
+            hint="3 variants each"
+          />
+          <Kpi
+            label="Brand voice match"
+            value="96%"
+            score={96}
+            hint="vs. your voice model"
+          />
+          <Kpi
+            label="SEO score"
+            value="91"
+            score={91}
+            hint="Yoast · out of 100"
+          />
+          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
+        </div>
+
+        {/* Counter strip */}
+        <Card.Root style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
+          <Card.Content>
+            <div className="wa-batch-counter">
+              <div className="wa-batch-counter__cells">
+                <Counter label="Approved" value={batch.approved} tone="success" />
+                <Counter label="Rejected" value={batch.rejected} tone="error" />
+                <Counter label="Pending" value={batch.pending} tone="neutral" />
+              </div>
+              <div className="wa-batch-counter__progress">
+                <span className="wa-eyebrow">Progress</span>
+                <div className="wa-batch-progress">
+                  <div
+                    className="wa-batch-progress__bar"
+                    style={{
+                      width:
+                        totalProgress.total > 0
+                          ? `${(totalProgress.settled / totalProgress.total) * 100}%`
+                          : '0%',
+                    }}
+                  />
+                </div>
+                <span
+                  className="wa-mono"
+                  style={{
+                    fontSize: 'var(--wpds-typography-font-size-xs)',
+                    color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  }}
+                >
+                  {totalProgress.settled} / {totalProgress.total}
+                </span>
+              </div>
+            </div>
+          </Card.Content>
+        </Card.Root>
+
+        {/* Per-child accordion */}
+        <Stack direction="column" gap="md">
+          {issues.map(({ issue, proposal }, idx) => {
+            const variants = variantsFromProposal(proposal);
+            const target = (proposal?.target ?? {}) as Record<string, unknown>;
+            const previousCopy =
+              typeof target.previous === 'string' ? target.previous : '';
+            const productName =
+              typeof target.product_name === 'string' ? target.product_name : issue.title;
+            const productSku =
+              typeof target.sku === 'string' ? target.sku : issue.id.slice(0, 8);
+            const isExpanded = expanded[issue.id] ?? false;
+            const selectedVariantID = selectedVariants[issue.id];
+            const selectedVariant = variants?.find((v) => v.id === selectedVariantID) ?? null;
+            const reviewable = issue.status === 'in_review';
+            const rowBusy = busy === `approve-row:${issue.id}` || busy === `reject-row:${issue.id}`;
+
+            return (
+              <Card.Root key={issue.id}>
+                <button
+                  type="button"
+                  className="wa-batch-row__header"
+                  onClick={() =>
+                    setExpanded((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
+                  }
+                  aria-expanded={isExpanded}
+                >
+                  <span
+                    className="wa-mono"
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      width: 32,
+                      flex: 'none',
+                    }}
+                  >
+                    {idx + 1} / {issues.length}
+                  </span>
+                  <PersonaAvatar persona={personaKey} size="md" />
+                  <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                    <Text
+                      variant="body-md"
+                      style={{
+                        fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                        textAlign: 'left',
+                      }}
+                    >
+                      {productName}
+                    </Text>
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {productSku}
+                    </span>
+                  </Stack>
+                  {selectedVariant && (
+                    <span className="wa-score-label">
+                      Best SEO{' '}
+                      <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
+                        {selectedVariant.seo}
+                      </span>
+                    </span>
+                  )}
+                  {selectedVariant && (
+                    <span className="wa-score-label">
+                      Voice{' '}
+                      <span className={`wa-score-label__value ${voiceColorClass(selectedVariant.voice)}`}>
+                        {selectedVariant.voice}%
+                      </span>
+                    </span>
+                  )}
+                  <span className={`wa-status-pill wa-status-pill--${rowStatusTone(issue.status)}`}>
+                    {rowStatusLabel(issue.status)}
+                  </span>
+                  <span aria-hidden="true">
+                    <Icon icon={isExpanded ? chevronUp : chevronDown} size={18} />
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="wa-batch-row__body">
+                    <div className="wa-batch-cols">
+                      {/* Current column */}
+                      <div className="wa-batch-col wa-batch-col--current">
+                        <span className="wa-eyebrow">Current</span>
+                        <Text
+                          variant="body-sm"
+                          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                        >
+                          Live on store
+                        </Text>
+                        <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                          Description
+                        </span>
+                        <Text
+                          variant="body-sm"
+                          style={{
+                            color: previousCopy
+                              ? 'var(--wpds-color-fg-content-neutral)'
+                              : 'var(--wpds-color-fg-content-neutral-weak)',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {previousCopy || '— empty —'}
+                        </Text>
+                      </div>
+
+                      {/* Variant columns */}
+                      {(variants ?? []).map((v) => {
+                        const isSelected = selectedVariantID === v.id;
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className={`wa-batch-col wa-batch-col--variant${
+                              isSelected ? ' wa-batch-col--selected' : ''
+                            }`}
+                            onClick={() =>
+                              reviewable &&
+                              setSelectedVariants((prev) => ({ ...prev, [issue.id]: v.id }))
+                            }
+                            disabled={!reviewable}
+                          >
+                            <div className="wa-batch-col__head">
+                              <span
+                                className="wa-batch-col__letter"
+                                style={{
+                                  background: isSelected
+                                    ? 'var(--wpds-color-bg-interactive-brand-strong)'
+                                    : 'transparent',
+                                  color: isSelected
+                                    ? '#ffffff'
+                                    : 'var(--wpds-color-fg-content-neutral)',
+                                  border: isSelected
+                                    ? 'none'
+                                    : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
+                                }}
+                              >
+                                {v.id}
+                              </span>
+                              {v.recommended && (
+                                <span className="wa-agent-pick-inline">Agent pick</span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                                  padding: '2px 8px',
+                                  borderRadius: 'var(--wpds-border-radius-sm)',
+                                  background: 'var(--wa-persona-mk-bg)',
+                                  color: 'var(--wa-persona-mk-ink)',
+                                }}
+                              >
+                                {v.label}
+                              </span>
+                              <span
+                                className={`wa-radio-mark${
+                                  isSelected ? ' wa-radio-mark--selected' : ''
+                                }`}
+                                aria-hidden="true"
+                                style={{ marginLeft: 'auto' }}
+                              >
+                                {isSelected && <Icon icon={check} size={14} />}
+                              </span>
+                            </div>
+                            <div className="wa-batch-col__scores">
+                              <span className="wa-score-label">
+                                SEO{' '}
+                                <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                  {v.seo}
+                                </span>
+                              </span>
+                              <span className="wa-score-label">
+                                Voice{' '}
+                                <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
+                                  {v.voice}%
+                                </span>
+                              </span>
+                              <span className="wa-score-label">
+                                <span className="wa-score-label__value">
+                                  {v.charCount} ch
+                                </span>
+                              </span>
+                            </div>
+                            <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                              Description
+                            </span>
+                            <Text
+                              variant="body-sm"
+                              style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
+                            >
+                              {v.body}
+                            </Text>
+                            {v.note && (
+                              <div
+                                style={{
+                                  marginTop: 'var(--wpds-dimension-gap-sm)',
+                                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                                  fontStyle: 'italic',
+                                  textAlign: 'left',
+                                }}
+                              >
+                                {v.note}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Per-row footer */}
+                    <div className="wa-batch-row__footer">
+                      <Text
+                        variant="body-sm"
+                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                      >
+                        {!reviewable
+                          ? `Already ${issue.status === 'done' ? 'approved' : issue.status}`
+                          : selectedVariantID
+                            ? `Variant ${selectedVariantID} selected`
+                            : 'No variant selected yet — click a column above to choose'}
+                      </Text>
+                      <div className="wa-batch-row__footer-actions">
+                        <Button
+                          variant="tertiary"
+                          isDestructive
+                          onClick={() => rejectRow(issue.id)}
+                          disabled={!reviewable || rowBusy || busy !== null}
+                        >
+                          {busy === `reject-row:${issue.id}` ? 'Rejecting…' : 'Reject'}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => approveRow(issue.id)}
+                          disabled={!reviewable || !selectedVariantID || rowBusy || busy !== null}
+                        >
+                          {busy === `approve-row:${issue.id}`
+                            ? 'Applying…'
+                            : selectedVariantID
+                              ? `Approve Variant ${selectedVariantID}`
+                              : 'Approve selected'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card.Root>
+            );
+          })}
+        </Stack>
+
+        {actionMsg && (
+          <div style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+            <Notice
+              status={actionMsg.kind === 'success' ? 'success' : 'error'}
+              isDismissible={false}
+            >
+              {actionMsg.text}
+            </Notice>
+          </div>
+        )}
+      </main>
+
+      {/* Sticky bottom action bar — top-level Approve all / Reject all. */}
+      <div className="wa-action-bar">
+        <div className="wa-action-bar-row">
+          <div className="wa-action-bar__left">
+            <span
+              style={{
+                height: 28,
+                width: 28,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: 12,
+                background: 'var(--wpds-color-bg-interactive-brand-strong)',
+                color: '#ffffff',
+                flex: 'none',
+              }}
+            >
+              {pendingCount}
+            </span>
+            <Stack direction="column" gap="xs">
+              <Text
+                variant="body-sm"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                {pendingCount === 0
+                  ? 'All children settled'
+                  : `${pendingCount} pending · ${countSelected(data, selectedVariants)} variants picked`}
+              </Text>
+              <Text
+                variant="body-sm"
+                style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              >
+                Approve-all writes one issue at a time, granular per-child PEP audit.
+              </Text>
+            </Stack>
+          </div>
+          <div className="wa-action-bar-actions">
+            <span className="wa-reversible-pill">
+              <span
+                aria-hidden="true"
+                style={{
+                  height: 6,
+                  width: 6,
+                  borderRadius: '50%',
+                  background: 'currentColor',
+                  display: 'inline-block',
+                }}
+              />
+              Reversible · always
+            </span>
+            <Button
+              variant="tertiary"
+              isDestructive
+              onClick={rejectAll}
+              disabled={pendingCount === 0 || busy !== null}
+            >
+              {busy === 'reject-all' ? 'Rejecting…' : 'Reject all'}
+            </Button>
+            <Button variant="tertiary" onClick={() => nav('/')}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={approveAll}
+              disabled={pendingCount === 0 || busy !== null}
+            >
+              {busy === 'approve-all' ? 'Applying to store…' : 'Approve & apply to store'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function rowStatusLabel(status: string): string {
+  switch (status) {
+    case 'in_review':
+      return 'Pending';
+    case 'done':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    case 'in_progress':
+      return 'In progress';
+    default:
+      return status;
+  }
+}
+
+function rowStatusTone(status: string): 'neutral' | 'success' | 'error' | 'warning' {
+  switch (status) {
+    case 'done':
+      return 'success';
+    case 'rejected':
+      return 'error';
+    case 'in_progress':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
+}
+
+function countSelected(
+  data: BatchDetail,
+  selected: Record<string, string>,
+): number {
+  let n = 0;
+  for (const { issue } of data.issues) {
+    if (issue.status === 'in_review' && selected[issue.id]) n++;
+  }
+  return n;
+}
+
+interface CounterProps {
+  label: string;
+  value: number;
+  tone: 'success' | 'error' | 'neutral';
+}
+
+function Counter({ label, value, tone }: CounterProps) {
+  const color =
+    tone === 'success'
+      ? 'var(--wpds-color-fg-content-success)'
+      : tone === 'error'
+        ? 'var(--wpds-color-fg-content-error)'
+        : 'var(--wpds-color-fg-content-neutral)';
+  return (
+    <div className="wa-batch-counter__cell">
+      <Text
+        variant="heading-md"
+        style={{
+          color,
+          fontWeight: 'var(--wpds-typography-font-weight-medium)',
+        }}
+      >
+        {value}
+      </Text>
+      <span className="wa-eyebrow">{label}</span>
+    </div>
+  );
+}
+
