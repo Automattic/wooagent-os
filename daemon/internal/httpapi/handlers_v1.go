@@ -34,8 +34,12 @@ type Issue struct {
 	Persona     string    `json:"persona,omitempty"`
 	Status      string    `json:"status"`
 	Priority    string    `json:"priority"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// BatchID is set when this issue is part of a batch (POST /v1/batches).
+	// Empty string for unbatched issues; the json:"omitempty" drops the
+	// field on the wire so single-issue clients see no change.
+	BatchID   string    `json:"batch_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Proposal is the agent-drafted change that an operator reviews on an issue.
@@ -76,8 +80,9 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	status := r.URL.Query().Get("status")
 	persona := r.URL.Query().Get("persona")
+	batchID := r.URL.Query().Get("batch_id")
 
-	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, created_at, updated_at FROM issues`
+	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at FROM issues`
 	args := []any{}
 	where := []string{}
 	if status != "" {
@@ -87,6 +92,10 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	if persona != "" {
 		where = append(where, "persona = ?")
 		args = append(args, persona)
+	}
+	if batchID != "" {
+		where = append(where, "batch_id = ?")
+		args = append(args, batchID)
 	}
 	if len(where) > 0 {
 		q += " WHERE " + joinAnd(where)
@@ -104,7 +113,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var i Issue
 		var createdAt, updatedAt string
-		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
@@ -116,12 +125,13 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 }
 
 type createIssueReq struct {
-	Title       string         `json:"title"`
-	Description string         `json:"description"`
-	Persona     string         `json:"persona"`
-	Priority    string         `json:"priority"`
-	Status      string         `json:"status"`
-	Proposal    *Proposal      `json:"proposal,omitempty"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Persona     string    `json:"persona"`
+	Priority    string    `json:"priority"`
+	Status      string    `json:"status"`
+	BatchID     string    `json:"batch_id,omitempty"`
+	Proposal    *Proposal `json:"proposal,omitempty"`
 }
 
 func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +149,24 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Priority == "" {
 		req.Priority = "medium"
+	}
+
+	// If a batch_id was supplied, verify the parent batch exists. The FK
+	// would catch the bad insert anyway, but the error would surface as a
+	// generic db_error — pre-checking gives a clean 404.
+	if req.BatchID != "" {
+		var ok int
+		err := s.store.DB.QueryRowContext(r.Context(),
+			`SELECT 1 FROM batches WHERE id = ?`, req.BatchID,
+		).Scan(&ok)
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusNotFound, "batch_not_found", "no batch with that id")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
+		}
 	}
 
 	var (
@@ -166,9 +194,9 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	id := uuid.NewString()
 	if _, err := s.store.DB.ExecContext(r.Context(),
-		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, req.Title, req.Description, nullIfEmpty(req.Persona), req.Status, req.Priority, now, now,
-		proposalType, proposalContent, proposalTarget,
+		proposalType, proposalContent, proposalTarget, nullIfEmpty(req.BatchID),
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -177,7 +205,8 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"issue": Issue{
 			ID: id, Title: req.Title, Description: req.Description, Persona: req.Persona,
-			Status: req.Status, Priority: req.Priority, CreatedAt: ts, UpdatedAt: ts,
+			Status: req.Status, Priority: req.Priority, BatchID: req.BatchID,
+			CreatedAt: ts, UpdatedAt: ts,
 		},
 		"proposal": req.Proposal,
 	})
@@ -189,8 +218,8 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	var createdAt, updatedAt string
 	var proposalType, proposalContent, proposalTarget sql.NullString
 	err := s.store.DB.QueryRowContext(r.Context(),
-		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target FROM issues WHERE id = ?`, id,
-	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget)
+		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target FROM issues WHERE id = ?`, id,
+	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
 		return
@@ -250,16 +279,187 @@ type approveIssueReq struct {
 	VariantID string `json:"variant_id,omitempty"`
 }
 
-func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
+// approveResult is the success payload from approveOne. The single-issue
+// HTTP handler maps it to the same JSON shape it has always returned; the
+// batch approve-all loop appends its fields under a per-child results entry.
+type approveResult struct {
+	IssueID   string
+	Status    string
+	Ability   string
+	AuditID   int64
+	UpdatedAt string
+}
+
+// approveError is the typed failure shape returned by approveOne. The
+// single-issue handler maps HTTPStatus + Code + Message to writeError, or
+// uses PEPReason via writePEPDenial when set. The batch handler ignores
+// HTTPStatus and embeds {code, message} per child in its 200 response.
+type approveError struct {
+	HTTPStatus int            // for the single-issue HTTP path
+	Code       string         // stable error code; reused in batch per-child results
+	Message    string         // human-readable
+	PEPReason  pep.ReasonCode // non-empty iff this came from a PEP denial
+}
+
+// approveOne loads the issue + proposal, dispatches via PEP+MCP, and flips
+// the status to done on success. No HTTP coupling — both the single-issue
+// approve handler and the batch approve-all loop call this.
+//
+// Race-hardened: claims the issue with `UPDATE ... WHERE status='in_review'`
+// before invoking PEP, gates on RowsAffected==1. Concurrent approvers that
+// lose the race come back with code=wrong_status. On any failure after the
+// claim flip we roll the status back to in_review so the operator can retry.
+//
+// The persona for PEP comes from issues.persona; we default to marketing when
+// the issue has no persona set (V1 only has the marketing agent active).
+func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (approveResult, *approveError) {
 	if s.pep == nil {
-		writeError(w, http.StatusServiceUnavailable, "mcp_not_configured",
-			"daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart")
-		return
+		return approveResult{}, &approveError{
+			HTTPStatus: http.StatusServiceUnavailable,
+			Code:       "mcp_not_configured",
+			Message:    "daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart",
+		}
 	}
 
-	id := chi.URLParam(r, "id")
-	ctx := r.Context()
+	// Single SELECT pulling status, persona, proposal, and batch_id at once.
+	// Replaces the two-query pattern (load + loadIssuePersona) we used before
+	// the batch-loop refactor.
+	var status, proposalType, proposalContent string
+	var personaSlug, proposalTarget, batchID sql.NullString
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT status, persona, COALESCE(proposal_type, ''), COALESCE(proposal_content, ''), proposal_target, batch_id FROM issues WHERE id = ?`, issueID,
+	).Scan(&status, &personaSlug, &proposalType, &proposalContent, &proposalTarget, &batchID)
+	if err == sql.ErrNoRows {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusNotFound, Code: "not_found", Message: "no issue with that id"}
+	}
+	if err != nil {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
+	}
+	if status != "in_review" {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusConflict, Code: "wrong_status", Message: "approve requires status=in_review, found " + status}
+	}
+	if proposalType == "" {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "no_proposal", Message: "issue has no proposal to approve"}
+	}
 
+	dispatch, ok := approveDispatchByType[proposalType]
+	if !ok {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "unknown_proposal_type", Message: "no approve handler for proposal_type=" + proposalType}
+	}
+
+	target := map[string]any{}
+	if proposalTarget.Valid && proposalTarget.String != "" {
+		if err := json.Unmarshal([]byte(proposalTarget.String), &target); err != nil {
+			return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "bad_target", Message: err.Error()}
+		}
+	}
+
+	contentToShip := proposalContent
+	if variantID != "" {
+		body, err := resolveVariantBody(target, variantID)
+		if err != nil {
+			return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_variant_id", Message: err.Error()}
+		}
+		contentToShip = body
+	}
+
+	params, err := dispatch.buildParams(contentToShip, target)
+	if err != nil {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_proposal_target", Message: err.Error()}
+	}
+
+	// Race-hardening: claim the issue by flipping it to in_progress before
+	// invoking PEP. RowsAffected==1 means we won; ==0 means another approver
+	// got there first. The kanban briefly shows the card under Drafting
+	// during this window — that's a feature, not a bug (it visualises that
+	// work is in flight).
+	now := time.Now().UTC().Format(time.RFC3339)
+	claimRes, err := s.store.DB.ExecContext(ctx,
+		`UPDATE issues SET status = 'in_progress', updated_at = ? WHERE id = ? AND status = 'in_review'`, now, issueID,
+	)
+	if err != nil {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
+	}
+	affected, _ := claimRes.RowsAffected()
+	if affected != 1 {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusConflict, Code: "wrong_status", Message: "approve race lost — another approval already started"}
+	}
+	rollbackClaim := func() {
+		_, _ = s.store.DB.ExecContext(ctx,
+			`UPDATE issues SET status = 'in_review', updated_at = ? WHERE id = ? AND status = 'in_progress'`,
+			now, issueID,
+		)
+	}
+
+	persona := manifest.PersonaMarketing
+	if personaSlug.Valid && strings.TrimSpace(personaSlug.String) != "" {
+		persona = manifest.Persona(personaSlug.String)
+	}
+	batchIDStr := ""
+	if batchID.Valid {
+		batchIDStr = batchID.String
+	}
+
+	// Route through the Policy Enforcement Point. The PEP runs the trust
+	// state + persona scope checks (V1), writes a chain-of-identity audit
+	// row, and dispatches to MCP. There is no direct s.mcp call site here
+	// or anywhere else in the daemon — that's the §8.4.2 invariant.
+	decision, mcpRes, invokeErr := s.pep.Invoke(ctx, pep.Request{
+		Persona: persona,
+		Ability: dispatch.ability,
+		Args:    params,
+		Intent:  pep.IntentApply,
+		IssueID: issueID,
+		BatchID: batchIDStr,
+	})
+	if !decision.Allowed {
+		rollbackClaim()
+		if invokeErr != nil {
+			if errors.Is(invokeErr, pep.ErrMCPNotConfigured) {
+				return approveResult{}, &approveError{HTTPStatus: http.StatusServiceUnavailable, Code: "mcp_not_configured", Message: "daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart"}
+			}
+			return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "mcp_call_failed", Message: invokeErr.Error()}
+		}
+		return approveResult{}, &approveError{Code: string(decision.Reason), Message: pepDenialMessage(decision.Reason), PEPReason: decision.Reason}
+	}
+
+	if len(mcpRes.Content) == 0 {
+		rollbackClaim()
+		return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "mcp_empty", Message: "MCP returned no content"}
+	}
+	var envelope struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(mcpRes.Content[0].Text), &envelope); err != nil {
+		rollbackClaim()
+		return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "mcp_decode", Message: err.Error()}
+	}
+	if !envelope.Success {
+		rollbackClaim()
+		return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "ability_failed", Message: envelope.Error}
+	}
+
+	if _, err := s.store.DB.ExecContext(ctx,
+		`UPDATE issues SET status = 'done', updated_at = ? WHERE id = ?`, now, issueID,
+	); err != nil {
+		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
+	}
+
+	return approveResult{
+		IssueID:   issueID,
+		Status:    "done",
+		Ability:   dispatch.ability,
+		AuditID:   decision.AuditID,
+		UpdatedAt: now,
+	}, nil
+}
+
+// handleApproveIssue is now a thin HTTP wrapper around approveOne; the real
+// work (PEP, MCP, status update) lives in the helper so the batch approve-all
+// loop can share it.
+func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
 	var req approveIssueReq
 	if r.ContentLength > 0 {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -268,141 +468,23 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Load the issue + proposal in one shot. Status check happens against the
-	// just-loaded value so two concurrent approves can't both fire (the second
-	// one will see status="done" and bail).
-	var status, proposalType, proposalContent string
-	var proposalTarget sql.NullString
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT status, COALESCE(proposal_type, ''), COALESCE(proposal_content, ''), proposal_target FROM issues WHERE id = ?`, id,
-	).Scan(&status, &proposalType, &proposalContent, &proposalTarget)
-	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
-		return
-	}
-	if status != "in_review" {
-		writeError(w, http.StatusConflict, "wrong_status",
-			"approve requires status=in_review, found "+status)
-		return
-	}
-	if proposalType == "" {
-		writeError(w, http.StatusUnprocessableEntity, "no_proposal",
-			"issue has no proposal to approve")
-		return
-	}
-
-	dispatch, ok := approveDispatchByType[proposalType]
-	if !ok {
-		writeError(w, http.StatusUnprocessableEntity, "unknown_proposal_type",
-			"no approve handler for proposal_type="+proposalType)
-		return
-	}
-
-	target := map[string]any{}
-	if proposalTarget.Valid && proposalTarget.String != "" {
-		if err := json.Unmarshal([]byte(proposalTarget.String), &target); err != nil {
-			writeError(w, http.StatusInternalServerError, "bad_target", err.Error())
+	res, perr := s.approveOne(r.Context(), id, req.VariantID)
+	if perr != nil {
+		if perr.PEPReason != "" {
+			writePEPDenial(w, perr.PEPReason)
 			return
 		}
-	}
-
-	contentToShip := proposalContent
-	if req.VariantID != "" {
-		body, err := resolveVariantBody(target, req.VariantID)
-		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, "bad_variant_id", err.Error())
-			return
-		}
-		contentToShip = body
-	}
-
-	params, err := dispatch.buildParams(contentToShip, target)
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "bad_proposal_target", err.Error())
-		return
-	}
-
-	// Route through the Policy Enforcement Point. The PEP runs the trust
-	// state + persona scope checks (V1), writes a chain-of-identity audit
-	// row, and dispatches to MCP. There is no direct s.mcp call site here
-	// or anywhere else in the daemon — that's the §8.4.2 invariant.
-	persona := manifest.PersonaMarketing
-	if issuePersona := strings.TrimSpace(loadIssuePersona(ctx, s, id)); issuePersona != "" {
-		persona = manifest.Persona(issuePersona)
-	}
-	decision, mcpRes, invokeErr := s.pep.Invoke(ctx, pep.Request{
-		Persona: persona,
-		Ability: dispatch.ability,
-		Args:    params,
-		Intent:  pep.IntentApply,
-		IssueID: id,
-	})
-	if !decision.Allowed {
-		if invokeErr != nil {
-			if errors.Is(invokeErr, pep.ErrMCPNotConfigured) {
-				writeError(w, http.StatusServiceUnavailable, "mcp_not_configured",
-					"daemon started without MCP credentials — set WOOAGENT_MCP_URL/USER/APP_PASSWORD and restart")
-				return
-			}
-			writeError(w, http.StatusBadGateway, "mcp_call_failed", invokeErr.Error())
-			return
-		}
-		writePEPDenial(w, decision.Reason)
-		return
-	}
-
-	if len(mcpRes.Content) == 0 {
-		writeError(w, http.StatusBadGateway, "mcp_empty", "MCP returned no content")
-		return
-	}
-	var envelope struct {
-		Success bool   `json:"success"`
-		Error   string `json:"error,omitempty"`
-	}
-	if err := json.Unmarshal([]byte(mcpRes.Content[0].Text), &envelope); err != nil {
-		writeError(w, http.StatusBadGateway, "mcp_decode", err.Error())
-		return
-	}
-	if !envelope.Success {
-		writeError(w, http.StatusBadGateway, "ability_failed", envelope.Error)
-		return
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := s.store.DB.ExecContext(ctx,
-		`UPDATE issues SET status = 'done', updated_at = ? WHERE id = ?`, now, id,
-	); err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		writeError(w, perr.HTTPStatus, perr.Code, perr.Message)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         id,
-		"status":     "done",
-		"ability":    dispatch.ability,
-		"audit_id":   decision.AuditID,
-		"updated_at": now,
+		"id":         res.IssueID,
+		"status":     res.Status,
+		"ability":    res.Ability,
+		"audit_id":   res.AuditID,
+		"updated_at": res.UpdatedAt,
 	})
-}
-
-// loadIssuePersona reads the persona slug off an issue. Used by the approve
-// handler to pass the right Persona into the PEP. Returns "" if the issue
-// has no persona set, in which case the caller falls back to a default.
-func loadIssuePersona(ctx context.Context, s *Server, id string) string {
-	var persona sql.NullString
-	if err := s.store.DB.QueryRowContext(ctx,
-		`SELECT persona FROM issues WHERE id = ?`, id,
-	).Scan(&persona); err != nil {
-		return ""
-	}
-	if !persona.Valid {
-		return ""
-	}
-	return persona.String
 }
 
 // writePEPDenial maps a typed PEP reason code to an HTTP status. Status
