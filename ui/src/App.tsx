@@ -3,8 +3,12 @@ import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { Text } from '@wordpress/ui';
 import ConnectionForm from './auth/ConnectionForm';
 import LeftNav from './components/LeftNav';
+import TopBar from './components/TopBar';
+import AskAgentDrawer from './components/AskAgentDrawer';
 import Kanban from './screens/Kanban';
 import IssueDetail from './screens/IssueDetail';
+import BatchReview from './screens/BatchReview';
+import Agents from './screens/Agents';
 import Settings from './screens/Settings';
 import Placeholder from './screens/Placeholder';
 import { loadConnection, type Connection, type Issue, api } from './api/client';
@@ -15,6 +19,19 @@ export default function App() {
   const [probed, setProbed] = useState(false);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [issuesError, setIssuesError] = useState<string | null>(null);
+  const [askAgentOpen, setAskAgentOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K opens the Ask Agent drawer from anywhere in the app.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setAskAgentOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const stored = loadConnection();
@@ -79,6 +96,7 @@ export default function App() {
     }
   })();
   const inReview = (issues ?? []).filter((i) => i.status === 'in_review').length;
+  const askAgentContext = `Board · Today's marketing queue · ${(issues ?? []).length} items`;
 
   return (
     <Shell>
@@ -109,6 +127,12 @@ export default function App() {
               </button>
               <Text variant="heading-sm">WooAgent OS</Text>
             </header>
+            <TopBar onAskAgent={() => setAskAgentOpen(true)} />
+            <AskAgentDrawer
+              isOpen={askAgentOpen}
+              onClose={() => setAskAgentOpen(false)}
+              contextLabel={askAgentContext}
+            />
         <Routes>
           <Route
             path="/"
@@ -118,6 +142,15 @@ export default function App() {
             path="/issues/:id"
             element={
               <IssueDetail
+                connection={connection}
+                onChanged={() => refreshIssues(connection)}
+              />
+            }
+          />
+          <Route
+            path="/batches/:id"
+            element={
+              <BatchReview
                 connection={connection}
                 onChanged={() => refreshIssues(connection)}
               />
@@ -151,6 +184,47 @@ export default function App() {
               <Placeholder
                 area="Abilities"
                 description="Browser for every signed ability the agents can call (WooCommerce, Yoast, WordPress.com, etc.). Tune permissions, see version pins, audit recent calls."
+                status="soon"
+              />
+            }
+          />
+          <Route
+            path="/my-issues"
+            element={
+              <Placeholder
+                area="My issues"
+                description="User-generated issues you'd like the agents to take a look at. Coming in V2."
+                status="soon"
+              />
+            }
+          />
+          <Route path="/agents" element={<Agents connection={connection} />} />
+          <Route
+            path="/runtimes"
+            element={
+              <Placeholder
+                area="Runtimes"
+                description="Daemons, MCP servers, and the LLM endpoints they connect to. Health, latency, model in use."
+                status="soon"
+              />
+            }
+          />
+          <Route
+            path="/guardrails"
+            element={
+              <Placeholder
+                area="Guardrails"
+                description="Policy enforcement rules — what each agent can do without your sign-off, what always needs review."
+                status="soon"
+              />
+            }
+          />
+          <Route
+            path="/secrets"
+            element={
+              <Placeholder
+                area="Secrets"
+                description="API keys and tokens used by the abilities. Rotate, scope, and audit access."
                 status="soon"
               />
             }

@@ -1,89 +1,33 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { Stack, Text } from '@wordpress/ui';
+import {
+  Icon,
+  inbox,
+  columns,
+  people,
+  category,
+  box,
+  store,
+  shield,
+  key,
+} from '@wordpress/icons';
 
-interface AppItem {
+interface NavItem {
   to: string;
   label: string;
-  glyph: string;
+  icon: { type: string } | unknown;
+  /** Render as a paused/dim non-clickable affordance (V2 placeholder). */
+  paused?: boolean;
+  /** Show this counter on the right side of the link. */
+  badge?: number;
 }
-
-interface AgentItem {
-  to: string;
-  label: string;
-  badge: string;
-  badgeBg: string;
-  badgeFg: string;
-  state: 'active' | 'focus' | 'paused';
-}
-
-const APP_ITEMS: AppItem[] = [
-  { to: '/', label: 'Board', glyph: '▦' },
-  { to: '/activity', label: 'Activity', glyph: '◷' },
-  { to: '/abilities', label: 'Abilities', glyph: '◆' },
-  { to: '/settings', label: 'Store settings', glyph: '⚙' },
-];
-
-const AGENTS: AgentItem[] = [
-  {
-    to: '/agents/chief',
-    label: 'Chief of Staff',
-    badge: 'CS',
-    badgeBg: 'var(--wa-persona-cs-bg)',
-    badgeFg: 'var(--wa-persona-cs-ink)',
-    state: 'active',
-  },
-  {
-    to: '/agents/marketing',
-    label: 'Marketing',
-    badge: 'MK',
-    badgeBg: 'var(--wa-persona-mk-bg)',
-    badgeFg: 'var(--wa-persona-mk-ink)',
-    state: 'focus',
-  },
-  {
-    to: '/agents/pricing',
-    label: 'Pricing',
-    badge: 'PR',
-    badgeBg: 'var(--wa-persona-pr-bg)',
-    badgeFg: 'var(--wa-persona-pr-ink)',
-    state: 'paused',
-  },
-  {
-    to: '/agents/inventory',
-    label: 'Inventory',
-    badge: 'IN',
-    badgeBg: 'var(--wa-persona-in-bg)',
-    badgeFg: 'var(--wa-persona-in-ink)',
-    state: 'paused',
-  },
-  {
-    to: '/agents/accounting',
-    label: 'Accounting',
-    badge: 'AC',
-    badgeBg: 'var(--wa-persona-ac-bg)',
-    badgeFg: 'var(--wa-persona-ac-ink)',
-    state: 'paused',
-  },
-  {
-    to: '/agents/reporting',
-    label: 'Reporting',
-    badge: 'RP',
-    badgeBg: 'var(--wa-persona-rp-bg)',
-    badgeFg: 'var(--wa-persona-rp-ink)',
-    state: 'paused',
-  },
-  {
-    to: '/agents/sales-support',
-    label: 'Sales Support',
-    badge: 'SS',
-    badgeBg: 'var(--wa-persona-ss-bg)',
-    badgeFg: 'var(--wa-persona-ss-ink)',
-    state: 'paused',
-  },
-];
 
 interface Props {
   marketingInReview: number;
+  /** WooCommerce store hostname rendered in the connected-store footer. For
+      now this is the daemon hostname — the daemon is the only store-context
+      we surface. Will become a real store identifier once the daemon
+      exposes one. */
   daemonHostname: string;
   /** When true, the sidebar is open in mobile drawer mode. Has no effect on
       desktop (the desktop layout is sticky-positioned via CSS). */
@@ -100,197 +44,89 @@ export default function LeftNav({
   onItemClick,
 }: Props) {
   const loc = useLocation();
-  const onMarketing =
-    loc.pathname === '/' ||
-    loc.pathname.startsWith('/issues/') ||
-    loc.pathname === '/agents/marketing';
+  // Board is the "active" route while on the kanban or any issue detail.
+  const onBoard = loc.pathname === '/' || loc.pathname.startsWith('/issues/');
+
+  const inbox_items: NavItem[] = [
+    { to: '/my-issues', label: 'My issues', icon: inbox, paused: true },
+    {
+      to: '/',
+      label: 'Board',
+      icon: columns,
+      badge: marketingInReview > 0 ? marketingInReview : undefined,
+    },
+  ];
+  const fleet_items: NavItem[] = [
+    { to: '/agents', label: 'Agents', icon: people },
+    { to: '/abilities', label: 'Abilities', icon: category },
+    { to: '/runtimes', label: 'Runtimes', icon: box },
+  ];
+  const settings_items: NavItem[] = [
+    { to: '/settings', label: 'Stores', icon: store },
+    { to: '/guardrails', label: 'Guardrails', icon: shield },
+    { to: '/secrets', label: 'Secrets', icon: key },
+  ];
 
   return (
     <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
+      {/* Brand header. The W tile uses the marketing persona color since the
+          marketing agent is the V1 product surface — same documented exception
+          as the rest of the persona-color use sites. */}
       <div
         style={{
-          padding: 'var(--wpds-dimension-padding-md)',
-          borderBottom:
-            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+          padding:
+            'var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-md)',
         }}
       >
         <Stack direction="row" gap="sm" align="center">
           <div
+            className="wa-persona-avatar wa-persona-avatar--md"
             style={{
-              height: 28,
-              width: 28,
+              background: 'var(--wa-persona-mk-bg)',
+              color: 'var(--wa-persona-mk-ink)',
               borderRadius: 'var(--wpds-border-radius-md)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ffffff',
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-              fontWeight: 700,
-              background: 'var(--wpds-color-bg-interactive-brand-strong)',
             }}
+            aria-hidden="true"
           >
             W
           </div>
-          <Text variant="heading-sm">WooAgent OS</Text>
+          <Text variant="heading-sm" style={{ color: '#ffffff' }}>
+            WooAgent
+          </Text>
         </Stack>
       </div>
 
       <nav
         style={{
-          padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
-        }}
-      >
-        <div
-          className="wa-eyebrow"
-          style={{
-            padding: '0 var(--wpds-dimension-padding-sm)',
-            marginBottom: 'var(--wpds-dimension-gap-xs)',
-          }}
-        >
-          App
-        </div>
-        {APP_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            onClick={onItemClick}
-            className={({ isActive }) =>
-              `wa-navlink${isActive ? ' wa-navlink--active' : ''}`
-            }
-          >
-            <span
-              className="wa-mono"
-              style={{
-                fontSize: 'var(--wpds-typography-font-size-xs)',
-                width: 16,
-                textAlign: 'center',
-                flex: 'none',
-              }}
-              aria-hidden="true"
-            >
-              {item.glyph}
-            </span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-
-      <nav
-        style={{
-          padding: 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-xs)',
-          borderTop:
-            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
           flex: 1,
           overflowY: 'auto',
+          padding:
+            '0 var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-md)',
         }}
       >
-        <div
-          className="wa-eyebrow"
-          style={{
-            padding: '0 var(--wpds-dimension-padding-sm)',
-            marginBottom: 'var(--wpds-dimension-gap-xs)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span>Agents</span>
-          <span className="wa-mono" style={{ fontSize: 10 }}>
-            7
-          </span>
-        </div>
-        {AGENTS.map((a) => {
-          const here = a.label === 'Marketing' ? onMarketing : loc.pathname === a.to;
-          return (
-            <NavLink
-              key={a.to}
-              to={a.to}
-              onClick={onItemClick}
-              className={() => {
-                const cls = ['wa-navlink'];
-                if (here) cls.push('wa-navlink--active');
-                else if (a.state === 'paused') cls.push('wa-navlink--paused');
-                return cls.join(' ');
-              }}
-            >
-              <span
-                style={{
-                  height: 24,
-                  width: 24,
-                  borderRadius: 'var(--wpds-border-radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: 10,
-                  fontVariantNumeric: 'tabular-nums',
-                  flex: 'none',
-                  background: a.badgeBg,
-                  color: a.badgeFg,
-                }}
-              >
-                {a.badge}
-              </span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {a.label}
-              </span>
-              {a.state === 'active' && (
-                <span
-                  aria-label="active"
-                  style={{
-                    height: 6,
-                    width: 6,
-                    borderRadius: '50%',
-                    background: 'var(--wpds-color-fg-content-success)',
-                    flex: 'none',
-                  }}
-                />
-              )}
-              {a.state === 'focus' && marketingInReview > 0 && (
-                <span
-                  className="wa-mono"
-                  style={{
-                    fontSize: 10,
-                    color: 'var(--wa-persona-mk-ink)',
-                    flex: 'none',
-                  }}
-                >
-                  {marketingInReview} in review
-                </span>
-              )}
-              {a.state === 'paused' && (
-                <span
-                  className="wa-mono"
-                  style={{
-                    fontSize: 10,
-                    color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    flex: 'none',
-                  }}
-                >
-                  paused
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
+        <NavGroup label="Inbox" items={inbox_items} active={onBoard ? '/' : ''} onItemClick={onItemClick} />
+        <NavGroup label="Fleet" items={fleet_items} active={loc.pathname.startsWith('/agents') ? '/agents' : loc.pathname} onItemClick={onItemClick} />
+        <NavGroup label="Settings" items={settings_items} active={loc.pathname} onItemClick={onItemClick} />
       </nav>
 
       <div
         style={{
           padding: 'var(--wpds-dimension-padding-md)',
           borderTop:
-            'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
+            '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
-        <div className="wa-eyebrow" style={{ marginBottom: 4 }}>
+        <div
+          className="wa-eyebrow"
+          style={{ marginBottom: 4 }}
+        >
           Connected store
         </div>
         <div
           className="wa-mono"
           style={{
             fontSize: 'var(--wpds-typography-font-size-xs)',
-            color: 'var(--wpds-color-fg-content-neutral)',
+            color: 'rgba(255, 255, 255, 0.85)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -300,25 +136,111 @@ export default function LeftNav({
           {daemonHostname}
         </div>
         <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
+          {/* Lighter sage green than --wpds-color-fg-content-success — that
+              token is #002900 (designed for text on light surfaces) and is
+              effectively invisible against the dark sidebar bg. */}
           <span
             style={{
               height: 6,
               width: 6,
               borderRadius: '50%',
-              background: 'var(--wpds-color-fg-content-success)',
+              background: 'var(--wpds-color-stroke-surface-success)',
               display: 'inline-block',
             }}
           />
           <span
             style={{
               fontSize: 11,
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              color: 'rgba(255, 255, 255, 0.6)',
             }}
           >
-            Daemon connected
+            Pressable staging
           </span>
         </Stack>
       </div>
     </aside>
+  );
+}
+
+interface NavGroupProps {
+  label: string;
+  items: NavItem[];
+  active: string;
+  onItemClick?: () => void;
+}
+
+function NavGroup({ label, items, active, onItemClick }: NavGroupProps) {
+  return (
+    <div style={{ paddingTop: 'var(--wpds-dimension-padding-md)' }}>
+      <div
+        className="wa-eyebrow"
+        style={{
+          padding: '0 var(--wpds-dimension-padding-sm)',
+          marginBottom: 'var(--wpds-dimension-gap-xs)',
+        }}
+      >
+        {label}
+      </div>
+      {items.map((item) => {
+        const isActive =
+          item.paused === true
+            ? false
+            : item.to === active ||
+              (item.to !== '/' && active.startsWith(item.to));
+
+        const inner = (
+          <>
+            <Icon icon={item.icon as never} size={18} />
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.label}
+            </span>
+            {item.badge !== undefined && (
+              <span
+                aria-label={`${item.badge} in review`}
+                style={{
+                  background: 'var(--wa-persona-mk-ink)',
+                  color: '#ffffff',
+                  fontFamily: 'var(--wpds-typography-font-family-mono)',
+                  fontSize: 10,
+                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                  padding: '1px 6px',
+                  borderRadius: 'var(--wpds-border-radius-sm)',
+                  flex: 'none',
+                }}
+              >
+                {item.badge}
+              </span>
+            )}
+          </>
+        );
+
+        if (item.paused) {
+          return (
+            <span
+              key={item.to}
+              className="wa-navlink wa-navlink--paused"
+              aria-disabled="true"
+              title="Coming in V2"
+            >
+              {inner}
+            </span>
+          );
+        }
+
+        return (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            onClick={onItemClick}
+            className={() =>
+              `wa-navlink${isActive ? ' wa-navlink--active' : ''}`
+            }
+          >
+            {inner}
+          </NavLink>
+        );
+      })}
+    </div>
   );
 }

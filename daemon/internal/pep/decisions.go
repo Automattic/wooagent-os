@@ -46,6 +46,11 @@ type Request struct {
 	TaskID  string
 	StepID  string
 	IssueID string
+	// BatchID links the call back to the parent batch when the issue is
+	// part of one. Forward-compat for analytics ("which batches got
+	// partially denied"); audit_invocations doesn't carry it as a column —
+	// joins go through issues.batch_id.
+	BatchID string
 
 	// LLM provenance. Empty when the call is operator-driven.
 	Model      string

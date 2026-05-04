@@ -71,6 +71,11 @@ func (s *Server) buildRouter() chi.Router {
 		r.Get("/v1/issues/{id}", s.handleGetIssue)
 		r.Post("/v1/issues/{id}/approve", s.handleApproveIssue)
 		r.Post("/v1/issues/{id}/reject", s.handleRejectIssue)
+		r.Get("/v1/batches", s.handleListBatches)
+		r.Post("/v1/batches", s.handleCreateBatch)
+		r.Get("/v1/batches/{id}", s.handleGetBatch)
+		r.Post("/v1/batches/{id}/approve-all", s.handleApproveBatch)
+		r.Post("/v1/batches/{id}/reject-all", s.handleRejectBatch)
 		r.Get("/v1/abilities", s.handleListAbilities)
 	})
 
