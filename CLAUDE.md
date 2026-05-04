@@ -5,14 +5,15 @@ This file is loaded into every Claude Code session in this repo. It captures con
 ## Repo layout
 
 - `daemon/`, `cmd/`, `internal/` — Go (ADK Go runtime). Pure-Go, no Python.
-- `ui/` — daemon-served React UI. Connects to the local daemon over `/v1/*`. Real auth, real fetches.
-- `marketing-prototype/` — standalone React app deployed to GHES Pages. Mock data; serves as the design reference for teammates.
+- `ui/` — daemon-served React UI. Connects to the local daemon over `/v1/*`. Real auth, real fetches. **The active UI surface — all new UI work happens here.**
 - `prompts/`, `skills/` — agent prompts and ability templates.
 - `spike-adk/` — exploratory Python (kept for now; new work goes in Go).
 
+`marketing-prototype/` exists in the tree as a frozen design-reference app from earlier in Phase 1. **Don't touch it for current work** — it's paused and may diverge from the live `ui/` design direction.
+
 ## UI stack — WordPress Design System (WPDS)
 
-Both `ui/` and `marketing-prototype/` use the WordPress Design System. **No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults.** When building or reviewing UI in this repo, invoke these skills:
+`ui/` uses the WordPress Design System. **No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults.** When building or reviewing UI in this repo, invoke these skills:
 
 - `wpds` — design system rules, MCP-server-backed component & token lookup.
 - `frontend-design` — distinctive, polished frontend principles (apply within WPDS, not against it).
@@ -57,10 +58,6 @@ Used in **two places only**: the agent avatar squares in the sidebar, and the ki
 ## Build & dev
 
 - `cd ui && npm run dev` — port 5173. Connects to a local daemon via stored bearer token.
-- `cd marketing-prototype && npm run dev` — port 5174. Mock data; uses Vite proxy `/api/woo/*` to the staging WooCommerce store.
-- `cd marketing-prototype && npm run deploy` — bash script to publish to GHES Pages.
-
-Both apps share the WPDS foundation but maintain independent Vite setups, dependencies, and bundle output.
 
 ## Git
 
