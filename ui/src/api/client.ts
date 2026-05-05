@@ -351,6 +351,77 @@ export interface IssueDetail {
   proposal: Proposal | null;
 }
 
+// Onboarding domain types — see onboarding-design-brief.md §10. The daemon
+// surface for these is sequenced after the brief (engineering plan #2);
+// until it lands, these endpoints will 404 and the UI surfaces ApiError.
+
+export interface Store {
+  id: string;
+  url: string;
+  mcp_endpoint?: string;
+  device_name?: string;
+  status: 'pairing' | 'paired' | 'expired' | 'failed';
+  pairing_code?: string;
+  pair_url?: string;
+  expires_at?: string;
+  paired_at?: string;
+  ability_count?: number;
+  last_discovered_at?: string;
+}
+
+export interface AbilityPluginSummary {
+  plugin: string;
+  count: number;
+  signed: boolean;
+  unapproved: number;
+  /** Marker for plugins still in developer preview — surfaced inline. */
+  preview?: boolean;
+}
+
+export interface AbilitiesResponse {
+  total: number;
+  by_plugin: AbilityPluginSummary[];
+}
+
+export type ModelProviderKind = 'anthropic' | 'openai' | 'ollama';
+
+export interface ModelProvider {
+  id: string;
+  kind: ModelProviderKind;
+  default_model: string;
+  endpoint?: string;
+  // Display name. Defaults to "${title} · ${default_model}" but operators
+  // can rename — meaningful when multiple configurations of the same
+  // kind exist (e.g. "Anthropic · prod" vs "Anthropic · staging").
+  name?: string;
+  // The fleet default. Personas without an explicit override fall back
+  // to this provider. Exactly one row is marked default.
+  is_default?: boolean;
+  last_tested_at?: string;
+  last_test_status?: 'ok' | 'failed' | 'untested';
+}
+
+export interface ModelTestRequest {
+  kind: ModelProviderKind;
+  api_key?: string;
+  endpoint?: string;
+  default_model?: string;
+}
+
+export interface ModelTestResult {
+  ok: boolean;
+  message?: string;
+  /** Populated for kinds that auto-discover models (Ollama, OpenAI list). */
+  models?: string[];
+}
+
+export interface ModelProviderCreate {
+  kind: ModelProviderKind;
+  api_key?: string;
+  endpoint?: string;
+  default_model: string;
+}
+
 export interface ApproveResult {
   id: string;
   status: 'done' | 'rejected';
@@ -384,5 +455,44 @@ export const api = {
       request<BatchOperationResult>(c, `/v1/batches/${id}/reject-all`, {
         method: 'POST',
       }),
+  },
+  stores: {
+    list: (c: Connection) => request<{ stores: Store[] }>(c, '/v1/stores'),
+    get: (c: Connection, id: string) => request<Store>(c, `/v1/stores/${id}`),
+    create: (c: Connection, url: string) =>
+      request<Store>(c, '/v1/stores', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      }),
+    delete: (c: Connection, id: string) =>
+      request<void>(c, `/v1/stores/${id}`, { method: 'DELETE' }),
+  },
+  abilities: {
+    list: (c: Connection, storeId: string) =>
+      request<AbilitiesResponse>(
+        c,
+        `/v1/abilities?store_id=${encodeURIComponent(storeId)}`,
+      ),
+  },
+  modelProviders: {
+    list: (c: Connection) =>
+      request<{ providers: ModelProvider[] }>(c, '/v1/model-providers'),
+    // Pre-save validation. Engineering plan #2 sketches POST
+    // /v1/model-providers/:id/test (post-save) — but Step 4's "Test
+    // connection must pass before Save" requirement needs a no-id endpoint
+    // so we don't litter the daemon with untested providers. This shape is
+    // the UI's ask of engineering.
+    test: (c: Connection, body: ModelTestRequest) =>
+      request<ModelTestResult>(c, '/v1/model-providers/test', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    create: (c: Connection, body: ModelProviderCreate) =>
+      request<ModelProvider>(c, '/v1/model-providers', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    delete: (c: Connection, id: string) =>
+      request<void>(c, `/v1/model-providers/${id}`, { method: 'DELETE' }),
   },
 };

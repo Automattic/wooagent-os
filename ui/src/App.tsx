@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { Text } from '@wordpress/ui';
-import ConnectionForm from './auth/ConnectionForm';
+import OnboardingShell from './onboarding/OnboardingShell';
 import LeftNav from './components/LeftNav';
 import TopBar from './components/TopBar';
 import AskAgentDrawer from './components/AskAgentDrawer';
@@ -23,6 +23,11 @@ import { useIsMobile } from './lib/useMediaQuery';
 export default function App() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [probed, setProbed] = useState(false);
+  // Onboarding gate. Tri-state until probed: null = checking, true = ready
+  // for kanban, false = onboarding flow takes over the whole window.
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(
+    null,
+  );
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
@@ -44,15 +49,36 @@ export default function App() {
     const stored = loadConnection();
     if (!stored) {
       setProbed(true);
+      setOnboardingComplete(false);
       return;
     }
-    api
-      .health(stored)
-      .then(() => setConnection(stored))
-      .catch(() => {
-        /* leave connection null, form will render */
-      })
-      .finally(() => setProbed(true));
+    (async () => {
+      try {
+        await api.health(stored);
+        setConnection(stored);
+        // Probe onboarding completion: kanban opens only if there's a paired
+        // store AND a configured model provider (brief §3 — "kanban opens
+        // only when the underlying setup is sound"). Either endpoint
+        // missing or empty means onboarding isn't done.
+        const [storesRes, providersRes] = await Promise.all([
+          api.stores.list(stored).catch(() => ({ stores: [] })),
+          api.modelProviders.list(stored).catch(() => ({ providers: [] })),
+        ]);
+        const hasStore = storesRes.stores.some((s) => s.status === 'paired');
+        const hasProvider = providersRes.providers.length > 0;
+        setOnboardingComplete(hasStore && hasProvider);
+      } catch {
+        setOnboardingComplete(false);
+      } finally {
+        setProbed(true);
+      }
+    })();
+  }, []);
+
+  // Re-probe completion when the operator finishes the flow. Step 5's
+  // "Open the kanban" calls onComplete() which lands here.
+  const markOnboardingComplete = useCallback(() => {
+    setOnboardingComplete(true);
   }, []);
 
   // Refresh shared board state whenever a connection lands or an issue
@@ -106,8 +132,14 @@ export default function App() {
 
   if (!probed) return null;
 
-  if (!connection) {
-    return <ConnectionForm onConnected={setConnection} />;
+  if (!connection || !onboardingComplete) {
+    return (
+      <OnboardingRoutes
+        connection={connection}
+        onConnected={setConnection}
+        onComplete={markOnboardingComplete}
+      />
+    );
   }
 
   const hostname = (() => {
@@ -327,6 +359,36 @@ interface DrawerControls {
 
 interface ShellProps {
   children: (drawer: DrawerControls) => React.ReactNode;
+}
+
+// Mounts the OnboardingShell only inside the /onboard/* route tree so the
+// shell's nested <Routes> resolves against onboarding paths. Anything else
+// gets sent to /onboard for the resume-redirect to take over.
+interface OnboardingRoutesProps {
+  connection: Connection | null;
+  onConnected(c: Connection): void;
+  onComplete(): void;
+}
+function OnboardingRoutes({
+  connection,
+  onConnected,
+  onComplete,
+}: OnboardingRoutesProps) {
+  return (
+    <Routes>
+      <Route
+        path="/onboard/*"
+        element={
+          <OnboardingShell
+            connection={connection}
+            onConnected={onConnected}
+            onComplete={onComplete}
+          />
+        }
+      />
+      <Route path="*" element={<Navigate to="/onboard" replace />} />
+    </Routes>
+  );
 }
 
 // Shell owns the mobile-drawer state and closes it whenever the route
