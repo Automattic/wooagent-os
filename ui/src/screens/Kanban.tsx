@@ -1,8 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, Stack, Text } from '@wordpress/ui';
 import { Notice, Spinner } from '@wordpress/components';
-import { type Issue } from '../api/client';
-import { KindBadge, kindFromIssue } from '../components/StatusBadge';
+import { type Batch, type Issue } from '../api/client';
+import {
+  KindBadge,
+  kindFromIssue,
+  kindFromPersonaSlug,
+  type IssueKind,
+} from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 
 type ColumnKey = 'backlog' | 'drafting' | 'in_review' | 'done';
@@ -17,7 +22,7 @@ const COLUMNS: { key: ColumnKey; label: string; hint: string }[] = [
 // Daemon has 6 statuses; the board surfaces 4. todo+in_progress collapse to
 // "drafting" because operators don't differentiate them; rejected drops off
 // the board (matches prototype semantics — undo lives in the Done column).
-function columnFor(status: Issue['status']): ColumnKey | null {
+function columnForIssue(status: Issue['status']): ColumnKey | null {
   switch (status) {
     case 'backlog':
       return 'backlog';
@@ -31,6 +36,16 @@ function columnFor(status: Issue['status']): ColumnKey | null {
     case 'rejected':
       return null;
   }
+}
+
+// Batches don't have a status column on the daemon — their column is
+// derived from child counts. Pending children mean the operator still owes
+// a call → in_review. No pending and at least one approved → done. All
+// rejected (or empty) → off-board.
+function columnForBatch(b: Batch): ColumnKey | null {
+  if (b.pending > 0) return 'in_review';
+  if (b.approved > 0) return 'done';
+  return null;
 }
 
 function relativeTime(iso: string): string {
@@ -49,7 +64,7 @@ function relativeTime(iso: string): string {
 // Right-side state label rendered on the card's meta row. Tracks the column
 // — backlog "queued", drafting "drafting now", review/done show timestamps
 // with success treatment for done.
-function cardStateLabel(col: ColumnKey, issue: Issue): string {
+function issueStateLabel(col: ColumnKey, issue: Issue): string {
   switch (col) {
     case 'backlog':
       return 'queued';
@@ -62,12 +77,66 @@ function cardStateLabel(col: ColumnKey, issue: Issue): string {
   }
 }
 
+function batchStateLabel(col: ColumnKey, batch: Batch): string {
+  switch (col) {
+    case 'backlog':
+      return 'queued';
+    case 'drafting':
+      return 'drafting now';
+    case 'in_review':
+      return relativeTime(batch.updated_at);
+    case 'done':
+      return `shipped ${relativeTime(batch.updated_at)}`;
+  }
+}
+
+// Pluralise the kind for a multi-child meta line.
+function kindNoun(kind: IssueKind, count: number): string {
+  switch (kind) {
+    case 'content':
+      return count === 1 ? 'rewrite' : 'rewrites';
+    case 'campaign':
+      return count === 1 ? 'campaign' : 'campaigns';
+    case 'email':
+      return count === 1 ? 'email' : 'emails';
+    case 'price':
+      return count === 1 ? 'price change' : 'price changes';
+    case 'message':
+      return count === 1 ? 'reply' : 'replies';
+  }
+}
+
+// Per-batch meta line. Names the work in concrete terms ("5/7 pending"
+// or "all 7 approved") rather than the per-child variant counts that
+// only make sense for issues.
+function batchMetaLabel(batch: Batch, kind: IssueKind): string {
+  if (batch.pending > 0) {
+    return `${batch.pending} of ${batch.total} ${kindNoun(kind, batch.total)} pending`;
+  }
+  if (batch.approved === batch.total) {
+    return `${batch.total} ${kindNoun(kind, batch.total)} approved`;
+  }
+  if (batch.approved > 0) {
+    return `${batch.approved}/${batch.total} ${kindNoun(kind, batch.total)} approved`;
+  }
+  return `${batch.total} ${kindNoun(kind, batch.total)}`;
+}
+
+// BoardItem is the union the kanban renders. Either a single-issue card
+// (existing behavior) or a batch card representing N children grouped
+// under one parent. The dedupe logic below ensures any issue with a
+// batch_id matching a known batch is replaced by its batch's card.
+type BoardItem =
+  | { kind: 'issue'; issue: Issue; column: ColumnKey; sortKey: string }
+  | { kind: 'batch'; batch: Batch; column: ColumnKey; sortKey: string };
+
 interface Props {
   issues: Issue[] | null;
+  batches: Batch[];
   error: string | null;
 }
 
-export default function Kanban({ issues, error }: Props) {
+export default function Kanban({ issues, batches, error }: Props) {
   const nav = useNavigate();
 
   if (error) {
@@ -93,6 +162,26 @@ export default function Kanban({ issues, error }: Props) {
     if (!acc) return i.updated_at;
     return i.updated_at > acc ? i.updated_at : acc;
   }, null);
+
+  // Build the board. Drop child issues whose batch_id matches a known
+  // batch — they'll be represented by the batch's synthetic card. Issues
+  // with a batch_id but no matching batch (stale data) keep rendering as
+  // individual cards; better than vanishing.
+  const batchIDs = new Set(batches.map((b) => b.id));
+  const items: BoardItem[] = [];
+  for (const issue of issues) {
+    if (issue.batch_id && batchIDs.has(issue.batch_id)) continue;
+    const col = columnForIssue(issue.status);
+    if (col === null) continue;
+    items.push({ kind: 'issue', issue, column: col, sortKey: issue.updated_at });
+  }
+  for (const batch of batches) {
+    const col = columnForBatch(batch);
+    if (col === null) continue;
+    items.push({ kind: 'batch', batch, column: col, sortKey: batch.updated_at });
+  }
+  // Within a column, newer items first.
+  items.sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
 
   return (
     <main
@@ -157,7 +246,7 @@ export default function Kanban({ issues, error }: Props) {
 
       <div className="wa-kanban-row">
         {COLUMNS.map((col) => {
-          const colIssues = issues.filter((i) => columnFor(i.status) === col.key);
+          const colItems = items.filter((it) => it.column === col.key);
           const accentClass = `wa-kanban-col__accent wa-kanban-col__accent--${
             col.key === 'in_review' ? 'review' : col.key
           }`;
@@ -175,11 +264,11 @@ export default function Kanban({ issues, error }: Props) {
                   </Text>
                   <span className="wa-eyebrow">{col.hint}</span>
                 </Stack>
-                <span className="wa-kanban-col__count">{colIssues.length}</span>
+                <span className="wa-kanban-col__count">{colItems.length}</span>
               </div>
               <div className={accentClass} />
               <div className="wa-kanban-col__cards">
-                {colIssues.length === 0 && (
+                {colItems.length === 0 && (
                   <Text
                     variant="body-sm"
                     style={{
@@ -189,92 +278,166 @@ export default function Kanban({ issues, error }: Props) {
                     No items.
                   </Text>
                 )}
-                {colIssues.map((issue) => {
-                  const kind = kindFromIssue(issue);
-                  const personaKey = personaKeyFrom(issue.persona);
-                  const stateLabel = cardStateLabel(col.key, issue);
-                  const stateClass =
-                    col.key === 'drafting'
-                      ? 'wa-card-meta--drafting'
-                      : col.key === 'done'
-                        ? 'wa-card-meta--success'
-                        : '';
-                  return (
-                    <button
-                      key={issue.id}
-                      type="button"
-                      onClick={() =>
-                        issue.batch_id
-                          ? nav(`/batches/${issue.batch_id}`)
-                          : nav(`/issues/${issue.id}`)
-                      }
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: 0,
-                        background: 'transparent',
-                        border: 'none',
-                        cursor: 'var(--wpds-cursor-control)',
-                      }}
-                    >
-                      <Card.Root>
-                        <Card.Content>
-                          <Stack direction="column" gap="sm">
-                            <Stack direction="row" gap="sm" align="center">
-                              <KindBadge kind={kind} />
-                              <span
-                                className="wa-mono"
-                                style={{
-                                  fontSize: 10,
-                                  color:
-                                    'var(--wpds-color-fg-content-neutral-weak)',
-                                }}
-                              >
-                                {issue.id.slice(0, 8).toUpperCase()}
-                              </span>
-                            </Stack>
-                            <Text
-                              variant="body-sm"
-                              style={{
-                                fontWeight:
-                                  'var(--wpds-typography-font-weight-medium)',
-                              }}
-                            >
-                              {issue.title}
-                            </Text>
-                            <div className="wa-card-meta">
-                              {/* Batched issues route to /batches/:id rather
-                                  than /issues/:id; the meta line names the
-                                  parent batch instead of the variant count. */}
-                              <span>
-                                {issue.batch_id
-                                  ? `batch ${issue.batch_id.slice(0, 6).toUpperCase()}`
-                                  : kind === 'content'
-                                    ? '3 variants'
-                                    : '5 child tasks'}
-                              </span>
-                              <span
-                                className={`wa-card-meta-state ${stateClass}`}
-                              >
-                                {col.key === 'done' && (
-                                  <span className="wa-card-meta-dot" aria-hidden="true" />
-                                )}
-                                <span>{stateLabel}</span>
-                                <PersonaAvatar persona={personaKey} size="sm" />
-                              </span>
-                            </div>
-                          </Stack>
-                        </Card.Content>
-                      </Card.Root>
-                    </button>
-                  );
-                })}
+                {colItems.map((item) =>
+                  item.kind === 'issue'
+                    ? renderIssueCard(item.issue, col.key, () =>
+                        item.issue.batch_id
+                          ? nav(`/batches/${item.issue.batch_id}`)
+                          : nav(`/issues/${item.issue.id}`),
+                      )
+                    : renderBatchCard(item.batch, col.key, () =>
+                        nav(`/batches/${item.batch.id}`),
+                      ),
+                )}
               </div>
             </div>
           );
         })}
       </div>
     </main>
+  );
+}
+
+function renderIssueCard(
+  issue: Issue,
+  col: ColumnKey,
+  onClick: () => void,
+) {
+  const kind = kindFromIssue(issue);
+  const personaKey = personaKeyFrom(issue.persona);
+  const stateLabel = issueStateLabel(col, issue);
+  const stateClass =
+    col === 'drafting'
+      ? 'wa-card-meta--drafting'
+      : col === 'done'
+        ? 'wa-card-meta--success'
+        : '';
+  return (
+    <button
+      key={`issue-${issue.id}`}
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: 0,
+        background: 'transparent',
+        border: 'none',
+        cursor: 'var(--wpds-cursor-control)',
+      }}
+    >
+      <Card.Root>
+        <Card.Content>
+          <Stack direction="column" gap="sm">
+            <Stack direction="row" gap="sm" align="center">
+              <KindBadge kind={kind} />
+              <span
+                className="wa-mono"
+                style={{
+                  fontSize: 10,
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                }}
+              >
+                {issue.id.slice(0, 8).toUpperCase()}
+              </span>
+            </Stack>
+            <Text
+              variant="body-sm"
+              style={{
+                fontWeight: 'var(--wpds-typography-font-weight-medium)',
+              }}
+            >
+              {issue.title}
+            </Text>
+            <div className="wa-card-meta">
+              <span>
+                {kind === 'content'
+                  ? '3 variants'
+                  : kind === 'price'
+                    ? 'price change'
+                    : kind === 'message'
+                      ? 'reply draft'
+                      : '1 item'}
+              </span>
+              <span className={`wa-card-meta-state ${stateClass}`}>
+                {col === 'done' && (
+                  <span className="wa-card-meta-dot" aria-hidden="true" />
+                )}
+                <span>{stateLabel}</span>
+                <PersonaAvatar persona={personaKey} size="sm" />
+              </span>
+            </div>
+          </Stack>
+        </Card.Content>
+      </Card.Root>
+    </button>
+  );
+}
+
+function renderBatchCard(batch: Batch, col: ColumnKey, onClick: () => void) {
+  const kind = kindFromPersonaSlug(batch.persona);
+  const personaKey = personaKeyFrom(batch.persona);
+  const stateLabel = batchStateLabel(col, batch);
+  const stateClass =
+    col === 'drafting'
+      ? 'wa-card-meta--drafting'
+      : col === 'done'
+        ? 'wa-card-meta--success'
+        : '';
+  const meta = batchMetaLabel(batch, kind);
+  return (
+    <button
+      key={`batch-${batch.id}`}
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: 0,
+        background: 'transparent',
+        border: 'none',
+        cursor: 'var(--wpds-cursor-control)',
+      }}
+    >
+      <Card.Root>
+        <Card.Content>
+          <Stack direction="column" gap="sm">
+            <Stack direction="row" gap="sm" align="center">
+              <KindBadge kind={kind} />
+              <span
+                className="wa-mono"
+                style={{
+                  fontSize: 10,
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                }}
+              >
+                BATCH · {batch.id.slice(0, 6).toUpperCase()}
+              </span>
+            </Stack>
+            <Text
+              variant="body-sm"
+              style={{
+                fontWeight: 'var(--wpds-typography-font-weight-medium)',
+              }}
+            >
+              {batch.title}
+            </Text>
+            <div className="wa-card-meta">
+              <span>{meta}</span>
+              <span className={`wa-card-meta-state ${stateClass}`}>
+                {col === 'done' && (
+                  <span className="wa-card-meta-dot" aria-hidden="true" />
+                )}
+                <span>{stateLabel}</span>
+                <PersonaAvatar persona={personaKey} size="sm" />
+              </span>
+            </div>
+          </Stack>
+        </Card.Content>
+      </Card.Root>
+    </button>
   );
 }
