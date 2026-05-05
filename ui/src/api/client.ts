@@ -187,6 +187,164 @@ export function variantsFromProposal(p: Proposal | null | undefined): Variant[] 
   return out.length > 0 ? out : null;
 }
 
+// Pricing-persona structured proposal shape. The pricing-benchmark skill
+// emits these fields into proposal.target; the daemon's
+// product_price_change approve dispatch reads target.regular_price to drive
+// the wooagent-products/update call.
+export interface PriceSource {
+  url: string;
+  retailer?: string;
+  comparable_product: string;
+  observed_price: number;
+  currency?: string;
+  note?: string;
+}
+
+export interface PriceProposal {
+  productId?: number;
+  productName?: string;
+  productSku?: string;
+  currency: string;
+  previousPrice: number;
+  proposedPrice: number;
+  /** Signed. Negative = price cut. Daemon caps at ±25% per step. */
+  percentChange: number;
+  direction: 'increase' | 'decrease' | 'hold';
+  observedLow?: number;
+  observedMedian?: number;
+  observedHigh?: number;
+  sources: PriceSource[];
+}
+
+export function priceProposalFromProposal(
+  p: Proposal | null | undefined,
+): PriceProposal | null {
+  if (!p || p.type !== 'product_price_change' || !p.target) return null;
+  const t = p.target as Record<string, unknown>;
+  const previous = typeof t.previous_price === 'number' ? t.previous_price : NaN;
+  const proposed = typeof t.proposed_price === 'number' ? t.proposed_price : NaN;
+  if (!Number.isFinite(previous) || !Number.isFinite(proposed)) return null;
+  const direction =
+    t.direction === 'increase' || t.direction === 'decrease' || t.direction === 'hold'
+      ? (t.direction as PriceProposal['direction'])
+      : proposed > previous
+        ? 'increase'
+        : proposed < previous
+          ? 'decrease'
+          : 'hold';
+  const sourcesRaw = Array.isArray(t.sources) ? t.sources : [];
+  const sources: PriceSource[] = [];
+  for (const s of sourcesRaw) {
+    if (!s || typeof s !== 'object') continue;
+    const r = s as Record<string, unknown>;
+    if (typeof r.url !== 'string' || typeof r.observed_price !== 'number') continue;
+    sources.push({
+      url: r.url,
+      retailer: typeof r.retailer === 'string' ? r.retailer : undefined,
+      comparable_product:
+        typeof r.comparable_product === 'string' ? r.comparable_product : r.url,
+      observed_price: r.observed_price,
+      currency: typeof r.currency === 'string' ? r.currency : undefined,
+      note: typeof r.note === 'string' ? r.note : undefined,
+    });
+  }
+  return {
+    productId: typeof t.product_id === 'number' ? t.product_id : undefined,
+    productName: typeof t.product_name === 'string' ? t.product_name : undefined,
+    productSku: typeof t.product_sku === 'string' ? t.product_sku : undefined,
+    currency: typeof t.currency === 'string' ? t.currency : 'USD',
+    previousPrice: previous,
+    proposedPrice: proposed,
+    percentChange:
+      typeof t.percent_change === 'number'
+        ? t.percent_change
+        : ((proposed - previous) / previous) * 100,
+    direction,
+    observedLow: typeof t.observed_low === 'number' ? t.observed_low : undefined,
+    observedMedian:
+      typeof t.observed_median === 'number' ? t.observed_median : undefined,
+    observedHigh: typeof t.observed_high === 'number' ? t.observed_high : undefined,
+    sources,
+  };
+}
+
+// Sales Support structured proposal shape. The persona emits these fields
+// into proposal.target; the daemon's customer_reply_draft approve dispatch
+// reads them to call wooagent-orders/add-note.
+export interface MessageLineItem {
+  product_id?: number;
+  name: string;
+  quantity?: number;
+  total?: string;
+  sku?: string;
+}
+
+export interface MessageProposal {
+  message: string; // body of the note (plain text, may include \n)
+  noteType: 'customer' | 'internal';
+  subjectHint?: string;
+  orderId: number;
+  orderNumber?: string;
+  orderStatus?: string;
+  orderTotal?: string;
+  orderCurrency?: string;
+  orderDate?: string;
+  customerId?: number;
+  customerEmail?: string;
+  customerName?: string;
+  lineItems: MessageLineItem[];
+}
+
+export function messageProposalFromProposal(
+  p: Proposal | null | undefined,
+): MessageProposal | null {
+  if (!p || p.type !== 'customer_reply_draft' || !p.target) return null;
+  const t = p.target as Record<string, unknown>;
+  const orderId = typeof t.order_id === 'number' ? t.order_id : NaN;
+  if (!Number.isFinite(orderId)) return null;
+  const noteTypeRaw =
+    typeof t.note_type === 'string' ? t.note_type.toLowerCase() : 'customer';
+  const noteType: MessageProposal['noteType'] =
+    noteTypeRaw === 'internal' ? 'internal' : 'customer';
+
+  const itemsRaw = Array.isArray(t.line_items) ? t.line_items : [];
+  const lineItems: MessageLineItem[] = [];
+  for (const it of itemsRaw) {
+    if (!it || typeof it !== 'object') continue;
+    const r = it as Record<string, unknown>;
+    if (typeof r.name !== 'string') continue;
+    lineItems.push({
+      product_id: typeof r.product_id === 'number' ? r.product_id : undefined,
+      name: r.name,
+      quantity: typeof r.quantity === 'number' ? r.quantity : undefined,
+      total: typeof r.total === 'string' ? r.total : undefined,
+      sku: typeof r.sku === 'string' ? r.sku : undefined,
+    });
+  }
+
+  return {
+    message: p.content,
+    noteType,
+    subjectHint: typeof t.subject_hint === 'string' ? t.subject_hint : undefined,
+    orderId,
+    orderNumber:
+      typeof t.order_number === 'string' ? t.order_number : undefined,
+    orderStatus:
+      typeof t.order_status === 'string' ? t.order_status : undefined,
+    orderTotal: typeof t.order_total === 'string' ? t.order_total : undefined,
+    orderCurrency:
+      typeof t.order_currency === 'string' ? t.order_currency : undefined,
+    orderDate: typeof t.order_date === 'string' ? t.order_date : undefined,
+    customerId:
+      typeof t.customer_id === 'number' ? t.customer_id : undefined,
+    customerEmail:
+      typeof t.customer_email === 'string' ? t.customer_email : undefined,
+    customerName:
+      typeof t.customer_name === 'string' ? t.customer_name : undefined,
+    lineItems,
+  };
+}
+
 export interface IssueDetail {
   issue: Issue;
   runs: unknown[];

@@ -21,8 +21,8 @@ var defaultPersonas = []struct {
 	Persona, Name, ModelPreference string
 }{
 	{"marketing", "Marketing & SEO", "anthropic/claude-sonnet-4-6"},
-	{"pricing", "Pricing", "anthropic/claude-sonnet-4-6"},
-	{"sales_support", "Sales Support", "anthropic/claude-sonnet-4-6"},
+	{"pricing", "Pricing", "anthropic/claude-haiku-4-5-20251001"},
+	{"sales-support", "Sales Support", "anthropic/claude-haiku-4-5-20251001"},
 }
 
 func newInitCmd() *cobra.Command {
@@ -77,7 +77,7 @@ func newInitCmd() *cobra.Command {
 				seeded += int(n)
 			}
 			if seeded > 0 {
-				fmt.Fprintf(out, "✓ Seeded %d default persona(s): marketing, pricing, sales_support\n", seeded)
+				fmt.Fprintf(out, "✓ Seeded %d default persona(s): marketing, pricing, sales-support\n", seeded)
 			} else {
 				fmt.Fprintln(out, "• Personas already seeded (left untouched)")
 			}

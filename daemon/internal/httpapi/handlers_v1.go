@@ -268,6 +268,57 @@ var approveDispatchByType = map[string]approveDispatch{
 			}, nil
 		},
 	},
+	// Pricing persona. proposal.content is the operator-facing rationale
+	// (sources cited, observed range, reasoning); the numeric payload lives
+	// in proposal.target.regular_price (decimal string — Woo's update path
+	// wants "19.99" not 19.99). Same MCP ability as the prose rewrite; the
+	// fields-shipped subset is the only difference.
+	"product_price_change": {
+		ability: "wooagent-products/update",
+		buildParams: func(_ string, target map[string]any) (map[string]any, error) {
+			pid, err := requireIntFromTarget(target, "product_id")
+			if err != nil {
+				return nil, err
+			}
+			price, err := requireDecimalStringFromTarget(target, "regular_price")
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"id":            pid,
+				"regular_price": price,
+			}, nil
+		},
+	},
+	// Sales Support persona. proposal.content is the message body (plain
+	// text, ready for WP to email to the customer). target carries the
+	// order id and a note_type discriminator — "customer" sets
+	// is_customer_note=true so WP emails the note; "internal" leaves it
+	// off so it shows only in wp-admin.
+	"customer_reply_draft": {
+		ability: "wooagent-orders/add-note",
+		buildParams: func(content string, target map[string]any) (map[string]any, error) {
+			oid, err := requireIntFromTarget(target, "order_id")
+			if err != nil {
+				return nil, err
+			}
+			note := strings.TrimSpace(content)
+			if note == "" {
+				return nil, fmt.Errorf("proposal content (note body) is empty")
+			}
+			isCustomer := true // default: customer-facing
+			if v, ok := target["note_type"]; ok {
+				if s, ok := v.(string); ok && strings.EqualFold(strings.TrimSpace(s), "internal") {
+					isCustomer = false
+				}
+			}
+			return map[string]any{
+				"id":               oid,
+				"note":             note,
+				"is_customer_note": isCustomer,
+			}, nil
+		},
+	},
 }
 
 // approveIssueReq is the optional body for POST /v1/issues/:id/approve. When
@@ -612,6 +663,44 @@ func requireIntFromTarget(target map[string]any, key string) (int, error) {
 		return i, nil
 	default:
 		return 0, fmt.Errorf("%s has unsupported type %T", key, v)
+	}
+}
+
+// requireDecimalStringFromTarget reads a decimal price out of a JSON-decoded
+// target. WooCommerce's update path wants a decimal string ("19.99"), but
+// callers may have stored the value as a number — accept either and return a
+// canonical 2dp string so the MCP write is deterministic.
+func requireDecimalStringFromTarget(target map[string]any, key string) (string, error) {
+	v, ok := target[key]
+	if !ok {
+		return "", fmt.Errorf("missing %s in proposal target", key)
+	}
+	switch n := v.(type) {
+	case float64:
+		if n <= 0 {
+			return "", fmt.Errorf("%s must be > 0", key)
+		}
+		return strconv.FormatFloat(n, 'f', 2, 64), nil
+	case int:
+		if n <= 0 {
+			return "", fmt.Errorf("%s must be > 0", key)
+		}
+		return strconv.FormatFloat(float64(n), 'f', 2, 64), nil
+	case string:
+		s := strings.TrimSpace(n)
+		if s == "" {
+			return "", fmt.Errorf("%s is empty", key)
+		}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return "", fmt.Errorf("%s not a decimal: %w", key, err)
+		}
+		if f <= 0 {
+			return "", fmt.Errorf("%s must be > 0", key)
+		}
+		return strconv.FormatFloat(f, 'f', 2, 64), nil
+	default:
+		return "", fmt.Errorf("%s has unsupported type %T", key, v)
 	}
 }
 

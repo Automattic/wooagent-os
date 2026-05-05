@@ -11,13 +11,20 @@ import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
 import Settings from './screens/Settings';
 import Placeholder from './screens/Placeholder';
-import { loadConnection, type Connection, type Issue, api } from './api/client';
+import {
+  loadConnection,
+  type Batch,
+  type Connection,
+  type Issue,
+  api,
+} from './api/client';
 import { useIsMobile } from './lib/useMediaQuery';
 
 export default function App() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [probed, setProbed] = useState(false);
   const [issues, setIssues] = useState<Issue[] | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [askAgentOpen, setAskAgentOpen] = useState(false);
 
@@ -48,17 +55,24 @@ export default function App() {
       .finally(() => setProbed(true));
   }, []);
 
-  // Refresh shared issue state whenever a connection lands. Both the kanban
-  // and the sidebar's "Marketing N in review" badge consume this.
+  // Refresh shared board state whenever a connection lands or an issue
+  // changes status. Both the kanban (issues + batches) and the sidebar's
+  // "Marketing N in review" badge consume this. Batches load best-effort
+  // — a /v1/batches failure must not block the kanban from rendering.
   const refreshIssues = useCallback(
     async (c: Connection) => {
       setIssuesError(null);
       try {
-        const res = await api.issues(c);
-        setIssues(res.issues);
+        const [issuesRes, batchesRes] = await Promise.all([
+          api.issues(c),
+          api.batches.list(c).catch(() => ({ batches: [] as Batch[] })),
+        ]);
+        setIssues(issuesRes.issues);
+        setBatches(batchesRes.batches);
       } catch (e) {
         setIssuesError(e instanceof Error ? e.message : String(e));
         setIssues([]);
+        setBatches([]);
       }
     },
     [],
@@ -68,14 +82,22 @@ export default function App() {
     if (!connection) return;
     let cancelled = false;
     void (async () => {
-      const res = await api.issues(connection).catch((e) => {
+      try {
+        const [issuesRes, batchesRes] = await Promise.all([
+          api.issues(connection),
+          api.batches.list(connection).catch(() => ({ batches: [] as Batch[] })),
+        ]);
+        if (!cancelled) {
+          setIssues(issuesRes.issues);
+          setBatches(batchesRes.batches);
+        }
+      } catch (e) {
         if (!cancelled) {
           setIssuesError(e instanceof Error ? e.message : String(e));
           setIssues([]);
+          setBatches([]);
         }
-        return null;
-      });
-      if (!cancelled && res) setIssues(res.issues);
+      }
     })();
     return () => {
       cancelled = true;
@@ -136,7 +158,9 @@ export default function App() {
         <Routes>
           <Route
             path="/"
-            element={<Kanban issues={issues} error={issuesError} />}
+            element={
+              <Kanban issues={issues} batches={batches} error={issuesError} />
+            }
           />
           <Route
             path="/issues/:id"
@@ -164,6 +188,7 @@ export default function App() {
                 onDisconnect={() => {
                   setConnection(null);
                   setIssues(null);
+                  setBatches([]);
                 }}
               />
             }
