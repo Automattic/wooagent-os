@@ -1,21 +1,25 @@
-// Command persona-marketing is a debug-only one-shot for the Marketing
+// Command persona-pricing is a debug-only one-shot for the Pricing
 // persona. The daemon's `wooagent run` already spawns this persona
 // automatically on startup (see internal/cli/run.go); this binary stays
-// because it's useful for iterating on the marketing prompt without
-// restarting the daemon.
+// because it's useful for iterating on the pricing skill or harness
+// without restarting the daemon, and because it prints richer diagnostic
+// output than the daemon's per-persona log line.
 //
 // Both the binary and the daemon-startup path drive the same code in
-// internal/personas/marketing/ — fix bugs there, not here.
+// internal/personas/pricing/ — fix bugs there, not here.
 //
 // Run:
 //
 //	WOOAGENT_MCP_URL=https://<store>/wp-json/mcp/mcp-adapter-default-server \
 //	WOOAGENT_MCP_USER=<wp-user-or-email> \
 //	WOOAGENT_MCP_APP_PASSWORD=<wp-application-password> \
-//	go run ./cmd/persona-marketing
+//	ANTHROPIC_API_KEY=<sk-ant-...> \
+//	go run ./cmd/persona-pricing
 //
-// Optional: PERSONA_PRODUCT_ID picks a specific product. OPENAI_API_BASE_URL,
-// OPENAI_MODEL, OPENAI_API_KEY override the LM Studio defaults.
+// Optional: PERSONA_PRODUCT_ID picks a specific product. PERSONA_CURRENCY
+// (default USD) labels the proposal. ANTHROPIC_MODEL overrides the
+// default Haiku 4.5 model id. WOOAGENT_SKILLS_DIR overrides the skill
+// registry path.
 package main
 
 import (
@@ -29,13 +33,14 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 
-	// Side-effect import: registers Marketing in the personas registry.
-	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/marketing"
+	// Side-effect import: registers Pricing in the personas registry.
+	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/pricing"
 )
 
-const personaSlug = "marketing"
+const personaSlug = "pricing"
 
 func main() {
 	ctx := context.Background()
@@ -43,7 +48,18 @@ func main() {
 	mcpURL := mustEnv("WOOAGENT_MCP_URL")
 	mcpUser := mustEnv("WOOAGENT_MCP_USER")
 	mcpPass := strings.ReplaceAll(mustEnv("WOOAGENT_MCP_APP_PASSWORD"), " ", "")
+	apiKey := mustEnv("ANTHROPIC_API_KEY")
 
+	skillsDir := envOr("WOOAGENT_SKILLS_DIR", "skills")
+	skills, err := registry.LoadSkills(skillsDir)
+	if err != nil {
+		log.Fatalf("load skills (%s): %v", skillsDir, err)
+	}
+
+	// Open the daemon's SQLite directly. This means the binary writes
+	// issues to the same DB the running daemon serves — no HTTP
+	// round-trip, no separate auth dance. Concurrent access is safe under
+	// modernc.org/sqlite's WAL mode.
 	paths, err := config.DefaultPaths()
 	if err != nil {
 		log.Fatalf("resolve paths: %v", err)
@@ -68,12 +84,13 @@ func main() {
 	}
 
 	deps := personas.Deps{
-		Store: st,
-		MCP:   mcpClient,
+		Store:  st,
+		MCP:    mcpClient,
+		Skills: skills,
 		Env: personas.Env{
-			OpenAIAPIBase:     os.Getenv("OPENAI_API_BASE_URL"),
-			OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
-			OpenAIModel:       os.Getenv("OPENAI_MODEL"),
+			AnthropicAPIKey:   apiKey,
+			AnthropicModel:    os.Getenv("ANTHROPIC_MODEL"),
+			DefaultCurrency:   envOr("PERSONA_CURRENCY", "USD"),
 			ProductIDOverride: productID,
 		},
 	}
@@ -103,4 +120,11 @@ func mustEnv(key string) string {
 		log.Fatalf("required env var not set: %s", key)
 	}
 	return v
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

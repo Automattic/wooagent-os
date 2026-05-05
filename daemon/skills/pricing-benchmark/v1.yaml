@@ -1,0 +1,188 @@
+name: pricing.benchmark
+version: 0.2.0
+description: |
+  Propose a price change for a single WooCommerce product, grounded in live
+  market research at a known set of accessible mid-tier retailers. The
+  agent searches preferred retailer sites for comparable products in the
+  same category and price tier, compares the current price against the
+  observed range, and either proposes a new price with a written rationale
+  or declines to propose when grounding is insufficient.
+
+  PREFERRED RETAILERS — search these first.
+
+  These are the comparable retailers for this store's voice (warm,
+  small-batch, material-forward, made-to-last). They sit in the accessible
+  mid-tier band — above Target / H&M, below Theory / Vince. Use the
+  category groups below to pick the right ones for the product type.
+
+    Apparel + accessories:
+      - J.Crew         (jcrew.com)         — cashmere, basics, accessories
+      - Madewell       (madewell.com)      — denim, knits, leather goods
+      - Aritzia        (aritzia.com)       — contemporary women's
+      - Everlane       (everlane.com)      — transparency-priced basics
+      - Quince         (quince.com)        — direct-to-consumer luxury basics
+      - Banana Republic (bananarepublic.com) — workwear, sweaters
+      - COS            (cos.com)           — minimalist basics
+
+    Home goods:
+      - Anthropologie  (anthropologie.com) — home, apparel crossover
+      - West Elm       (westelm.com)       — modern home
+      - Crate & Barrel (crateandbarrel.com) — kitchen, home, tabletop
+      - Parachute      (parachutehome.com) — bedding, bath, towels
+      - Brooklinen     (brooklinen.com)    — bedding, bath
+      - Coyuchi        (coyuchi.com)       — organic textiles
+
+    Specialist (use only when the product type fits):
+      - Naadam         (naadam.co)         — cashmere
+      - Allbirds       (allbirds.com)      — wool footwear
+      - Outdoor Voices (outdoorvoices.com) — performance basics
+
+  SEARCH METHOD — use site: queries first.
+
+  The web_search tool understands Google's site: operator. Prefer
+  site-scoped queries because they return clean retailer pages with
+  prices, not blog posts or marketplace listings. Run several:
+
+    site:jcrew.com cashmere scarf
+    site:madewell.com cashmere scarf
+    site:everlane.com cashmere scarf
+    cashmere scarf $40-$80    (final unscoped query for breadth)
+
+  When a site-scoped query returns nothing, that retailer doesn't carry
+  the category — try the next one. Cap total searches at 6.
+
+  COMPARABLE QUALITY RULES.
+
+    1. A "comparable" must match on:
+       - Category   (cashmere scarf vs cashmere scarf, NOT cashmere scarf
+         vs acrylic scarf)
+       - Material   (the load-bearing signal — search the noun phrase that
+         names the material, not the brand name or the product slug)
+       - Tier       (a J.Crew $198 cashmere scarf IS comparable to a
+         small-batch $39 cashmere scarf only if the materials and
+         construction are similar; flag it but don't blindly anchor to it)
+    2. Decline to propose (no_proposal=true) when:
+       - Fewer than 3 comparables surface across all retailers
+       - Comparable prices vary by more than 4× (suggests category
+         mismatch — search isn't returning a coherent set)
+       - The store's product is a subscription, custom-made, or other
+         shape that doesn't have one-shot retail comparables
+       - The store's product is in a tier the preferred retailers don't
+         carry (e.g., $5 dish towel against Parachute $40 dish towels —
+         the comparable is Target / Walmart, not the preferred list)
+    3. When you decline, reason_no_proposal MUST name (a) the searches
+       you ran, (b) what came back, (c) why it doesn't qualify. "I
+       searched site:jcrew.com socks subscription and got 0 results;
+       site:madewell.com socks subscription returned bundles only;
+       subscription products don't have one-shot retail comps in the
+       preferred mid-tier band" — that's the format.
+
+  PROPOSAL METHOD.
+
+    1. Compute median, low, and high from the qualifying comparables.
+    2. Propose a new price that moves the current price toward the
+       observed band. Cap movement at ±25% per step — large adjustments
+       should land over multiple cycles, not one.
+    3. Direction:
+       - "increase" if the median is above the current price
+       - "decrease" if the median is below the current price
+       - "hold"     if median ≈ current (within ±3%)
+    4. Every numeric claim in rationale[] must trace to a sources[]
+       entry. The agent NEVER invents prices.
+
+  Output is a structured JSON object the persona harness writes into the
+  daemon issue's proposal.target. The proposal type is product_price_change.
+
+schema:
+  input:
+    type: object
+    required: [product_id, product_name, current_price, currency]
+    properties:
+      product_id:
+        type: integer
+        description: Woo product ID. Used to round-trip the eventual update.
+      product_name:
+        type: string
+      product_description:
+        type: string
+        description: Full product description; primary signal for the search query.
+      category:
+        type: string
+        description: Optional. Use when present; do not require it.
+      brand:
+        type: string
+        description: Optional. The store's brand voice, not the product manufacturer.
+      current_price:
+        type: number
+      currency:
+        type: string
+        enum: [USD, GBP, EUR, CAD, AUD]
+  output:
+    type: object
+    required: [no_proposal]
+    properties:
+      no_proposal:
+        type: boolean
+        description: True when grounding is insufficient. The harness will skip issue creation.
+      reason_no_proposal:
+        type: string
+        description: |
+          Required when no_proposal=true. Must name (a) what searches you
+          ran, (b) what came back, (c) why the results don't qualify. Do
+          not return an empty string.
+      previous_price:
+        type: number
+        description: Echo of current_price at the time of analysis. Frozen for audit.
+      proposed_price:
+        type: number
+      percent_change:
+        type: number
+        description: Signed. Negative = price cut. Capped at ±25% per step.
+      direction:
+        type: string
+        enum: [increase, decrease, hold]
+      observed_median:
+        type: number
+        description: Median of the qualifying comparables.
+      observed_low:
+        type: number
+      observed_high:
+        type: number
+      rationale:
+        type: string
+        description: |
+          Two to four sentences. Every number must reference a sources[]
+          entry. Name the retailer when you cite a price ("Madewell's
+          cashmere scarf is $128, J.Crew's is $198 — current $39 trails
+          the band").
+      sources:
+        type: array
+        minItems: 3
+        items:
+          type: object
+          required: [url, comparable_product, observed_price]
+          properties:
+            url:
+              type: string
+            retailer:
+              type: string
+              description: |
+                Retailer name (J.Crew, Madewell, Aritzia, Everlane, …).
+                Pull from the preferred list when possible. Operators
+                read this — don't leave blank.
+            comparable_product:
+              type: string
+              description: Name as it appears on the source page.
+            observed_price:
+              type: number
+            currency:
+              type: string
+            note:
+              type: string
+              description: Optional. Material/tier match notes the operator will read.
+examples:
+  - "Cashmere Scarf, currently $39 — search site:jcrew.com, site:madewell.com, site:naadam.co for cashmere scarves; expect comps in the $90–$200 band, propose a price rise capped at +25%."
+  - "Wool Cardigan, currently $89 — search site:everlane.com, site:jcrew.com, site:cos.com for wool cardigans; flag if comps cluster much lower (e.g., COS basics)."
+  - "Linen Tea Towel, currently $24 — search site:parachutehome.com, site:coyuchi.com, site:westelm.com for linen tea towels."
+  - "Stoneware Mug, currently $18 — search site:anthropologie.com, site:crateandbarrel.com, site:westelm.com; if comps are all $25-$35 propose a small rise; if $5-$10 (i.e., comps are at Target tier), no_proposal."
+  - "Acrylic Beanie, currently $65 — likely outside the preferred-retailer tier. Decline with a reason naming what you tried."
