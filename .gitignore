@@ -2,6 +2,12 @@
 /daemon/bin/
 /daemon/wooagent
 /daemon/spike-adk
+/daemon/spike-mcp
+/daemon/mcp-probe
+/daemon/manifest-compute
+/daemon/persona-marketing
+/daemon/persona-pricing
+/daemon/persona-sales-support
 *.exe
 *.exe~
 *.dll

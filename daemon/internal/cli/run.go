@@ -3,8 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -16,11 +18,21 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
+
+	// Side-effect imports register the persona implementations. Adding a
+	// new persona is a one-line change here plus a new package under
+	// internal/personas/<slug>/.
+	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/marketing"
+	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/pricing"
+	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/sales-support"
 )
 
 func newRunCmd() *cobra.Command {
 	var bind string
+	var skipPersonas bool
 	c := &cobra.Command{
 		Use:   "run",
 		Short: "Start the WooAgent OS daemon (headless REST API)",
@@ -99,10 +111,20 @@ func newRunCmd() *cobra.Command {
 			fmt.Fprintln(out, "    • local:   run `wooagent ui` in another terminal")
 			fmt.Fprintln(out, "→ Press Ctrl+C to stop.")
 
+			// Spawn persona seed runs in a background goroutine. Each persona
+			// checks agents.enabled and an "already-has-open-issues" guard, so
+			// restarts of the daemon don't duplicate-seed the kanban. Failures
+			// in one persona never block another or the HTTP server. See
+			// internal/personas/personas.go for the contract.
+			if !skipPersonas {
+				go runPersonas(ctx, st, mcpClient, out)
+			}
+
 			return httpapi.Run(ctx, cfg.BindAddr, srv.Handler())
 		},
 	}
 	c.Flags().StringVar(&bind, "bind", "", "address to bind (default: value of config.bind_addr or localhost:7777)")
+	c.Flags().BoolVar(&skipPersonas, "skip-personas", false, "skip the on-boot persona seed run (useful for HTTP-only debugging)")
 	return c
 }
 
@@ -123,4 +145,98 @@ func loadMCPClient(out interface{ Write([]byte) (int, error) }) *mcp.Client {
 		// pasted values from the admin UI work without preprocessing.
 		Password: strings.ReplaceAll(pass, " ", ""),
 	})
+}
+
+// runPersonas fans out registered personas in goroutines and logs their
+// outcomes. Personas may be skipped (env not set, no work to do, etc.) or
+// land an issue. Either way, the daemon keeps serving HTTP. Errors are
+// logged but never propagated — a single broken persona must not bench the
+// rest of the fleet.
+func runPersonas(ctx context.Context, st *store.Store, mcpClient *mcp.Client, out io.Writer) {
+	skills, err := loadSkillsForPersonas(out)
+	if err != nil {
+		fmt.Fprintf(out, "→ persona init: skill registry unavailable: %v\n", err)
+		// Continue anyway; personas that need a skill will skip themselves
+		// with a clear reason. Personas that don't need one (Marketing) keep
+		// working.
+		skills = map[string]registry.Skill{}
+	}
+
+	env := personas.Env{
+		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicModel:  os.Getenv("ANTHROPIC_MODEL"),
+		OpenAIAPIBase:   os.Getenv("OPENAI_API_BASE_URL"),
+		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:     os.Getenv("OPENAI_MODEL"),
+		DefaultCurrency: os.Getenv("PERSONA_CURRENCY"),
+	}
+	if id := strings.TrimSpace(os.Getenv("PERSONA_PRODUCT_ID")); id != "" {
+		if n, err := strconv.Atoi(id); err == nil {
+			env.ProductIDOverride = n
+		}
+	}
+
+	deps := personas.Deps{
+		Store:  st,
+		MCP:    mcpClient,
+		Skills: skills,
+		Env:    env,
+	}
+
+	all := personas.All()
+	if len(all) == 0 {
+		fmt.Fprintln(out, "→ persona init: no personas registered")
+		return
+	}
+	fmt.Fprintf(out, "→ persona init: running %d personas sequentially\n", len(all))
+
+	// Serial, not parallel. The MCP client has a single Mcp-Session-Id
+	// field; concurrent Initialize calls from goroutines race on that
+	// field and the loser sees "invalid or expired session" on its next
+	// CallTool. Sequential runs are also kinder to the WP store
+	// (one inbound request at a time) and to LLM rate limits. Phase 2
+	// personas run a few seconds each — the lost parallelism is cheap.
+	for _, p := range all {
+		// Honor cancellation between personas — Ctrl+C should exit
+		// promptly without waiting for the rest of the queue.
+		select {
+		case <-ctx.Done():
+			fmt.Fprintln(out, "→ persona init: context cancelled before completion")
+			return
+		default:
+		}
+		res, err := personas.RunAndPersist(ctx, p, deps)
+		if err != nil {
+			fmt.Fprintf(out, "  · %s: error · %v\n", p.Slug(), err)
+			continue
+		}
+		if res.Skipped {
+			fmt.Fprintf(out, "  · %s: skipped · %s\n", p.Slug(), res.SkipReason)
+			continue
+		}
+		fmt.Fprintf(out, "  · %s: issue %s landed in_review\n", p.Slug(), res.IssueID)
+	}
+	fmt.Fprintln(out, "→ persona init: done")
+}
+
+// loadSkillsForPersonas resolves the skills directory relative to the
+// daemon's working directory. Personas that need a specific skill look it
+// up by name in this map; personas that don't need any aren't affected by
+// a missing directory.
+func loadSkillsForPersonas(out io.Writer) (map[string]registry.Skill, error) {
+	// Prefer the override env (testing); fall back to the well-known repo
+	// layout. Production deployments will likely set the env explicitly so
+	// the daemon doesn't depend on cwd at all.
+	dir := os.Getenv("WOOAGENT_SKILLS_DIR")
+	if dir == "" {
+		dir = "skills"
+	}
+	skills, err := registry.LoadSkills(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(skills) == 0 {
+		fmt.Fprintf(out, "→ persona init: no skills found in %q (set WOOAGENT_SKILLS_DIR if running from outside daemon/)\n", dir)
+	}
+	return skills, nil
 }
