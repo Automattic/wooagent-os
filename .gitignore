@@ -51,3 +51,13 @@ yarn-error.log*
 # Internal-only planning + pitch docs (kept local, not in repo)
 /WooAgent_plan.md
 /WooAgent_Pitch.md
+/woopayments-abilities-proposal.md
+/wooagent-os-prd V2.md
+/wooagent-os-gepa-v2-plan.md
+/update-2026-04-22.md
+/progress.md
+/pep-implementation-plan.md
+/linearproject.md
+/hvmpersona.md
+/daemon-batch-issues-plan.md
+/companion-plugin-v0.1-plan.md
