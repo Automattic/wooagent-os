@@ -970,6 +970,386 @@ a {
 }
 
 
+/* ---------- Settings → Models ---------- */
+/* Wrap the Settings page so the cards have a sensible reading width
+   without stretching across the full main shell. */
+.wa-settings {
+  max-width: 760px;
+  padding: var(--wpds-dimension-padding-xl) var(--wa-page-pad-x);
+}
+
+.wa-model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wa-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-md);
+  padding: var(--wpds-dimension-padding-md) 0;
+  border-bottom:
+    var(--wpds-border-width-sm)
+    solid var(--wpds-color-stroke-surface-neutral-weak);
+}
+.wa-model-row:last-child { border-bottom: none; }
+.wa-model-row:first-child { padding-top: 0; }
+
+.wa-default-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--wpds-dimension-padding-sm);
+  border-radius: var(--wpds-border-radius-sm);
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: 10px;
+  font-weight: var(--wpds-typography-font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+}
+
+/* ---------- Onboarding (first-run setup) ---------- */
+/* Centered single-column flow per onboarding-design-brief.md §7. The full
+   sidebar/topbar shell is intentionally absent — there's nothing to navigate
+   to until Step 5 hands off to the main app. */
+.wa-onboarding-shell {
+  min-height: 100vh;
+  width: 100%;
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding:
+    var(--wpds-dimension-padding-xl)
+    var(--wpds-dimension-padding-md);
+  gap: var(--wpds-dimension-gap-lg);
+}
+
+/* min-width on the form/header keeps the cards from squeezing on narrow
+   layouts. The stepper wrap is content-width — the new Figma stepper
+   sizes itself naturally and centers within the shell. */
+.wa-onboarding-header,
+.wa-onboarding-surface {
+  width: 100%;
+  min-width: 512px;
+  max-width: var(--wpds-dimension-surface-width-sm, 560px);
+}
+.wa-onboarding-stepper-wrap {
+  width: auto;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.wa-onboarding-header { text-align: center; }
+.wa-onboarding-header > * { align-items: center; }
+
+@media (max-width: 540px) {
+  .wa-onboarding-header,
+  .wa-onboarding-surface {
+    min-width: 0;
+  }
+}
+
+/* Stepper — see Figma "Horizontal stepper alt 02 / Numbers" variant.
+   Inline label/marker rows separated by fixed-width neutral connectors.
+   Active and done states share the same dark fill — only the glyph
+   swaps (number → check). Connectors stay neutral throughout. */
+.wa-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  flex-wrap: wrap;
+  row-gap: var(--wpds-dimension-gap-xs);
+}
+.wa-stepper__item {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.wa-stepper__connector {
+  flex: none;
+  width: 24px;
+  height: 1px;
+  background: var(--wpds-color-stroke-surface-neutral);
+}
+.wa-stepper__step {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  background: transparent;
+  border: none;
+  padding:
+    var(--wpds-dimension-padding-xs)
+    var(--wpds-dimension-padding-sm);
+  border-radius: var(--wpds-border-radius-sm);
+  cursor: var(--wpds-cursor-control);
+  font: inherit;
+  color: inherit;
+  flex: none;
+  transition: color 0.1s;
+}
+.wa-stepper__step:disabled { cursor: default; }
+.wa-stepper__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  font-family: var(--wpds-typography-font-family-body);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: var(--wpds-typography-font-weight-medium);
+  background: transparent;
+  color: var(--wpds-color-fg-content-neutral-weak);
+  border:
+    var(--wpds-border-width-sm)
+    solid var(--wpds-color-stroke-surface-neutral);
+  flex: none;
+}
+.wa-stepper__label {
+  font-size: var(--wpds-typography-font-size-sm);
+  font-weight: var(--wpds-typography-font-weight-medium);
+  line-height: var(--wpds-typography-line-height-sm, 20px);
+  color: var(--wpds-color-fg-content-neutral-weak);
+  white-space: nowrap;
+}
+/* Active = filled dark circle with white number. */
+.wa-stepper__step--current .wa-stepper__marker {
+  background: var(--wpds-color-bg-interactive-neutral-strong);
+  border-color: var(--wpds-color-bg-interactive-neutral-strong);
+  color: #ffffff;
+}
+/* Done = outlined circle with a dark check (no fill). The label still
+   reads "completed" via dark text — only the marker treatment changes. */
+.wa-stepper__step--done .wa-stepper__marker {
+  background: transparent;
+  border-color: var(--wpds-color-stroke-surface-neutral-strong);
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-stepper__step--current .wa-stepper__label,
+.wa-stepper__step--done .wa-stepper__label {
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-stepper__step--done:not(:disabled):hover .wa-stepper__label {
+  color: var(--wpds-color-fg-interactive-brand);
+}
+
+/* Inline +/− disclosure used in Step 2 (plugin install) and Step 4 (custom
+   provider). Non-button look — text-link styling using mono small caps. */
+.wa-onboarding-disclosure {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: var(--wpds-cursor-control);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.wa-onboarding-disclosure:hover {
+  color: var(--wpds-color-fg-interactive-brand);
+}
+
+/* Big, copy-on-click pairing code block. Mono, oversize, with a subtle
+   button affordance so the click target reads as interactive. */
+.wa-onboarding-pairing-code {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: 28px;
+  letter-spacing: 0.18em;
+  font-weight: var(--wpds-typography-font-weight-medium);
+  text-align: center;
+  padding:
+    var(--wpds-dimension-padding-md)
+    var(--wpds-dimension-padding-lg);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  border:
+    var(--wpds-border-width-sm)
+    dashed var(--wpds-color-stroke-surface-neutral);
+  border-radius: var(--wpds-border-radius-md);
+  color: var(--wpds-color-fg-content-neutral);
+  cursor: copy;
+  user-select: all;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+.wa-onboarding-pairing-code:hover {
+  background: var(--wpds-color-bg-surface-neutral);
+  border-color: var(--wpds-color-stroke-interactive-brand);
+}
+
+/* Plugin breakdown list shown on Step 3. One row per plugin: name on the
+   left, count, then status tags. */
+.wa-onboarding-plugin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-xs);
+}
+.wa-onboarding-plugin-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  flex-wrap: wrap;
+  font-size: var(--wpds-typography-font-size-sm);
+  color: var(--wpds-color-fg-content-neutral);
+}
+.wa-onboarding-plugin-list__count {
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: var(--wpds-typography-font-size-xs);
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-onboarding-plugin-list__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--wpds-dimension-padding-sm);
+  border-radius: var(--wpds-border-radius-sm);
+  font-size: var(--wpds-typography-font-size-xs);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-onboarding-plugin-list__tag--ok {
+  background: var(--wpds-color-bg-surface-success-weak);
+  color: var(--wpds-color-fg-content-success);
+}
+.wa-onboarding-plugin-list__tag--warn {
+  background: var(--wpds-color-bg-surface-warning-weak);
+  color: var(--wpds-color-fg-content-warning);
+}
+.wa-onboarding-plugin-list__tag--info {
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+}
+
+/* Step 4 provider cards. A row of three on desktop, stacked on mobile. */
+.wa-onboarding-providers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--wpds-dimension-gap-sm);
+}
+@media (max-width: 767px) {
+  .wa-onboarding-providers {
+    grid-template-columns: 1fr;
+  }
+}
+.wa-onboarding-provider {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  text-align: left;
+  padding: var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral);
+  border:
+    var(--wpds-border-width-sm)
+    solid var(--wpds-color-stroke-surface-neutral);
+  border-radius: var(--wpds-border-radius-md);
+  cursor: var(--wpds-cursor-control);
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.wa-onboarding-provider:hover:not(:disabled) {
+  border-color: var(--wpds-color-stroke-surface-neutral-strong);
+}
+.wa-onboarding-provider--selected {
+  border-color: var(--wpds-color-stroke-interactive-brand) !important;
+  box-shadow: 0 0 0 2px var(--wpds-color-bg-surface-info-weak);
+}
+.wa-onboarding-provider__check {
+  position: absolute;
+  top: var(--wpds-dimension-padding-sm);
+  right: var(--wpds-dimension-padding-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  width: 18px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wpds-color-fg-interactive-brand);
+  border:
+    var(--wpds-border-width-sm)
+    solid var(--wpds-color-stroke-interactive-brand);
+}
+
+/* Provider card tag pill — currently used for the "Free · Local" cue on the
+   Ollama card, so cost-conscious operators see it as a first-class option.
+   Tones map to WPDS surface intents. */
+.wa-onboarding-provider__tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--wpds-dimension-padding-xs);
+  border-radius: var(--wpds-border-radius-sm);
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-onboarding-provider__tag--success {
+  background: var(--wpds-color-bg-surface-success-weak);
+  color: var(--wpds-color-fg-content-success);
+}
+.wa-onboarding-provider__tag--info {
+  background: var(--wpds-color-bg-surface-info-weak);
+  color: var(--wpds-color-fg-interactive-brand);
+}
+
+/* Step 5 success checklist. Each row: check icon, label, value (right). */
+.wa-onboarding-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wa-onboarding-checklist > li {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding:
+    var(--wpds-dimension-padding-sm) 0;
+  border-bottom:
+    var(--wpds-border-width-sm)
+    solid var(--wpds-color-stroke-surface-neutral-weak);
+  font-size: var(--wpds-typography-font-size-sm);
+}
+.wa-onboarding-checklist > li:last-child { border-bottom: none; }
+.wa-onboarding-checklist__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: var(--wpds-color-bg-surface-success-weak);
+  color: var(--wpds-color-fg-content-success);
+  flex: none;
+}
+.wa-onboarding-checklist__label {
+  flex: 0 0 auto;
+  color: var(--wpds-color-fg-content-neutral-weak);
+  min-width: 96px;
+}
+.wa-onboarding-checklist__value {
+  flex: 1;
+  text-align: right;
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+
+/* On mobile, hide the labels and show only the markers + connectors —
+   matches the Figma "Mobile version" variant. The 768px breakpoint lines
+   up with the rest of the app's mobile cutover (sidebar → drawer, etc). */
+@media (max-width: 767px) {
+  .wa-stepper__label { display: none; }
+  .wa-stepper__step { gap: 0; }
+}
+
 /* <768px: sidebar becomes off-canvas drawer; kanban scrolls horizontally;
    KPI row wraps to 2x2; action bar stacks; page header stacks; the desktop
    top bar gives way to the mobile bar (the hamburger lives there). */
