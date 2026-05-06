@@ -2,6 +2,13 @@
 // can work against any daemon (local, teammate's machine, agency-managed) per
 // the PRD §6.1 / §9. The daemon URL and token are never sent anywhere other
 // than the daemon itself.
+//
+// When the UI is served by the daemon itself (release-binary install, single
+// process), the daemon templates a per-run session token into index.html as
+// `window.__WOOAGENT_TOKEN__`. That gets first priority — the user never sees
+// Step 1's URL+token form. When loaded from a different origin (Vite dev on
+// :5173, hosted UI later), the token isn't there and the manual form takes
+// over via the localStorage fallback.
 
 const STORAGE_KEY = 'wooagent.connection';
 
@@ -10,7 +17,19 @@ export interface Connection {
   token: string;
 }
 
+declare global {
+  interface Window {
+    __WOOAGENT_TOKEN__?: string;
+  }
+}
+
 export function loadConnection(): Connection | null {
+  if (typeof window !== 'undefined' && window.__WOOAGENT_TOKEN__) {
+    return {
+      daemonUrl: window.location.origin,
+      token: window.__WOOAGENT_TOKEN__,
+    };
+  }
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
