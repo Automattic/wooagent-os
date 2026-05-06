@@ -1,31 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WooAgent OS — UI not built</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; line-height: 1.5; color: #1c1c1c; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.1rem; margin-top: 1.75rem; }
-    p, li { color: #4a4a4a; }
-    code { background: #f3f3f3; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.95em; }
-    pre { background: #f3f3f3; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.9em; }
-    .pill { display: inline-block; background: #e6f0ff; color: #1d4ed8; padding: 0.2em 0.6em; border-radius: 999px; font-size: 0.85em; margin-bottom: 1rem; }
-  </style>
-</head>
-<body>
-  <span class="pill">Daemon running</span>
-  <h1>WooAgent OS daemon is up — but the UI isn't bundled in this binary.</h1>
-  <p>This is the placeholder served when the daemon was built without the UI assets copied into the embed directory. Two ways to get the real UI:</p>
-  <h2>Install a release</h2>
-  <pre>curl -fsSL https://raw.githubusercontent.com/elizaan36/wooagent-os/trunk/install.sh | bash</pre>
-  <p>Release binaries always include the UI baked in.</p>
-  <h2>Build from source</h2>
-  <pre>cd ui &amp;&amp; npm install &amp;&amp; npm run build
-bash scripts/build-ui-into-daemon.sh
-cd daemon &amp;&amp; go build ./cmd/wooagent</pre>
-  <p>Or for fast iteration, run the Vite dev server in a separate terminal — the daemon's CORS allows cross-origin connections from <code>http://localhost:5173</code>:</p>
-  <pre>cd ui &amp;&amp; npm run dev</pre>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WooAgent OS</title>
+    <script type="module" crossorigin src="/assets/index-B-vuJH5x.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BDkQktcf.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>
