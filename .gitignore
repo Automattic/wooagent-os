@@ -42,6 +42,7 @@ yarn-error.log*
 
 # Build artifacts
 /dist/
+/build/
 
 # Personal scratch / drafts (not part of the project)
 /April 22 - wooagent-mockups/

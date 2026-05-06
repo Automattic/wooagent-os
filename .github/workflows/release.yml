@@ -1,0 +1,48 @@
+name: Release
+
+# Push a tag like v0.1.0 (or v0.1.0-rc.1 for a prerelease) and this
+# workflow cross-compiles the wooagent binary for the supported platforms,
+# packages the Companion Plugin zip, and publishes a GitHub Release with
+# every artifact + a SHA256SUMS file. install.sh consumes that release.
+#
+# Cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Validate locally without publishing (requires goreleaser installed):
+#   goreleaser release --snapshot --clean
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  # Required for goreleaser to create the release and upload assets.
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the changelog generator can read prior tags
+          # to build the release notes.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: daemon/go.sum
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          # Keep a stable major version; new minor/patch releases of
+          # goreleaser within v2 are picked up automatically.
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -26,6 +26,23 @@ A fleet of opinionated AI agents — Marketing, Pricing, Inventory, Accounting, 
 - `docs/` — API contracts and shared design notes (`api-contract-v1.md`).
 - `dist/` — Build artifacts (plugin zips, UI bundles). Gitignored.
 
+## Install
+
+If you just want to run WooAgent OS — not develop on it — grab the latest release with one line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/elizaan36/wooagent-os/trunk/install.sh | bash
+```
+
+The installer detects your platform (macOS / Linux on amd64 or arm64), downloads the matching binary from the latest GitHub Release, verifies its SHA-256, and drops it in `~/.wooagent/bin/wooagent`. After install:
+
+```bash
+wooagent init      # creates ~/.wooagent and mints an initial auth token
+wooagent run       # serves http://localhost:7777
+```
+
+Pin a specific version with `WOOAGENT_VERSION=v0.1.0`. Use `WOOAGENT_INSTALL_DIR=/usr/local/bin` to install into a system location instead. Windows isn't supported by the script — download the `.zip` from the [Releases page](https://github.com/elizaan36/wooagent-os/releases) directly, or use WSL.
+
 ## Quickstart (dev)
 
 Two terminals.
@@ -48,13 +65,30 @@ Open `http://localhost:5173`, paste the daemon URL and token from Terminal 1, an
 
 The daemon talks to any WooCommerce store running WP 6.9+ with the MCP Adapter installed. You also need the **WooAgent Companion** plugin on the store — it registers the `wooagent-*` ability surface the agent fleet uses.
 
+Grab the plugin zip from the same GitHub Release as the daemon (`wooagent-companion.zip`) — the release pipeline packages both off the same tag. To build it from source:
+
 ```bash
-# Build the plugin zip
-cd companion-plugin
-zip -r ../dist/wooagent-companion-0.1.0.zip . -x "*.DS_Store"
+bash scripts/build-companion-plugin-zip.sh   # writes dist/wooagent-companion.zip
 ```
 
-Upload the zip via **wp-admin → Plugins → Add New → Upload Plugin**. Authenticate the daemon with a WordPress Application Password (**Users → Profile → Application Passwords**). A native device-pair flow ships in a later plugin version.
+Upload the zip via **wp-admin → Plugins → Add New → Upload Plugin**. Then walk the daemon's first-run UI to pair: type your store URL, click **Open wp-admin → Pair device**, click Approve. The Companion Plugin's pair handshake mints a device token the daemon stores in your OS keychain.
+
+## Cutting a release
+
+Releases are automated. Tag a commit and push the tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` runs [GoReleaser](https://goreleaser.com/) which cross-compiles the `wooagent` binary for darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, and windows/amd64, packages the Companion Plugin zip, generates a `SHA256SUMS` file, and publishes everything as a GitHub Release. Tags like `v0.1.0-rc.1` or `v0.1.0-alpha.2` are auto-flagged as prereleases.
+
+Validate the build locally before tagging:
+
+```bash
+goreleaser release --snapshot --clean
+```
 
 ## Status
 
