@@ -15,9 +15,16 @@ project_name: wooagent
 
 before:
   hooks:
-    # Tidy up daemon module deps + build the WP plugin zip that gets
-    # attached to the release alongside the binaries.
+    # Tidy daemon module deps.
     - bash -c "cd daemon && go mod tidy"
+    # Build the React UI and copy it into the daemon's embed directory.
+    # MUST run before the daemon binary build below so //go:embed picks
+    # up the fresh assets. `npm ci` keeps lockfile-fidelity in CI; falls
+    # back to `npm install` if package-lock.json is missing.
+    - bash -c "cd ui && (npm ci || npm install) && npm run build"
+    - bash scripts/build-ui-into-daemon.sh
+    # Build the WP plugin zip that gets attached to the release alongside
+    # the daemon binaries.
     - bash scripts/build-companion-plugin-zip.sh
 
 builds:
