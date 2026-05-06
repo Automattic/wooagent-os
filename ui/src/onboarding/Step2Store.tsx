@@ -13,6 +13,7 @@ import { api, type Connection, type Store } from '../api/client';
 interface Props {
   connection: Connection;
   onPaired(store: Store): void;
+  onBack(): void;
 }
 
 type Phase =
@@ -26,7 +27,7 @@ const POLL_INTERVAL_MS = 2000;
 const MAX_REGENS = 1; // brief §6 — auto-regen once, hard-fail on second timeout
 const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
 
-export default function Step2Store({ connection, onPaired }: Props) {
+export default function Step2Store({ connection, onPaired, onBack }: Props) {
   const [storeUrl, setStoreUrl] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
@@ -155,13 +156,27 @@ export default function Step2Store({ connection, onPaired }: Props) {
                 </Text>
               </Stack>
             </Stack>
-            <Button
-              variant="primary"
-              __next40pxDefaultSize
-              onClick={() => onPaired(phase.store)}
+            <Stack
+              direction="row"
+              justify="space-between"
+              align="center"
+              style={{ width: '100%' }}
             >
-              Continue
-            </Button>
+              <Button
+                variant="tertiary"
+                __next40pxDefaultSize
+                onClick={onBack}
+              >
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                __next40pxDefaultSize
+                onClick={() => onPaired(phase.store)}
+              >
+                Continue
+              </Button>
+            </Stack>
           </Stack>
         </Card.Content>
       </Card.Root>
@@ -248,6 +263,16 @@ export default function Step2Store({ connection, onPaired }: Props) {
                 Waiting for approval in wp-admin…
               </Text>
             </Stack>
+
+            <Stack direction="row" justify="space-between" align="center">
+              <Button
+                variant="tertiary"
+                __next40pxDefaultSize
+                onClick={onBack}
+              >
+                Back
+              </Button>
+            </Stack>
           </Stack>
         </Card.Content>
       </Card.Root>
@@ -268,13 +293,22 @@ export default function Step2Store({ connection, onPaired }: Props) {
                 clicking the deep link.
               </Text>
             </Stack>
-            <Button
-              variant="primary"
-              __next40pxDefaultSize
-              onClick={() => setPhase({ kind: 'idle' })}
-            >
-              Try again
-            </Button>
+            <Stack direction="row" justify="space-between" align="center">
+              <Button
+                variant="tertiary"
+                __next40pxDefaultSize
+                onClick={onBack}
+              >
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                __next40pxDefaultSize
+                onClick={() => setPhase({ kind: 'idle' })}
+              >
+                Try again
+              </Button>
+            </Stack>
           </Stack>
         </Card.Content>
       </Card.Root>
@@ -351,7 +385,14 @@ export default function Step2Store({ connection, onPaired }: Props) {
             __nextHasNoMarginBottom
           />
 
-          <Stack direction="row" align="center">
+          <Stack direction="row" justify="space-between" align="center">
+            <Button
+              variant="tertiary"
+              __next40pxDefaultSize
+              onClick={onBack}
+            >
+              Back
+            </Button>
             <Button
               variant="primary"
               __next40pxDefaultSize

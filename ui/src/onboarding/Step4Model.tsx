@@ -20,6 +20,7 @@ import {
 interface Props {
   connection: Connection;
   onSaved(provider: ModelProvider): void;
+  onBack(): void;
 }
 
 interface ProviderOption {
@@ -37,6 +38,11 @@ interface ProviderOption {
   // field. Lets operators without an account get one without leaving the
   // flow to search for it.
   apiKeyHelpUrl?: string;
+  // Optional sub-line under the API-key field naming the supported
+  // procurement tiers. For Anthropic this surfaces that Team / Enterprise
+  // console keys work the same as personal — useful for org admins who'd
+  // otherwise bounce off the personal-shaped placeholder.
+  apiKeyTiers?: string;
 }
 
 const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
@@ -55,6 +61,7 @@ const PROVIDERS: ProviderOption[] = [
     needsApiKey: true,
     needsEndpoint: false,
     apiKeyHelpUrl: 'https://console.anthropic.com/settings/keys',
+    apiKeyTiers: 'Personal, Team, and Enterprise console keys all work.',
   },
   {
     kind: 'openai',
@@ -104,7 +111,7 @@ function ollamaInstallHint(): { command: string; note?: string } {
   }
 }
 
-export default function Step4Model({ connection, onSaved }: Props) {
+export default function Step4Model({ connection, onSaved, onBack }: Props) {
   const [picked, setPicked] = useState<ProviderOption | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [endpoint, setEndpoint] = useState('');
@@ -294,6 +301,11 @@ export default function Step4Model({ connection, onSaved }: Props) {
                     __next40pxDefaultSize
                     __nextHasNoMarginBottom
                   />
+                  {picked.apiKeyTiers && (
+                    <Text variant="body-sm" style={MUTED}>
+                      {picked.apiKeyTiers}
+                    </Text>
+                  )}
                   {picked.apiKeyHelpUrl && (
                     <Text variant="body-sm" style={MUTED}>
                       Don't have one?{' '}
@@ -362,19 +374,26 @@ export default function Step4Model({ connection, onSaved }: Props) {
                   {error}
                 </Notice>
               )}
-
-              <Stack direction="row" align="center">
-                <Button
-                  variant="primary"
-                  __next40pxDefaultSize
-                  disabled={!canSave || saving}
-                  onClick={save}
-                >
-                  {saving ? 'Saving…' : 'Save and continue'}
-                </Button>
-              </Stack>
             </Stack>
           )}
+
+          <Stack direction="row" justify="space-between" align="center">
+            <Button
+              variant="tertiary"
+              __next40pxDefaultSize
+              onClick={onBack}
+            >
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              __next40pxDefaultSize
+              disabled={!canSave || saving}
+              onClick={save}
+            >
+              {saving ? 'Saving…' : 'Save and continue'}
+            </Button>
+          </Stack>
         </Stack>
       </Card.Content>
     </Card.Root>
