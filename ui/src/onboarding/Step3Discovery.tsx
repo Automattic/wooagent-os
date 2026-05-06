@@ -13,6 +13,7 @@ interface Props {
   connection: Connection;
   store: Store;
   onContinue(): void;
+  onBack(): void;
 }
 
 const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
@@ -21,6 +22,7 @@ export default function Step3Discovery({
   connection,
   store,
   onContinue,
+  onBack,
 }: Props) {
   const [data, setData] = useState<AbilitiesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +142,14 @@ export default function Step3Discovery({
             </Text>
           )}
 
-          <Stack direction="row" align="center">
+          <Stack direction="row" justify="space-between" align="center">
+            <Button
+              variant="tertiary"
+              __next40pxDefaultSize
+              onClick={onBack}
+            >
+              Back
+            </Button>
             <Button
               variant="primary"
               __next40pxDefaultSize
