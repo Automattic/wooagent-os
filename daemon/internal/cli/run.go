@@ -79,6 +79,17 @@ func newRunCmd() *cobra.Command {
 				return fmt.Errorf("no auth tokens present — run `wooagent init` or `wooagent auth token create` first")
 			}
 
+			// Per-run UI session token. Templated into index.html by the
+			// uiassets handler so the embedded UI auto-connects without
+			// the operator pasting a bearer token. Operator-issued
+			// long-lived tokens (from `wooagent init` / `wooagent auth
+			// token create`) are unaffected — they still validate via
+			// the same Manager.Validate path.
+			uiSessionToken, err := am.MintUISession(ctx)
+			if err != nil {
+				return fmt.Errorf("mint UI session token: %w", err)
+			}
+
 			// MCP wiring is optional. The approve endpoint requires it; everything
 			// else (kanban, issue detail, list/create) runs without.
 			//
@@ -111,7 +122,7 @@ func newRunCmd() *cobra.Command {
 				pepInstance = pep.New(lookup, nil, st.DB)
 			}
 
-			srv := httpapi.New(st, am, pepInstance, secretStore)
+			srv := httpapi.New(st, am, pepInstance, secretStore, uiSessionToken)
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)

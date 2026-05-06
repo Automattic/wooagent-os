@@ -43,26 +43,35 @@ type PairingClient interface {
 // persisting plaintext to disk. Required: New panics if nil. Tests pass an
 // in-memory backend installed via keyring.MockInit().
 type Server struct {
-	router      chi.Router
-	store       *store.Store
-	auth        *auth.Manager
-	pep         *pep.PEP
-	secrets     secrets.Store
-	modelTester ModelTester
-	pairing     PairingClient
+	router         chi.Router
+	store          *store.Store
+	auth           *auth.Manager
+	pep            *pep.PEP
+	secrets        secrets.Store
+	modelTester    ModelTester
+	pairing        PairingClient
+	uiSessionToken string
 }
 
-func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store) *Server {
+// New wires a Server with all required collaborators.
+//
+// `uiSessionToken` is the per-run bearer token the daemon mints (via
+// auth.Manager.MintUISession) so the embedded UI auto-connects without
+// the operator pasting a token. Pass "" to disable auto-auth (the UI
+// falls back to its manual URL+token form). Only ever delivered to
+// loopback Host headers — see uiassets.Handler.
+func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, uiSessionToken string) *Server {
 	if sec == nil {
 		panic("httpapi.New: secrets.Store is required")
 	}
 	s := &Server{
-		store:       st,
-		auth:        am,
-		pep:         p,
-		secrets:     sec,
-		modelTester: newRealModelTester(),
-		pairing:     pairing.NewClient(),
+		store:          st,
+		auth:           am,
+		pep:            p,
+		secrets:        sec,
+		modelTester:    newRealModelTester(),
+		pairing:        pairing.NewClient(),
+		uiSessionToken: uiSessionToken,
 	}
 	s.router = s.buildRouter()
 	return s
@@ -123,7 +132,7 @@ func (s *Server) buildRouter() chi.Router {
 	// `wooagent run` serves a working app at `/` without a separate UI
 	// process. The Vite dev server on :5173 still works in parallel —
 	// CORS above permits any origin.
-	uiHandler := uiassets.Handler()
+	uiHandler := uiassets.Handler(s.uiSessionToken)
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/") {
 			writeError(w, http.StatusNotFound, "not_found", "no route matches")

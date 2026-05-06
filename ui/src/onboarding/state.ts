@@ -5,7 +5,6 @@
 export const ONBOARDING_STEPS = [
   { key: 'daemon', path: '/onboard/daemon', label: 'Connect' },
   { key: 'store', path: '/onboard/store', label: 'Add store' },
-  { key: 'discover', path: '/onboard/discover', label: 'Abilities' },
   { key: 'model', path: '/onboard/model', label: 'Model' },
   { key: 'done', path: '/onboard/done', label: 'Ready' },
 ] as const;
