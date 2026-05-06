@@ -388,20 +388,6 @@ export interface Store {
   last_discovered_at?: string;
 }
 
-export interface AbilityPluginSummary {
-  plugin: string;
-  count: number;
-  signed: boolean;
-  unapproved: number;
-  /** Marker for plugins still in developer preview — surfaced inline. */
-  preview?: boolean;
-}
-
-export interface AbilitiesResponse {
-  total: number;
-  by_plugin: AbilityPluginSummary[];
-}
-
 export type ModelProviderKind = 'anthropic' | 'openai' | 'ollama';
 
 export interface ModelProvider {
@@ -485,13 +471,6 @@ export const api = {
       }),
     delete: (c: Connection, id: string) =>
       request<void>(c, `/v1/stores/${id}`, { method: 'DELETE' }),
-  },
-  abilities: {
-    list: (c: Connection, storeId: string) =>
-      request<AbilitiesResponse>(
-        c,
-        `/v1/abilities?store_id=${encodeURIComponent(storeId)}`,
-      ),
   },
   modelProviders: {
     list: (c: Connection) =>
