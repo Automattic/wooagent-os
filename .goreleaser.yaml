@@ -1,0 +1,102 @@
+# goreleaser config — cross-compile wooagent + bundle the Companion Plugin zip
+# into a single GitHub Release per tag. Triggered by .github/workflows/release.yml
+# on tags matching v* (e.g. v0.1.0, v0.1.1-rc.1).
+#
+# Run locally to validate (without publishing):
+#   goreleaser release --snapshot --clean
+#
+# To cut a real release:
+#   git tag v0.1.0 && git push origin v0.1.0
+#   (The workflow runs goreleaser; nothing else needed locally.)
+
+version: 2
+
+project_name: wooagent
+
+before:
+  hooks:
+    # Tidy up daemon module deps + build the WP plugin zip that gets
+    # attached to the release alongside the binaries.
+    - bash -c "cd daemon && go mod tidy"
+    - bash scripts/build-companion-plugin-zip.sh
+
+builds:
+  - id: wooagent
+    main: ./cmd/wooagent
+    binary: wooagent
+    dir: ./daemon
+    # CGO_ENABLED=0 keeps the no-CGO single-binary install promise from
+    # CLAUDE.md. modernc.org/sqlite is pure Go; zalando/go-keyring uses
+    # OS-native syscalls without needing C linkage at build time.
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows on ARM exists but the audience is small enough that we'd
+      # rather skip than ship an untested binary. Add when someone asks.
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/wooagent-os/wooagent-os/daemon/internal/version.Version={{.Version}}
+
+archives:
+  - id: wooagent
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "wooagent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE*
+      - README.md
+
+checksum:
+  name_template: "SHA256SUMS"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+release:
+  draft: false
+  # Tags like v0.1.0-rc.1 / v0.1.0-alpha.2 are auto-flagged as prerelease;
+  # plain v0.1.0 ships as a stable release.
+  prerelease: auto
+  name_template: "WooAgent OS {{ .Tag }}"
+  extra_files:
+    # The Companion Plugin zip — built by scripts/build-companion-plugin-zip.sh
+    # via the before-hook above. Same release tag = same plugin version.
+    # Lives outside dist/ because goreleaser owns dist/.
+    - glob: build/wooagent-companion.zip
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))?!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
