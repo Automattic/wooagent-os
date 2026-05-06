@@ -148,6 +148,7 @@ export default function OnboardingShell({
                     setStore(s);
                     nav('/onboard/discover');
                   }}
+                  onBack={() => nav('/onboard/daemon')}
                 />
               ) : (
                 <Navigate to="/onboard/daemon" replace />
@@ -162,6 +163,7 @@ export default function OnboardingShell({
                   connection={connection}
                   store={store}
                   onContinue={() => nav('/onboard/model')}
+                  onBack={() => nav('/onboard/store')}
                 />
               ) : (
                 <Navigate to={resumePath} replace />
@@ -178,6 +180,7 @@ export default function OnboardingShell({
                     setProvider(p);
                     nav('/onboard/done');
                   }}
+                  onBack={() => nav('/onboard/discover')}
                 />
               ) : (
                 <Navigate to="/onboard/daemon" replace />
