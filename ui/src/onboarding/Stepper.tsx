@@ -1,26 +1,43 @@
 import { useNavigate } from 'react-router-dom';
 import { Icon, check } from '@wordpress/icons';
-import { ONBOARDING_STEPS, type OnboardingStepKey, stepIndex } from './state';
+import {
+  getVisibleSteps,
+  stepIndex,
+  type OnboardingStepKey,
+} from './state';
 
 interface Props {
   currentKey: OnboardingStepKey;
-  /** Highest-completed step. Steps up to and including this one are
-   *  navigable; steps after are dimmed and inert. */
+  /** Highest-completed step in the original 4-entry ONBOARDING_STEPS
+   *  (NOT in the filtered visible list — App + OnboardingShell think in
+   *  the canonical index space, the stepper translates). */
   highestCompleted: number;
 }
 
 // Custom stepper — no stable WPDS stepper exists. Built from semantic markup
 // + tokens per CLAUDE.md. Numbers turn into checks once a step completes.
+//
+// Renders `getVisibleSteps()`, not the full ONBOARDING_STEPS, so the
+// embedded-UI flow shows 3 steps (Connect store / Model / Ready) and Vite
+// dev shows all 4. The `currentKey` and `highestCompleted` props are in
+// the canonical index space (always 0..3); we re-index against the
+// visible list for marker numbers + completion math.
 export default function Stepper({ currentKey, highestCompleted }: Props) {
   const nav = useNavigate();
-  const currentIdx = stepIndex(currentKey);
+  const visible = getVisibleSteps();
+  const currentCanonicalIdx = stepIndex(currentKey);
 
   return (
     <nav aria-label="Onboarding progress" className="wa-stepper">
-      {ONBOARDING_STEPS.map((step, i) => {
-        const isDone = i < currentIdx || i <= highestCompleted - 1;
-        const isCurrent = i === currentIdx;
-        const isReachable = i <= highestCompleted || i <= currentIdx;
+      {visible.map((step, i) => {
+        const canonicalIdx = stepIndex(step.key);
+        const isDone =
+          canonicalIdx < currentCanonicalIdx ||
+          canonicalIdx <= highestCompleted - 1;
+        const isCurrent = canonicalIdx === currentCanonicalIdx;
+        const isReachable =
+          canonicalIdx <= highestCompleted ||
+          canonicalIdx <= currentCanonicalIdx;
         const stateClass = isCurrent
           ? 'wa-stepper__step--current'
           : isDone

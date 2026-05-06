@@ -18,7 +18,12 @@ import Step1Daemon from './Step1Daemon';
 import Step2Store from './Step2Store';
 import Step4Model from './Step4Model';
 import Step5Done from './Step5Done';
-import { ONBOARDING_STEPS, stepIndex, type OnboardingStepKey } from './state';
+import {
+  ONBOARDING_STEPS,
+  getVisibleSteps,
+  isAutoAuth,
+  type OnboardingStepKey,
+} from './state';
 
 interface Props {
   connection: Connection | null;
@@ -95,7 +100,11 @@ export default function OnboardingShell({
   })();
 
   const currentKey = keyFromPath(location.pathname);
-  const currentIdx = stepIndex(currentKey);
+  const visibleSteps = getVisibleSteps();
+  // Step counter in the header runs over visible steps so embedded-UI
+  // users (3 steps total) don't see "Step 2 of 4" — they see "Step 1 of 3".
+  const visibleIdx = visibleSteps.findIndex((s) => s.key === currentKey);
+  const visibleStepNumber = visibleIdx >= 0 ? visibleIdx + 1 : 1;
 
   // While we're probing, show nothing rather than flicker through the wrong
   // step's UI — the redirect below routes the operator to the right place.
@@ -110,7 +119,7 @@ export default function OnboardingShell({
             variant="body-sm"
             style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
           >
-            Step {currentIdx + 1} of {ONBOARDING_STEPS.length} · First-run
+            Step {visibleStepNumber} of {visibleSteps.length} · First-run
             setup
           </Text>
         </Stack>
@@ -129,12 +138,20 @@ export default function OnboardingShell({
           <Route
             path="daemon"
             element={
-              <Step1Daemon
-                onConnected={(c) => {
-                  onConnected(c);
-                  nav('/onboard/store');
-                }}
-              />
+              isAutoAuth() ? (
+                // Embedded-UI build auto-connects via window.__WOOAGENT_TOKEN__.
+                // The Step 1 form is dead in this mode — redirect to the
+                // resume path (Step 2 by default) rather than showing a
+                // confusing URL+token paste form.
+                <Navigate to={resumePath} replace />
+              ) : (
+                <Step1Daemon
+                  onConnected={(c) => {
+                    onConnected(c);
+                    nav('/onboard/store');
+                  }}
+                />
+              )
             }
           />
           <Route
