@@ -12,6 +12,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
@@ -24,15 +25,31 @@ import (
 // directly because the rule "no orchestrator → MCP shortcut" is enforced by
 // having pep.Invoke be the only path. pep may be nil for UI-only daemon
 // runs; approve returns 503 in that case.
+//
+// `secrets` is the OS-keychain wrapper used by /v1/stores and
+// /v1/model-providers to store device tokens and API keys without
+// persisting plaintext to disk. Required: New panics if nil. Tests pass an
+// in-memory backend installed via keyring.MockInit().
 type Server struct {
-	router chi.Router
-	store  *store.Store
-	auth   *auth.Manager
-	pep    *pep.PEP
+	router      chi.Router
+	store       *store.Store
+	auth        *auth.Manager
+	pep         *pep.PEP
+	secrets     secrets.Store
+	modelTester ModelTester
 }
 
-func New(st *store.Store, am *auth.Manager, p *pep.PEP) *Server {
-	s := &Server{store: st, auth: am, pep: p}
+func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store) *Server {
+	if sec == nil {
+		panic("httpapi.New: secrets.Store is required")
+	}
+	s := &Server{
+		store:       st,
+		auth:        am,
+		pep:         p,
+		secrets:     sec,
+		modelTester: newRealModelTester(),
+	}
 	s.router = s.buildRouter()
 	return s
 }
@@ -77,6 +94,14 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/batches/{id}/approve-all", s.handleApproveBatch)
 		r.Post("/v1/batches/{id}/reject-all", s.handleRejectBatch)
 		r.Get("/v1/abilities", s.handleListAbilities)
+		r.Get("/v1/stores", s.handleListStores)
+		r.Post("/v1/stores", s.handleCreateStore)
+		r.Get("/v1/stores/{id}", s.handleGetStore)
+		r.Delete("/v1/stores/{id}", s.handleDeleteStore)
+		r.Get("/v1/model-providers", s.handleListModelProviders)
+		r.Post("/v1/model-providers", s.handleCreateModelProvider)
+		r.Post("/v1/model-providers/test", s.handleTestModelProvider)
+		r.Delete("/v1/model-providers/{id}", s.handleDeleteModelProvider)
 	})
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
