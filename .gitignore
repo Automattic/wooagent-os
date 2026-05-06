@@ -44,6 +44,13 @@ yarn-error.log*
 /dist/
 /build/
 
+# UI assets embedded into the daemon binary at build time. The placeholder
+# index.html stays committed so //go:embed compiles on a fresh clone; the
+# real (Vite-built) bundle lands here via scripts/build-ui-into-daemon.sh
+# and shouldn't be checked in (binary churn + size).
+/daemon/internal/uiassets/dist/*
+!/daemon/internal/uiassets/dist/index.html
+
 # Personal scratch / drafts (not part of the project)
 /April 22 - wooagent-mockups/
 /blog-2026-04-27.md
