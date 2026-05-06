@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/uiassets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
 
@@ -116,8 +118,18 @@ func (s *Server) buildRouter() chi.Router {
 		r.Delete("/v1/model-providers/{id}", s.handleDeleteModelProvider)
 	})
 
+	// Catch-all handler: API paths get the JSON 404 envelope (existing
+	// behavior); everything else falls through to the embedded UI so
+	// `wooagent run` serves a working app at `/` without a separate UI
+	// process. The Vite dev server on :5173 still works in parallel —
+	// CORS above permits any origin.
+	uiHandler := uiassets.Handler()
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not_found", "no route matches")
+		if strings.HasPrefix(r.URL.Path, "/v1/") {
+			writeError(w, http.StatusNotFound, "not_found", "no route matches")
+			return
+		}
+		uiHandler.ServeHTTP(w, r)
 	})
 
 	return r

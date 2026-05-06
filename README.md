@@ -41,25 +41,37 @@ wooagent init      # creates ~/.wooagent and mints an initial auth token
 wooagent run       # serves http://localhost:7777
 ```
 
+Open <http://localhost:7777> in a browser — the React UI is baked into the binary and served from the same daemon. No second process, no separate Vite dev server.
+
 Pin a specific version with `WOOAGENT_VERSION=v0.1.0`. Use `WOOAGENT_INSTALL_DIR=/usr/local/bin` to install into a system location instead. Windows isn't supported by the script — download the `.zip` from the [Releases page](https://github.com/automattic/wooagent-os/releases) directly, or use WSL.
 
 ## Quickstart (dev)
 
-Two terminals.
+The release binary bundles the UI; for source-tree development you have two options.
+
+**Option A — Vite dev server** (recommended for UI iteration). Two terminals; the daemon's CORS allows cross-origin from `:5173`.
 
 ```bash
 # Terminal 1 — daemon
 cd daemon
 go run ./cmd/wooagent init           # creates ~/.wooagent and mints an initial auth token
-go run ./cmd/wooagent run            # serves http://localhost:7777
+go run ./cmd/wooagent run            # serves http://localhost:7777 (with the placeholder UI)
 
-# Terminal 2 — UI
+# Terminal 2 — Vite dev server
 cd ui
 npm install
-npm run dev                          # serves http://localhost:5173
+npm run dev                          # serves http://localhost:5173 with hot reload
 ```
 
-Open `http://localhost:5173`, paste the daemon URL and token from Terminal 1, and you're connected.
+Open <http://localhost:5173>, paste the daemon URL + token from Terminal 1.
+
+**Option B — embedded UI** (matches the release-binary behavior; useful for testing the install flow).
+
+```bash
+cd ui && npm install && npm run build
+bash scripts/build-ui-into-daemon.sh
+cd daemon && go run ./cmd/wooagent run    # http://localhost:7777 now serves the bundled UI
+```
 
 ## Connecting a WooCommerce store
 
