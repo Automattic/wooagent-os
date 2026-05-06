@@ -21,7 +21,7 @@ define( 'WOOAGENT_COMPANION_PATH', plugin_dir_path( __FILE__ ) );
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-products.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-orders.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-customers.php';
-require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-device-pair.php';
+require_once WOOAGENT_COMPANION_PATH . 'includes/pair-rest.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/admin-pair-screen.php';
 
 add_action( 'wp_abilities_api_categories_init', 'wooagent_companion_register_categories' );
@@ -37,7 +37,6 @@ function wooagent_companion_register_categories(): void {
 		'wooagent-products'     => array( 'label' => __( 'WooAgent · Products', 'wooagent-companion' ),    'description' => __( 'Read and update WooCommerce products.', 'wooagent-companion' ) ),
 		'wooagent-orders'       => array( 'label' => __( 'WooAgent · Orders', 'wooagent-companion' ),      'description' => __( 'Inspect WooCommerce orders and attach notes.', 'wooagent-companion' ) ),
 		'wooagent-customers'    => array( 'label' => __( 'WooAgent · Customers', 'wooagent-companion' ),   'description' => __( 'Read WooCommerce customer records.', 'wooagent-companion' ) ),
-		'wooagent-device-pair'  => array( 'label' => __( 'WooAgent · Device pairing', 'wooagent-companion' ), 'description' => __( 'Daemon device pairing flow (scaffolded; ships in v0.2).', 'wooagent-companion' ) ),
 	);
 
 	foreach ( $cats as $slug => $args ) {
@@ -62,17 +61,15 @@ function wooagent_companion_register_abilities(): void {
 		'wooagent-orders/get',
 		'wooagent-orders/add-note',
 		'wooagent-customers/get',
-		'wooagent-device-pair/request',
-		'wooagent-device-pair/confirm',
-		'wooagent-device-pair/revoke',
 	);
 
 	// Verify categories exist before we register abilities referencing them.
+	// Device pairing moved to dedicated REST endpoints (see pair-rest.php) —
+	// it doesn't ride the Abilities API anymore, so no category needed.
 	$category_check = array(
 		'wooagent-products'    => wp_has_ability_category( 'wooagent-products' ),
 		'wooagent-orders'      => wp_has_ability_category( 'wooagent-orders' ),
 		'wooagent-customers'   => wp_has_ability_category( 'wooagent-customers' ),
-		'wooagent-device-pair' => wp_has_ability_category( 'wooagent-device-pair' ),
 	);
 	update_option( 'wooagent_companion_category_check_at_register', $category_check );
 
@@ -91,7 +88,6 @@ function wooagent_companion_register_abilities(): void {
 	wooagent_companion_register_product_abilities();
 	wooagent_companion_register_order_abilities();
 	wooagent_companion_register_customer_abilities();
-	wooagent_companion_register_device_pair_abilities();
 
 	set_error_handler( $prev_handler );
 

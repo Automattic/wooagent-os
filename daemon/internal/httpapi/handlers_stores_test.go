@@ -7,16 +7,62 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	_ "modernc.org/sqlite"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/zalando/go-keyring"
 )
+
+// fakePairing is a programmable PairingClient. Tests set RequestErr,
+// PollResult, etc. to simulate the Companion Plugin's responses without
+// spinning up a real plugin. Calls are recorded for assertions.
+type fakePairing struct {
+	mu sync.Mutex
+
+	RequestErr error
+	PollResult pairing.PollResult
+	PollErr    error
+	RevokeErr  error
+
+	RequestCalls []fakePairingCall
+	PollCalls    []fakePairingCall
+	RevokeCalls  []fakePairingCall
+}
+
+type fakePairingCall struct {
+	StoreURL    string
+	Code        string
+	DeviceName  string
+	DeviceToken string
+}
+
+func (f *fakePairing) Request(_ context.Context, storeURL, code, deviceName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.RequestCalls = append(f.RequestCalls, fakePairingCall{StoreURL: storeURL, Code: code, DeviceName: deviceName})
+	return f.RequestErr
+}
+
+func (f *fakePairing) Poll(_ context.Context, storeURL, code string) (pairing.PollResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.PollCalls = append(f.PollCalls, fakePairingCall{StoreURL: storeURL, Code: code})
+	return f.PollResult, f.PollErr
+}
+
+func (f *fakePairing) Revoke(_ context.Context, storeURL, deviceToken string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.RevokeCalls = append(f.RevokeCalls, fakePairingCall{StoreURL: storeURL, DeviceToken: deviceToken})
+	return f.RevokeErr
+}
 
 // memSecrets is a thin wrapper around the zalando/go-keyring mock backend.
 // We don't use osKeyring directly because it lives in another package; the
@@ -43,10 +89,14 @@ func (memSecrets) Delete(_ context.Context, k string) error {
 }
 
 // newStoresTestRig wires a Server with only the /v1/stores routes plus a
-// mocked keychain backend. PEP/manifest are nil because the stores
-// endpoints don't go through PEP; the existing newTestRig is heavier and
-// would couple stores tests to the issues fixture.
-func newStoresTestRig(t *testing.T) (*Server, *httptest.Server) {
+// mocked keychain backend and an injectable PairingClient. PEP/manifest
+// are nil because stores endpoints don't go through PEP; the existing
+// newTestRig is heavier and would couple stores tests to the issues
+// fixture.
+//
+// If pair is nil the rig installs a fakePairing that returns "pending"
+// — handler tests that don't care about pairing get a no-op stub.
+func newStoresTestRig(t *testing.T, pair PairingClient) (*Server, *httptest.Server) {
 	t.Helper()
 	keyring.MockInit()
 
@@ -56,7 +106,10 @@ func newStoresTestRig(t *testing.T) (*Server, *httptest.Server) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	s := &Server{store: st, secrets: memSecrets{}}
+	if pair == nil {
+		pair = &fakePairing{PollResult: pairing.PollResult{Status: pairing.StatusPending}}
+	}
+	s := &Server{store: st, secrets: memSecrets{}, pairing: pair}
 
 	r := chi.NewRouter()
 	r.Get("/v1/stores", s.handleListStores)
@@ -87,7 +140,7 @@ func postStore(t *testing.T, ts *httptest.Server, url string) *http.Response {
 // a code, an expires_at timestamp roughly pairingTTL in the future, and a
 // pair_url derived from the store URL.
 func TestCreateStore_HappyPath(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	res := postStore(t, ts, "https://mystore.com")
 	if res.StatusCode != http.StatusCreated {
@@ -120,7 +173,7 @@ func TestCreateStore_HappyPath(t *testing.T) {
 // row's id is returned with a freshly-rotated pairing_code. The UI's
 // "regen-once-on-expiry" flow depends on this.
 func TestCreateStore_IdempotentDuringPairing(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	first := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 	res := postStore(t, ts, "https://mystore.com")
@@ -140,7 +193,7 @@ func TestCreateStore_IdempotentDuringPairing(t *testing.T) {
 // DELETE first. Distinguishes "fix a stuck pairing" (idempotent) from
 // "replace a working connection" (explicit).
 func TestCreateStore_ConflictWhenPaired(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	first := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 
@@ -160,7 +213,7 @@ func TestCreateStore_ConflictWhenPaired(t *testing.T) {
 // at the boundary. The UI's onboarding flow surfaces this code as a
 // validation message under the URL input.
 func TestCreateStore_InvalidURL(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 	cases := []string{
 		"",
 		"http://insecure.com",
@@ -182,7 +235,7 @@ func TestCreateStore_InvalidURL(t *testing.T) {
 // row — so the UNIQUE(url) index does its job and the operator can't
 // accidentally keep two near-duplicate rows.
 func TestCreateStore_NormalizesURL(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	a := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 	b := decode[Store](t, postStore(t, ts, "  https://mystore.com/  "))
@@ -194,7 +247,7 @@ func TestCreateStore_NormalizesURL(t *testing.T) {
 // GET /v1/stores returns every row. Empty case returns an empty array
 // (not null) so the UI's .map() works without a nil-guard.
 func TestListStores(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	res, err := http.Get(ts.URL + "/v1/stores")
 	if err != nil {
@@ -219,7 +272,7 @@ func TestListStores(t *testing.T) {
 // window has closed. The lazy-on-read transition keeps state changes in
 // one place and means the daemon doesn't run a goroutine per pending pair.
 func TestGetStore_ExpiresOnRead(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 
@@ -242,7 +295,7 @@ func TestGetStore_ExpiresOnRead(t *testing.T) {
 }
 
 func TestGetStore_NotFound(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	res, err := http.Get(ts.URL + "/v1/stores/store_does-not-exist")
 	if err != nil {
@@ -256,7 +309,7 @@ func TestGetStore_NotFound(t *testing.T) {
 // DELETE /v1/stores/:id wipes the row + the keychain entry for its
 // device token. No keychain leak for a token whose row was deleted.
 func TestDeleteStore_HappyPath(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 
 	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 
@@ -288,7 +341,7 @@ func TestDeleteStore_HappyPath(t *testing.T) {
 }
 
 func TestDeleteStore_NotFound(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/v1/stores/store_nope", nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -302,7 +355,7 @@ func TestDeleteStore_NotFound(t *testing.T) {
 // DELETE with no token_ref (i.e., row never finished pairing) still
 // succeeds — the keychain step is skipped, the row is removed.
 func TestDeleteStore_NoTokenRef(t *testing.T) {
-	_, ts := newStoresTestRig(t)
+	_, ts := newStoresTestRig(t, nil)
 	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/v1/stores/"+created.ID, nil)
@@ -312,6 +365,159 @@ func TestDeleteStore_NoTokenRef(t *testing.T) {
 	}
 	if res.StatusCode != http.StatusNoContent {
 		t.Errorf("status=%d, want 204", res.StatusCode)
+	}
+}
+
+// ---------- pairing handshake integration ----------
+
+// POST /v1/stores calls Request on the pairing client with the generated
+// code. The UI should be able to show the code immediately while the
+// plugin-side transient is registered in parallel.
+func TestCreateStore_CallsPairingRequest(t *testing.T) {
+	pair := &fakePairing{PollResult: pairing.PollResult{Status: pairing.StatusPending}}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+	if len(pair.RequestCalls) != 1 {
+		t.Fatalf("RequestCalls=%d, want 1", len(pair.RequestCalls))
+	}
+	got := pair.RequestCalls[0]
+	if got.StoreURL != "https://mystore.com" || got.Code != created.PairingCode {
+		t.Errorf("Request args wrong: %+v vs created %+v", got, created)
+	}
+	if got.DeviceName == "" {
+		t.Errorf("DeviceName empty, want hostname or fallback")
+	}
+}
+
+// PluginNotInstalled (404 from /pair/request) flips the row to failed
+// with reason 'companion_plugin_missing'. The UI surfaces this as a
+// targeted error rather than a generic transient one.
+func TestCreateStore_PluginMissing(t *testing.T) {
+	pair := &fakePairing{RequestErr: pairing.PluginNotInstalled}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+	if created.Status != "failed" {
+		t.Errorf("status=%q, want failed", created.Status)
+	}
+}
+
+// GET /v1/stores/:id polls the plugin while pairing. When the plugin
+// returns approved + a device token, the daemon writes the token to the
+// keychain and flips the row to 'paired'.
+func TestGetStore_PollApprovedTransitions(t *testing.T) {
+	pair := &fakePairing{PollResult: pairing.PollResult{
+		Status:      pairing.StatusApproved,
+		DeviceID:    "dev_abc",
+		DeviceName:  "test-device",
+		DeviceToken: "secret-token",
+	}}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+
+	res, err := http.Get(ts.URL + "/v1/stores/" + created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "paired" {
+		t.Errorf("status=%q, want paired", got.Status)
+	}
+	if got.PairedAt == "" {
+		t.Errorf("paired_at empty")
+	}
+	if got.DeviceName != "test-device" {
+		t.Errorf("device_name=%q, want test-device", got.DeviceName)
+	}
+
+	// Token landed in the keychain under the per-store key.
+	stored, err := keyring.Get("WooAgent OS", "wooagent.stores."+created.ID)
+	if err != nil {
+		t.Fatalf("keychain Get: %v", err)
+	}
+	if stored != "secret-token" {
+		t.Errorf("keychain token=%q, want secret-token", stored)
+	}
+}
+
+// Operator clicks Reject in wp-admin → plugin returns rejected → row
+// flips to failed with reason 'operator_rejected'. The UI maps this to
+// a targeted "you rejected this device" message.
+func TestGetStore_PollRejectedTransitions(t *testing.T) {
+	pair := &fakePairing{PollResult: pairing.PollResult{Status: pairing.StatusRejected}}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+
+	res, err := http.Get(ts.URL + "/v1/stores/" + created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "failed" {
+		t.Errorf("status=%q, want failed", got.Status)
+	}
+}
+
+// Pending poll keeps the row in 'pairing' — the UI continues to display
+// the code + countdown. The lazy expiry path (backdate expires_at) still
+// transitions to 'expired' even when the plugin would return pending.
+func TestGetStore_PendingThenExpiry(t *testing.T) {
+	pair := &fakePairing{PollResult: pairing.PollResult{Status: pairing.StatusPending}}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+
+	// First read: still pairing.
+	res, _ := http.Get(ts.URL + "/v1/stores/" + created.ID)
+	got := decode[Store](t, res)
+	if got.Status != "pairing" {
+		t.Errorf("status=%q, want pairing", got.Status)
+	}
+
+	// Backdate the window and read again — lazy expiry overrides the poll.
+	if err := backdateExpiry(ts, created.ID); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+	res2, _ := http.Get(ts.URL + "/v1/stores/" + created.ID)
+	got2 := decode[Store](t, res2)
+	if got2.Status != "expired" {
+		t.Errorf("post-backdate status=%q, want expired", got2.Status)
+	}
+}
+
+// DELETE on a paired row calls Revoke with the keychain'd token before
+// wiping local state. The plugin then drops the device from its devices
+// list — no orphans.
+func TestDeleteStore_CallsRevokeForPaired(t *testing.T) {
+	pair := &fakePairing{PollResult: pairing.PollResult{
+		Status:      pairing.StatusApproved,
+		DeviceID:    "dev_abc",
+		DeviceName:  "test",
+		DeviceToken: "secret-token",
+	}}
+	_, ts := newStoresTestRig(t, pair)
+
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+	// Drive through to paired.
+	http.Get(ts.URL + "/v1/stores/" + created.ID)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/v1/stores/"+created.ID, nil)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("status=%d, want 204", res.StatusCode)
+	}
+
+	if len(pair.RevokeCalls) != 1 {
+		t.Fatalf("RevokeCalls=%d, want 1", len(pair.RevokeCalls))
+	}
+	if pair.RevokeCalls[0].DeviceToken != "secret-token" {
+		t.Errorf("Revoke token=%q, want secret-token", pair.RevokeCalls[0].DeviceToken)
 	}
 }
 

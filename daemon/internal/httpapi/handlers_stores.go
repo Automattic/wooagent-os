@@ -1,18 +1,21 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 )
 
@@ -195,6 +198,7 @@ func (s *Server) handleCreateStore(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 			return
 		}
+		s.kickoffPairing(ctx, existingID, canonURL, code)
 		s.respondStoreByID(w, r, existingID, http.StatusOK)
 		return
 	case errors.Is(err, sql.ErrNoRows):
@@ -213,7 +217,32 @@ func (s *Server) handleCreateStore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
+	s.kickoffPairing(ctx, id, canonURL, code)
 	s.respondStoreByID(w, r, id, http.StatusCreated)
+}
+
+// kickoffPairing tells the Companion Plugin to expect `code`. PluginNotInstalled
+// flips the row to failed (so the UI surfaces a clear "install the plugin"
+// message); any other error is logged but doesn't abort — the operator
+// can retry via the rotate-on-resubmit path.
+func (s *Server) kickoffPairing(ctx context.Context, id, storeURL, code string) {
+	deviceName, _ := os.Hostname()
+	if deviceName == "" {
+		deviceName = "wooagent-os"
+	}
+	err := s.pairing.Request(ctx, storeURL, code, deviceName)
+	if err == nil {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if errors.Is(err, pairing.PluginNotInstalled) {
+		_, _ = s.store.DB.ExecContext(ctx,
+			`UPDATE stores SET status='failed', pairing_code=NULL,
+			                  failure_reason='companion_plugin_missing', updated_at=?
+			 WHERE id=? AND status='pairing'`,
+			now, id,
+		)
+	}
 }
 
 // handleListStores returns every stores row. No pagination — the realistic
@@ -255,10 +284,10 @@ func (s *Server) handleGetStore(w http.ResponseWriter, r *http.Request) {
 func (s *Server) respondStoreByID(w http.ResponseWriter, r *http.Request, id string, successStatus int) {
 	ctx := r.Context()
 
-	var status, expiresAt string
+	var status, expiresAt, storeURL, pairingCode string
 	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT status, COALESCE(expires_at, '') FROM stores WHERE id = ?`, id,
-	).Scan(&status, &expiresAt)
+		`SELECT status, COALESCE(expires_at, ''), url, COALESCE(pairing_code, '') FROM stores WHERE id = ?`, id,
+	).Scan(&status, &expiresAt, &storeURL, &pairingCode)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "store_not_found", "no store with that id")
 		return
@@ -278,6 +307,9 @@ func (s *Server) respondStoreByID(w http.ResponseWriter, r *http.Request, id str
 				writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 				return
 			}
+			status = "expired"
+		} else if pairingCode != "" {
+			s.pollPairing(ctx, id, storeURL, pairingCode)
 		}
 	}
 
@@ -291,6 +323,63 @@ func (s *Server) respondStoreByID(w http.ResponseWriter, r *http.Request, id str
 	writeJSON(w, successStatus, storeRow)
 }
 
+// pollPairing asks the plugin whether the operator has acted on `code`
+// yet. Approved → store the device token in the keychain and flip the
+// row to 'paired'. Rejected → flip to 'failed' with reason
+// 'operator_rejected'. PluginNotInstalled (transient gone) → flip to
+// 'expired'. Any other error is silent: the UI keeps polling, and
+// either the plugin recovers or the row eventually expires on its own.
+func (s *Server) pollPairing(ctx context.Context, id, storeURL, code string) {
+	res, err := s.pairing.Poll(ctx, storeURL, code)
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	if errors.Is(err, pairing.PluginNotInstalled) {
+		_, _ = s.store.DB.ExecContext(ctx,
+			`UPDATE stores SET status='expired', pairing_code=NULL, updated_at=? WHERE id=? AND status='pairing'`,
+			now, id,
+		)
+		return
+	}
+	if err != nil {
+		return
+	}
+
+	switch res.Status {
+	case pairing.StatusPending:
+		return
+
+	case pairing.StatusApproved:
+		// Token is delivered exactly once by the plugin. Skip the keychain
+		// write on a re-poll (status='approved' but token empty) — the row
+		// is already paired, this is just a redundant call.
+		if res.DeviceToken == "" {
+			return
+		}
+		tokenRef := "wooagent.stores." + id
+		if err := s.secrets.Set(ctx, tokenRef, res.DeviceToken); err != nil {
+			return
+		}
+		deviceName := res.DeviceName
+		if deviceName == "" {
+			deviceName = "wooagent-device"
+		}
+		_, _ = s.store.DB.ExecContext(ctx,
+			`UPDATE stores SET status='paired', pairing_code=NULL, paired_at=?,
+			                  token_ref=?, device_name=?, updated_at=?
+			 WHERE id=? AND status='pairing'`,
+			now, tokenRef, deviceName, now, id,
+		)
+
+	case pairing.StatusRejected:
+		_, _ = s.store.DB.ExecContext(ctx,
+			`UPDATE stores SET status='failed', pairing_code=NULL,
+			                  failure_reason='operator_rejected', updated_at=?
+			 WHERE id=? AND status='pairing'`,
+			now, id,
+		)
+	}
+}
+
 // handleDeleteStore unpairs a store: drops its keychain entry then deletes
 // the row. v0.1 skips the plugin-side wooagent-device-pair/revoke call
 // (plugin not yet shipped) — the keychain wipe is the part that can't leak.
@@ -301,9 +390,10 @@ func (s *Server) handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var tokenRef sql.NullString
+	var storeURL string
 	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT token_ref FROM stores WHERE id = ?`, id,
-	).Scan(&tokenRef)
+		`SELECT token_ref, url FROM stores WHERE id = ?`, id,
+	).Scan(&tokenRef, &storeURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "store_not_found", "no store with that id")
 		return
@@ -314,6 +404,13 @@ func (s *Server) handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if tokenRef.Valid && tokenRef.String != "" {
+		// Best-effort plugin-side revoke before we wipe the local secret.
+		// Failure here doesn't block deletion: if the plugin is unreachable
+		// the operator can still revoke the orphan from wp-admin's device
+		// list, and our row + keychain entry are already gone.
+		if token, err := s.secrets.Get(ctx, tokenRef.String); err == nil {
+			_ = s.pairing.Revoke(ctx, storeURL, token)
+		}
 		if err := s.secrets.Delete(ctx, tokenRef.String); err != nil && !errors.Is(err, secrets.ErrNotFound) {
 			writeError(w, http.StatusInternalServerError, "keychain_error", err.Error())
 			return
