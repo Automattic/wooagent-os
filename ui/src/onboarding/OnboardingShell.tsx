@@ -16,7 +16,6 @@ import {
 import Stepper from './Stepper';
 import Step1Daemon from './Step1Daemon';
 import Step2Store from './Step2Store';
-import Step3Discovery from './Step3Discovery';
 import Step4Model from './Step4Model';
 import Step5Done from './Step5Done';
 import { ONBOARDING_STEPS, stepIndex, type OnboardingStepKey } from './state';
@@ -79,19 +78,19 @@ export default function OnboardingShell({
   }, [connection]);
 
   // Highest completed step — drives both the stepper's "back-navigable" line
-  // and the resume-redirect from /onboard.
+  // and the resume-redirect from /onboard. Indices match ONBOARDING_STEPS:
+  // 0 daemon, 1 store, 2 model, 3 done.
   const highestCompleted = (() => {
     if (!connection) return -1;
     if (!store || store.status !== 'paired') return 0;
-    if (!provider) return 2;
-    return 4;
+    if (!provider) return 1;
+    return 3;
   })();
 
   const resumePath = (() => {
     if (highestCompleted < 0) return '/onboard/daemon';
     if (highestCompleted < 1) return '/onboard/store';
-    if (highestCompleted < 3) return '/onboard/discover';
-    if (highestCompleted < 4) return '/onboard/model';
+    if (highestCompleted < 2) return '/onboard/model';
     return '/onboard/done';
   })();
 
@@ -146,27 +145,12 @@ export default function OnboardingShell({
                   connection={connection}
                   onPaired={(s) => {
                     setStore(s);
-                    nav('/onboard/discover');
+                    nav('/onboard/model');
                   }}
                   onBack={() => nav('/onboard/daemon')}
                 />
               ) : (
                 <Navigate to="/onboard/daemon" replace />
-              )
-            }
-          />
-          <Route
-            path="discover"
-            element={
-              connection && store ? (
-                <Step3Discovery
-                  connection={connection}
-                  store={store}
-                  onContinue={() => nav('/onboard/model')}
-                  onBack={() => nav('/onboard/store')}
-                />
-              ) : (
-                <Navigate to={resumePath} replace />
               )
             }
           />
@@ -180,7 +164,7 @@ export default function OnboardingShell({
                     setProvider(p);
                     nav('/onboard/done');
                   }}
-                  onBack={() => nav('/onboard/discover')}
+                  onBack={() => nav('/onboard/store')}
                 />
               ) : (
                 <Navigate to="/onboard/daemon" replace />

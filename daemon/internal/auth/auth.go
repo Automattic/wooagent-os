@@ -78,6 +78,31 @@ func (m *Manager) AnyTokenExists(ctx context.Context) (bool, error) {
 	return n > 0, nil
 }
 
+// UISessionTokenName is the well-known auth_tokens.name reserved for the
+// embedded UI's auto-auth path. The daemon mints one of these on every
+// startup so the React UI loaded from the daemon's own host can call
+// /v1/* without the operator pasting a bearer token.
+const UISessionTokenName = "ui-session"
+
+// MintUISession deletes any prior ui-session row and mints a fresh one,
+// returning the plaintext to the caller. The plaintext is held in
+// process memory for the daemon run and templated into index.html via
+// the uiassets handler so the embedded UI auto-connects.
+//
+// We rotate per-run rather than persisting plaintext (the auth_tokens
+// table only stores hashes) because the UI session token is ephemeral
+// to "this daemon process" — operator-issued long-lived tokens (the
+// kind minted by `wooagent init` / `wooagent auth token create`)
+// survive restarts; this one doesn't need to.
+func (m *Manager) MintUISession(ctx context.Context) (string, error) {
+	if _, err := m.DB.ExecContext(ctx,
+		`DELETE FROM auth_tokens WHERE name = ?`, UISessionTokenName,
+	); err != nil {
+		return "", fmt.Errorf("clear prior ui-session: %w", err)
+	}
+	return m.Mint(ctx, UISessionTokenName)
+}
+
 func hashToken(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
