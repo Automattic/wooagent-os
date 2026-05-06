@@ -20,6 +20,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 
 	// Side-effect imports register the persona implementations. Adding a
@@ -67,6 +68,14 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// The keychain is the durable home for device tokens (paired
+			// stores) and provider API keys. v0.1 refuses to start without
+			// it — see internal/secrets/secrets.go for the probe rationale.
+			secretStore, err := secrets.Open()
+			if err != nil {
+				return fmt.Errorf("open secret store: %w", err)
+			}
 			if !has {
 				return fmt.Errorf("no auth tokens present — run `wooagent init` or `wooagent auth token create` first")
 			}
@@ -97,7 +106,7 @@ func newRunCmd() *cobra.Command {
 				pepInstance = pep.New(lookup, nil, st.DB)
 			}
 
-			srv := httpapi.New(st, am, pepInstance)
+			srv := httpapi.New(st, am, pepInstance, secretStore)
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)
