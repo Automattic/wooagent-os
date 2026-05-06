@@ -11,11 +11,21 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
+
+// PairingClient is the daemon-facing interface to the Companion Plugin's
+// /pair/* REST endpoints. Defined here as an interface so handler tests
+// can inject a fake without spinning up a real plugin install.
+type PairingClient interface {
+	Request(ctx context.Context, storeURL, code, deviceName string) error
+	Poll(ctx context.Context, storeURL, code string) (pairing.PollResult, error)
+	Revoke(ctx context.Context, storeURL, deviceToken string) error
+}
 
 // Server wraps a chi router configured with the v1 API, CORS, and bearer-token
 // auth. Callers pass it to http.Server.
@@ -37,6 +47,7 @@ type Server struct {
 	pep         *pep.PEP
 	secrets     secrets.Store
 	modelTester ModelTester
+	pairing     PairingClient
 }
 
 func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store) *Server {
@@ -49,6 +60,7 @@ func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store) *Serv
 		pep:         p,
 		secrets:     sec,
 		modelTester: newRealModelTester(),
+		pairing:     pairing.NewClient(),
 	}
 	s.router = s.buildRouter()
 	return s
