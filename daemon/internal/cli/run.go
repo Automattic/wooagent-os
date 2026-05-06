@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -81,9 +80,15 @@ func newRunCmd() *cobra.Command {
 			}
 
 			// MCP wiring is optional. The approve endpoint requires it; everything
-			// else (kanban, issue detail, list/create) runs without. Storing
-			// credentials in env vars rather than the DB is intentional for v0.1
-			// — secrets storage lands with the keychain integration in Phase 3.
+			// else (kanban, issue detail, list/create) runs without.
+			//
+			// TODO(plan #4 — Companion Plugin): cut MCP over to paired stores.
+			// Once the device-pair handshake lands and `stores` rows can reach
+			// status='paired', resolve mcp.Client config from the row +
+			// keychain (token_ref) here, with env-var fallback. The auth
+			// shape (bearer vs Basic vs WP App Password issued at pair time)
+			// is decided by the plugin work, so we stay env-var-only here
+			// until then to avoid locking in an assumption.
 			mcpClient := loadMCPClient(cmd.OutOrStdout())
 
 			// Build the PEP. The manifest is the trust allowlist; the PEP wraps
@@ -126,7 +131,7 @@ func newRunCmd() *cobra.Command {
 			// in one persona never block another or the HTTP server. See
 			// internal/personas/personas.go for the contract.
 			if !skipPersonas {
-				go runPersonas(ctx, st, mcpClient, out)
+				go runPersonas(ctx, st, secretStore, mcpClient, out)
 			}
 
 			return httpapi.Run(ctx, cfg.BindAddr, srv.Handler())
@@ -161,7 +166,7 @@ func loadMCPClient(out interface{ Write([]byte) (int, error) }) *mcp.Client {
 // land an issue. Either way, the daemon keeps serving HTTP. Errors are
 // logged but never propagated — a single broken persona must not bench the
 // rest of the fleet.
-func runPersonas(ctx context.Context, st *store.Store, mcpClient *mcp.Client, out io.Writer) {
+func runPersonas(ctx context.Context, st *store.Store, sec secrets.Store, mcpClient *mcp.Client, out io.Writer) {
 	skills, err := loadSkillsForPersonas(out)
 	if err != nil {
 		fmt.Fprintf(out, "→ persona init: skill registry unavailable: %v\n", err)
@@ -171,19 +176,7 @@ func runPersonas(ctx context.Context, st *store.Store, mcpClient *mcp.Client, ou
 		skills = map[string]registry.Skill{}
 	}
 
-	env := personas.Env{
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		AnthropicModel:  os.Getenv("ANTHROPIC_MODEL"),
-		OpenAIAPIBase:   os.Getenv("OPENAI_API_BASE_URL"),
-		OpenAIAPIKey:    os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:     os.Getenv("OPENAI_MODEL"),
-		DefaultCurrency: os.Getenv("PERSONA_CURRENCY"),
-	}
-	if id := strings.TrimSpace(os.Getenv("PERSONA_PRODUCT_ID")); id != "" {
-		if n, err := strconv.Atoi(id); err == nil {
-			env.ProductIDOverride = n
-		}
-	}
+	env := resolvePersonaEnv(ctx, st.DB, sec, envFromOS(), out)
 
 	deps := personas.Deps{
 		Store:  st,
