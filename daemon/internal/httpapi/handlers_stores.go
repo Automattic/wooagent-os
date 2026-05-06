@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/user"
 	"strings"
 	"time"
 
@@ -40,6 +41,24 @@ type Store struct {
 	PairedAt          string  `json:"paired_at,omitempty"`
 	AbilityCount      *int    `json:"ability_count,omitempty"`
 	LastDiscoveredAt  string  `json:"last_discovered_at,omitempty"`
+}
+
+// composeDeviceName returns the human-readable device label sent to the
+// Companion Plugin's pair/request endpoint and rendered in the wp-admin
+// "Currently paired" list. Format: `username@hostname`. Distinguishes
+// pairings from multiple OS user accounts on the same machine — bare
+// hostname collapses them all to the same name (e.g. "Mac.lan"). Both
+// failures fall back to a static label so pairing still works in
+// sandboxed environments where os/user.Current() can return an error.
+func composeDeviceName() string {
+	host, _ := os.Hostname()
+	if host == "" {
+		host = "unknown-host"
+	}
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username + "@" + host
+	}
+	return host
 }
 
 // pairingTTL is the window during which an operator can confirm a pending
@@ -127,7 +146,11 @@ func scanStore(scanner interface {
 		s.AbilityCount = &v
 	}
 	if s.Status == "pairing" && s.URL != "" {
-		s.PairURL = s.URL + "/wp-admin/admin.php?page=wooagent-pair"
+		// `?page=wooagent` matches the slug declared in the Companion
+		// Plugin's add_menu_page() — `?page=wooagent-pair` would 404 in
+		// wp-admin. The code= query string prefills the input on the
+		// Pair device screen so the operator confirms with one click.
+		s.PairURL = s.URL + "/wp-admin/admin.php?page=wooagent&code=" + s.PairingCode
 	}
 	return s, nil
 }
@@ -226,11 +249,7 @@ func (s *Server) handleCreateStore(w http.ResponseWriter, r *http.Request) {
 // message); any other error is logged but doesn't abort — the operator
 // can retry via the rotate-on-resubmit path.
 func (s *Server) kickoffPairing(ctx context.Context, id, storeURL, code string) {
-	deviceName, _ := os.Hostname()
-	if deviceName == "" {
-		deviceName = "wooagent-os"
-	}
-	err := s.pairing.Request(ctx, storeURL, code, deviceName)
+	err := s.pairing.Request(ctx, storeURL, code, composeDeviceName())
 	if err == nil {
 		return
 	}
