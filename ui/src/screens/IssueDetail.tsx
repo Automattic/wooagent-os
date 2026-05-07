@@ -567,7 +567,6 @@ export default function IssueDetail({ connection, onChanged }: Props) {
                     <Stack direction="row" gap="sm" align="center">
                       <span
                         style={{
-                          fontFamily: 'var(--wpds-typography-font-family-mono)',
                           fontSize: 12,
                           fontWeight: 700,
                           padding: '2px 8px',
@@ -831,7 +830,6 @@ function PriceIssueView(props: PriceViewProps) {
                     <Text
                       variant="heading-xl"
                       style={{
-                        fontFamily: 'var(--wpds-typography-font-family-mono)',
                         textDecoration: 'line-through',
                         color: 'var(--wpds-color-fg-content-neutral-weak)',
                       }}
@@ -855,7 +853,6 @@ function PriceIssueView(props: PriceViewProps) {
                     <Text
                       variant="heading-xl"
                       style={{
-                        fontFamily: 'var(--wpds-typography-font-family-mono)',
                         fontWeight: 'var(--wpds-typography-font-weight-medium)',
                       }}
                     >
@@ -867,7 +864,6 @@ function PriceIssueView(props: PriceViewProps) {
                       marginLeft: 'auto',
                       padding: '6px 14px',
                       borderRadius: 'var(--wpds-border-radius-md)',
-                      fontFamily: 'var(--wpds-typography-font-family-mono)',
                       fontWeight: 'var(--wpds-typography-font-weight-medium)',
                       fontSize: 'var(--wpds-typography-font-size-md)',
                       background: directionTone.bg,
@@ -1480,7 +1476,6 @@ function MessageIssueView(props: MessageViewProps) {
                         'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
                       fontSize: 'var(--wpds-typography-font-size-xs)',
                       color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      fontFamily: 'var(--wpds-typography-font-family-mono)',
                     }}
                   >
                     To: {proposal.customerEmail ?? '(no email on file)'} · Order {orderLabel}
@@ -1546,7 +1541,7 @@ function personaLabelFrom(persona: string | undefined): string {
     case 'pricing':
       return 'Pricing agent';
     case 'sales-support':
-      return 'Sales Support agent';
+      return 'Sales support agent';
     case 'inventory':
       return 'Inventory agent';
     case 'accounting':
@@ -1554,7 +1549,7 @@ function personaLabelFrom(persona: string | undefined): string {
     case 'reporting':
       return 'Reporting agent';
     case 'chief-of-staff':
-      return 'Chief of Staff';
+      return 'Chief of staff';
     default:
       return `${persona ?? 'unassigned'} agent`;
   }

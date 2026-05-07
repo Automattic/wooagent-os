@@ -13,7 +13,24 @@ This file is loaded into every Claude Code session in this repo. It captures con
 
 ## UI stack — WordPress Design System (WPDS)
 
-`ui/` uses the WordPress Design System. **No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults.** When building or reviewing UI in this repo, invoke these skills:
+`ui/` uses the WordPress Design System **exclusively**. **Only WPDS components.** No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults, no custom-styled HTML elements (`<button>`, `<input>`, `<select>`, badges, dropdowns) without a WPDS wrapper. If WPDS doesn't have what you need, escalate in #design-systems first.
+
+**If you must draw something custom, you MUST add a `// CUSTOM:` code comment immediately above it explaining (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md / a P2 / an issue).** Reviewers should reject custom UI that isn't called out.
+
+### Anti-rolls — reach for WPDS, not raw HTML
+
+| Don't | Use |
+|---|---|
+| `<button>` with custom CSS | `Button` (icon-only: `Button icon={...} label="..."`) |
+| `<input type="search">` | `SearchControl` |
+| `<input type="text">` | `InputControl` / `TextControl` |
+| `<select>` | `SelectControl` |
+| `<a>` | `Link` |
+| Custom badge span (counts, pills) | `Badge` from `@wordpress/ui` (use `intent="high"` for attention, `"informational"` for neutral counts) |
+| Custom dropdown menu | `Dropdown` with `MenuItem` / `MenuGroup` |
+| Mono-styled span for code-like text | `<code>` element with `font-family: var(--wpds-typography-font-family-mono)` only when semantically code; for everything else use the body font |
+
+When building or reviewing UI in this repo, invoke these skills:
 
 - `wpds` — design system rules, MCP-server-backed component & token lookup.
 - `frontend-design` — distinctive, polished frontend principles (apply within WPDS, not against it).
@@ -31,7 +48,7 @@ This file is loaded into every Claude Code session in this repo. It captures con
 Use `--wpds-*` CSS variables only:
 - Color: `--wpds-color-bg-surface-*`, `--wpds-color-fg-content-*`, `--wpds-color-stroke-*`, `--wpds-color-bg-interactive-*`.
 - Dimension: `--wpds-dimension-padding-*`, `--wpds-dimension-gap-*`, `--wpds-dimension-surface-width-*`.
-- Typography: `--wpds-typography-font-family-{body,heading,mono}`, `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*`.
+- Typography: `--wpds-typography-font-family-{body,heading}`, `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*`. **No `mono`** — body font for identifiers, hostnames, slugs, model names, everything. See `ui/DESIGN.md` Typography section for rationale.
 - Elevation: `--wpds-elevation-{xs,sm,md,lg}`.
 - Border: `--wpds-border-radius-*`, `--wpds-border-width-*`.
 
