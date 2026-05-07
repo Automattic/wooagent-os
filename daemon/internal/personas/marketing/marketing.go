@@ -1,15 +1,19 @@
 // Package marketing is the Marketing-agent implementation.
 //
-// Side-effect-registers itself with personas.Register on import. Mirrors
-// the original cmd/persona-marketing harness: read product via MCP, draft
-// a brand-voice rewrite via an OpenAI-compatible chat-completions endpoint
-// (LM Studio's gemma by default), produce a proposal of type
+// Side-effect-registers itself with personas.Register on import. Reads a
+// product via MCP, drafts a brand-voice rewrite, lands a proposal of type
 // product_description_rewrite.
+//
+// LLM routing:
+//   - When ANTHROPIC_API_KEY is set, calls Claude directly via /v1/messages
+//     (matches pricing and sales-support; this is the production path).
+//   - Otherwise falls back to an OpenAI-compatible chat-completions
+//     endpoint (LM Studio's gemma by default) — kept as a no-key escape
+//     hatch for local spike work.
 //
 // Skipped outcomes (no daemon failure):
 //   - MCP not configured
-//   - OpenAI-compatible endpoint not reachable / errors out (LM Studio not
-//     running, model not loaded, etc.)
+//   - LLM call errored (Claude rate-limit, LM Studio not running, etc.)
 //   - The store has no published products
 package marketing
 
@@ -28,6 +32,10 @@ import (
 )
 
 const (
+	defaultAnthropicModel = "claude-sonnet-4-6"
+	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
+	anthropicVersion      = "2023-06-01"
+
 	defaultOpenAIBase  = "http://localhost:1234/v1"
 	defaultOpenAIModel = "google/gemma-4-e4b"
 	defaultOpenAIKey   = "lm-studio"
@@ -77,33 +85,14 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
 
-	base := deps.Env.OpenAIAPIBase
-	if base == "" {
-		base = defaultOpenAIBase
-	}
-	model := deps.Env.OpenAIModel
-	if model == "" {
-		model = defaultOpenAIModel
-	}
-	apiKey := deps.Env.OpenAIAPIKey
-	if apiKey == "" {
-		apiKey = defaultOpenAIKey
-	}
-
-	rewrite, err := draftRewrite(ctx, base, apiKey, model, p)
+	rewrite, skipReason, err := draftWithFallback(ctx, deps.Env, p)
 	if err != nil {
-		// LLM endpoint not reachable / errors out → skip rather than fail.
-		// Marketing depends on a local LM Studio that may not be running.
-		return personas.Drafted{
-			Skipped:    true,
-			SkipReason: fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err),
-		}, nil
+		return personas.Drafted{}, err
 	}
-	rewrite = strings.TrimSpace(rewrite)
-	if rewrite == "" {
+	if skipReason != "" {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: "LLM returned empty rewrite",
+			SkipReason: skipReason,
 		}, nil
 	}
 
@@ -209,6 +198,123 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 
 // ---- LLM ----
 
+// draftWithFallback prefers Anthropic when AnthropicAPIKey is set, and
+// falls back to the OpenAI-compatible endpoint (LM Studio by default)
+// otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
+// means the caller should mark the run Skipped.
+func draftWithFallback(ctx context.Context, env personas.Env, p product) (string, string, error) {
+	if strings.TrimSpace(env.AnthropicAPIKey) != "" {
+		model := env.AnthropicModel
+		if model == "" {
+			model = defaultAnthropicModel
+		}
+		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p)
+		if err != nil {
+			return "", fmt.Sprintf("Claude API errored: %v", err), nil
+		}
+		if rewrite = strings.TrimSpace(rewrite); rewrite == "" {
+			return "", "Claude returned empty rewrite", nil
+		}
+		return rewrite, "", nil
+	}
+
+	base := env.OpenAIAPIBase
+	if base == "" {
+		base = defaultOpenAIBase
+	}
+	model := env.OpenAIModel
+	if model == "" {
+		model = defaultOpenAIModel
+	}
+	apiKey := env.OpenAIAPIKey
+	if apiKey == "" {
+		apiKey = defaultOpenAIKey
+	}
+	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p)
+	if err != nil {
+		return "", fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err), nil
+	}
+	if rewrite = strings.TrimSpace(rewrite); rewrite == "" {
+		return "", "LLM returned empty rewrite", nil
+	}
+	return rewrite, "", nil
+}
+
+// ---- Anthropic ----
+
+type anthropicMsg struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type anthropicReq struct {
+	Model     string         `json:"model"`
+	MaxTokens int            `json:"max_tokens"`
+	System    string         `json:"system"`
+	Messages  []anthropicMsg `json:"messages"`
+}
+
+type anthropicContentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+type anthropicResp struct {
+	Content []anthropicContentBlock `json:"content"`
+	Error   struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product) (string, error) {
+	user := fmt.Sprintf(
+		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
+		p.Name, p.SKU, strings.TrimSpace(p.Description),
+	)
+
+	body, _ := json.Marshal(anthropicReq{
+		Model:     model,
+		MaxTokens: 512,
+		System:    systemPrompt,
+		Messages:  []anthropicMsg{{Role: "user", Content: user}},
+	})
+
+	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(cctx, "POST", anthropicAPIURL, bytes.NewReader(body))
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("content-type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("anthropic http: %w", err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 {
+		return "", fmt.Errorf("anthropic http %d: %s", res.StatusCode, raw)
+	}
+	var parsed anthropicResp
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", fmt.Errorf("anthropic decode: %w", err)
+	}
+	if parsed.Error.Type != "" {
+		return "", fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+	}
+
+	var sb strings.Builder
+	for _, b := range parsed.Content {
+		if b.Type == "text" {
+			sb.WriteString(b.Text)
+		}
+	}
+	return strings.TrimSpace(sb.String()), nil
+}
+
+// ---- OpenAI-compatible (LM Studio fallback) ----
+
 type chatMsg struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -227,7 +333,7 @@ type chatResp struct {
 	} `json:"choices"`
 }
 
-func draftRewrite(
+func draftRewriteOpenAI(
 	ctx context.Context,
 	base, apiKey, model string,
 	p product,
