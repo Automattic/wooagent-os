@@ -26,16 +26,19 @@ const BEHAVIORS = [
 // see the controls behave; nothing persists.
 export default function EditPersonaModal({ persona, systemPrompt, onClose }: Props) {
   const personaKey = personaKeyFrom(persona.persona);
+  // Sentence case for all persona display names (DESIGN.md). Acronyms (SEO)
+  // remain uppercased.
+  const fallback = persona.name || persona.persona;
   const displayName =
     persona.persona === 'marketing'
       ? 'Marketing & SEO'
       : persona.persona === 'inventory'
-        ? 'Inventory Manager'
+        ? 'Inventory manager'
         : persona.persona === 'sales-support'
-          ? 'Sales Support'
+          ? 'Sales support'
           : persona.persona === 'chief'
-            ? 'Chief of Staff'
-            : persona.name || persona.persona;
+            ? 'Chief of staff'
+            : fallback.charAt(0).toUpperCase() + fallback.slice(1).toLowerCase();
 
   const [prompt, setPrompt] = useState(systemPrompt);
   const [behaviors, setBehaviors] = useState<Record<string, boolean>>(
