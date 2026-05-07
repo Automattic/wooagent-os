@@ -42,10 +42,10 @@ export default function Step5Done({ store, provider, onOpenKanban }: Props) {
     { label: 'Using', value: providerLabel },
     {
       label: 'Default fleet',
-      value: 'Marketing, Pricing, Sales Support',
+      value: 'Marketing, Pricing, Sales support',
     },
     {
-      label: 'Chief of Staff',
+      label: 'Chief of staff',
       value: 'Generating your store profile…',
     },
   ];

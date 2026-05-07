@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Stack, Text } from '@wordpress/ui';
+import { Badge, Stack, Text } from '@wordpress/ui';
 import {
   Icon,
   inbox,
@@ -123,7 +123,6 @@ export default function LeftNav({
           Connected store
         </div>
         <div
-          className="wa-mono"
           style={{
             fontSize: 'var(--wpds-typography-font-size-xs)',
             color: 'rgba(255, 255, 255, 0.85)',
@@ -195,21 +194,9 @@ function NavGroup({ label, items, active, onItemClick }: NavGroupProps) {
               {item.label}
             </span>
             {item.badge !== undefined && (
-              <span
-                aria-label={`${item.badge} in review`}
-                style={{
-                  background: 'var(--wa-persona-mk-ink)',
-                  color: '#ffffff',
-                  fontFamily: 'var(--wpds-typography-font-family-mono)',
-                  fontSize: 10,
-                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                  padding: '1px 6px',
-                  borderRadius: 'var(--wpds-border-radius-sm)',
-                  flex: 'none',
-                }}
-              >
-                {item.badge}
-              </span>
+              <Badge intent="high" aria-label={`${item.badge} in review`}>
+                {String(item.badge)}
+              </Badge>
             )}
           </>
         );
