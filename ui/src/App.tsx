@@ -291,7 +291,7 @@ export default function App() {
             path="/agents/chief"
             element={
               <Placeholder
-                area="Chief of Staff"
+                area="Chief of staff"
                 description="Orchestrates the specialist agents, dispatches work, and keeps the queue balanced. Out of scope for phase 1."
               />
             }
@@ -336,7 +336,7 @@ export default function App() {
             path="/agents/sales-support"
             element={
               <Placeholder
-                area="Sales Support agent"
+                area="Sales support agent"
                 description="Drafts customer replies, handles refund triage, escalates edge cases. Paused for phase 1."
               />
             }

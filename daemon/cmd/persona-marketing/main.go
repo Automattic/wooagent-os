@@ -14,8 +14,12 @@
 //	WOOAGENT_MCP_APP_PASSWORD=<wp-application-password> \
 //	go run ./cmd/persona-marketing
 //
-// Optional: PERSONA_PRODUCT_ID picks a specific product. OPENAI_API_BASE_URL,
-// OPENAI_MODEL, OPENAI_API_KEY override the LM Studio defaults.
+// LLM routing: when ANTHROPIC_API_KEY is set, calls Claude (default
+// claude-sonnet-4-6, override with ANTHROPIC_MODEL). Otherwise falls back
+// to the OpenAI-compatible endpoint — OPENAI_API_BASE_URL, OPENAI_MODEL,
+// OPENAI_API_KEY override the LM Studio defaults.
+//
+// Optional: PERSONA_PRODUCT_ID picks a specific product.
 package main
 
 import (
@@ -71,6 +75,8 @@ func main() {
 		Store: st,
 		MCP:   mcpClient,
 		Env: personas.Env{
+			AnthropicAPIKey:   os.Getenv("ANTHROPIC_API_KEY"),
+			AnthropicModel:    os.Getenv("ANTHROPIC_MODEL"),
 			OpenAIAPIBase:     os.Getenv("OPENAI_API_BASE_URL"),
 			OpenAIAPIKey:      os.Getenv("OPENAI_API_KEY"),
 			OpenAIModel:       os.Getenv("OPENAI_MODEL"),
