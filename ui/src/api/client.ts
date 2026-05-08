@@ -434,6 +434,28 @@ export interface ApproveResult {
   updated_at: string;
 }
 
+// Abilities domain — discovered per paired store via the WP MCP Adapter.
+// trust_state is the daemon's three-state machine; the UI surfaces it as
+// a Badge intent and uses it to gate the per-row "Trust" action.
+export type AbilityTrustState = 'new' | 'trusted' | 'schema_changed';
+
+export interface Ability {
+  id: string;
+  store_id: string;
+  store_url?: string;
+  name: string;
+  title?: string;
+  description?: string;
+  version?: string;
+  /** Cached MCP get-ability-info envelope. JSON-shaped; surfaced raw in
+   *  the inspector for V1 (no structured schema renderer yet). */
+  schema?: Record<string, unknown>;
+  schema_hash?: string;
+  trust_state: AbilityTrustState;
+  trusted_at?: string;
+  last_seen_at?: string;
+}
+
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
@@ -471,6 +493,20 @@ export const api = {
       }),
     delete: (c: Connection, id: string) =>
       request<void>(c, `/v1/stores/${id}`, { method: 'DELETE' }),
+  },
+  abilities: {
+    list: (
+      c: Connection,
+      params?: { storeId?: string; trustState?: AbilityTrustState },
+    ) => {
+      const qs = new URLSearchParams();
+      if (params?.storeId) qs.set('store_id', params.storeId);
+      if (params?.trustState) qs.set('trust_state', params.trustState);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return request<{ abilities: Ability[] }>(c, `/v1/abilities${suffix}`);
+    },
+    trust: (c: Connection, id: string) =>
+      request<Ability>(c, `/v1/abilities/${id}/trust`, { method: 'POST' }),
   },
   modelProviders: {
     list: (c: Connection) =>
