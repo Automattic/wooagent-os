@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Stack, Text } from '@wordpress/ui';
+import { Card, Stack, Text } from '@wordpress/ui';
 import {
   FormToggle,
   Notice,
@@ -399,14 +399,17 @@ export default function Agents({ connection }: Props) {
     [enabledMap],
   );
 
-  // Primary action drives row click; supportsBulk omitted everywhere so
-  // DataViews does not render a selection column.
+  // Row click drives the edit flow via `onClickItem`. The action is also
+  // exposed under the per-row ⋮ menu — no `isPrimary` flag, so DataViews
+  // keeps it in the secondary-actions dropdown rather than rendering it
+  // inline as a text button (which made the Actions column read as a
+  // labelled button instead of an icon menu). `supportsBulk` is omitted
+  // everywhere so DataViews does not render a selection column.
   const actions = useMemo<Action<Persona>[]>(
     () => [
       {
         id: 'edit',
         label: 'Edit persona',
-        isPrimary: true,
         callback: (items) => {
           const p = items[0];
           if (p) setEditing(p);
@@ -488,18 +491,20 @@ export default function Agents({ connection }: Props) {
         </span>
       </Stack>
 
-      <DataViews<Persona>
-        view={view}
-        onChangeView={setView}
-        fields={fields}
-        actions={actions}
-        data={shaped}
-        getItemId={(p) => p.persona}
-        paginationInfo={paginationInfo}
-        defaultLayouts={{ table: {} }}
-        onClickItem={(p) => setEditing(p)}
-        empty={<EmptyState />}
-      />
+      <Card.Root>
+        <DataViews<Persona>
+          view={view}
+          onChangeView={setView}
+          fields={fields}
+          actions={actions}
+          data={shaped}
+          getItemId={(p) => p.persona}
+          paginationInfo={paginationInfo}
+          defaultLayouts={{ table: {} }}
+          onClickItem={(p) => setEditing(p)}
+          empty={<EmptyState />}
+        />
+      </Card.Root>
 
       {editing && (
         <EditPersonaModal
