@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { Card, Stack, Text } from '@wordpress/ui';
 import { Button } from '@wordpress/components';
+import { Page } from '@wordpress/admin-ui';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
   area: string;
@@ -8,6 +10,7 @@ interface Props {
   status?: 'soon' | 'demo';
   ctaTo?: string;
   ctaLabel?: string;
+  onAskAgent: () => void;
 }
 
 export default function Placeholder({
@@ -16,15 +19,18 @@ export default function Placeholder({
   status = 'soon',
   ctaTo = '/',
   ctaLabel = '← Back to Board',
+  onAskAgent,
 }: Props) {
   const nav = useNavigate();
   return (
-    <main
-      style={{
-        maxWidth: 900,
-        margin: '0 auto',
-        padding: 'var(--wpds-dimension-padding-3xl) var(--wa-page-pad-x)',
-      }}
+    <Page
+      title={area}
+      subTitle={
+        status === 'soon'
+          ? 'Out of scope for phase 1.'
+          : 'Reference area.'
+      }
+      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
     >
       <Card.Root
         style={{
@@ -65,6 +71,6 @@ export default function Placeholder({
           </Stack>
         </Card.Content>
       </Card.Root>
-    </main>
+    </Page>
   );
 }

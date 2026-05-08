@@ -1,17 +1,21 @@
+import { useState } from 'react';
 import { Button, SearchControl } from '@wordpress/components';
 import { Icon, comment } from '@wordpress/icons';
-import { useState } from 'react';
 
 interface Props {
   onAskAgent: () => void;
 }
 
-// Global top bar: search input (stub for V1) + Ask agent button.
-export default function TopBar({ onAskAgent }: Props) {
+// Right-side actions shared across every WPDS <Page> in WooAgent: a global
+// search input (stub for V1) and the "Ask agent" button. Each screen passes
+// it via Page's `actions` prop so the page heading + search + Ask agent
+// always sit on a single horizontal band — replacing the prior standalone
+// TopBar component, which has been removed.
+export default function PageGlobalActions({ onAskAgent }: Props) {
   const [query, setQuery] = useState('');
   return (
-    <div className="wa-topbar">
-      <div style={{ flex: 1, maxWidth: 480 }}>
+    <>
+      <div style={{ width: 480 }}>
         <SearchControl
           __nextHasNoMarginBottom
           value={query}
@@ -28,6 +32,6 @@ export default function TopBar({ onAskAgent }: Props) {
       >
         Ask agent
       </Button>
-    </div>
+    </>
   );
 }

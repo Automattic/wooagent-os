@@ -116,10 +116,6 @@ Square swatch with the persona's `bg` and `ink` colors and the persona's initial
 
 Dark vertical sidebar. WooAgent wordmark at top, nav items below. Persistent across screens. The only place `PersonaAvatar` appears in the chrome.
 
-### `TopBar` (`ui/src/components/TopBar.tsx`)
-
-Light, thin, full-width across the content area. Breadcrumbs left, global search center, "Ask Agent" trigger right. No persona color.
-
 ### `ActionBar` (`ui/src/components/ActionBar.tsx`)
 
 Sticky bottom bar on review / approve / batch surfaces. Indigo primary CTA right, secondary actions left. Replaces inline per-row action buttons in batch contexts. The 13.1 review-and-approve view is the reference.
@@ -147,6 +143,54 @@ Small full-radius pill on queue cards: `CONTENT` / `CAMPAIGN` / `EMAIL`, colored
 ### Onboarding card (`ui/src/onboarding/`)
 
 Centered card on a neutral background, WooAgent wordmark above, sequential `Stepper` below the heading. Used for first-run setup (the 13.2 flow). Light surface, indigo primary CTA, no persona color (no agent identity yet at this stage). The stepper is conditional — three steps in the embedded UI, four in Vite dev.
+
+### `PageGlobalActions` (`ui/src/components/PageGlobalActions.tsx`)
+
+Right-side actions slot shared across every WPDS `<Page>` in WooAgent: the global search input (stub for V1) and the "Ask agent" button. Each screen passes it via Page's `actions` prop so heading + search + Ask agent always sit on a single horizontal band. Replaces the prior standalone `TopBar` component, which has been retired.
+
+## Component inventory
+
+The canonical WPDS + library components in use across `ui/`. **Reach for one of these before writing custom UI.** If something here doesn't fit, escalate in #design-systems before forking — and add a `// CUSTOM:` comment per the rule below.
+
+### `@wordpress/admin-ui` — page-level layout
+
+- **`Page`** — every screen wraps its content in `<Page title subTitle actions>`. Provides the heading + actions row on a single horizontal band. The `actions` slot always receives `<PageGlobalActions onAskAgent={…} />` for consistency. Optional slots: `breadcrumbs`, `badges`, `visual`, `headingLevel`.
+
+### `@wordpress/ui` — primary surfaces, layout, type, status
+
+- **`Badge`** — status/identity pill. Allowed intents: `high`, `medium`, `low`, `none`, `stable`, `informational`, `draft`. (Used: agent online indicator, status column on the roster, kind pill via `StatusBadge`.)
+- **`Card.Root`** / **`Card.Header`** / **`Card.Content`** — bordered surface for grouped content. Wraps form sections (Settings) and proposal panels (IssueDetail).
+- **`Notice.Root`** + **`Notice.Description`** + **`Notice.Actions`** + **`Notice.ActionButton`** + **`Notice.CloseIcon`** — compound notice component (intents: `neutral`, `info`, `warning`, `success`, `error`). The legacy `Notice` from `@wordpress/components` is **not** used; all notices are the compound form.
+- **`Stack`** — default layout primitive (flex with token-based gaps). Reach for this before plain CSS flex.
+- **`Text`** — typographic primitive. Variants: `heading-2xl` … `heading-xs`, `body-md`, `body-sm`. Always pair with a real heading element via `render={<h1 />}` when it's a page heading.
+
+### `@wordpress/components` — gap-fillers (forms, controls, utilities)
+
+- **`Button`** — primary/secondary/tertiary actions and icon-only buttons (`Button icon={…} label="…"`). Use in place of any `<button>`.
+- **`Spinner`** — async-loading indicator.
+- **`TextControl`** / **`SearchControl`** / **`SelectControl`** — text input, search input, and select dropdown. Use in place of any `<input>` / `<select>`.
+- **`FormToggle`** — on/off boolean toggle (used inline in the agent roster's "Enabled" column).
+- **`Modal`** — modal dialog (used by `EditPersonaModal`).
+- **`ExternalLink`** — outbound URL with built-in icon and `rel="noopener"`. Use in place of any `<a href>` for external destinations.
+- **Internal-router `Link`** — `react-router-dom` `<Link>` is the canonical WooAgent in-app link. (No `@wordpress/components` `Link` is currently in use; `react-router-dom` ownership of routing makes it a better fit.)
+
+### `@wordpress/dataviews` — tabular UIs
+
+- **`DataViews`** + **`filterSortAndPaginate`** + types `Action`, `Field`, `View` — used by the agent roster (Agents) and is the canonical building block for any future data-table screen. Bulk-select is suppressed app-wide by omitting `supportsBulk` on actions; layouts default to table-only via `defaultLayouts={{ table: {} }}` unless a specific screen needs grid/list.
+
+### `@wordpress/icons`
+
+- Use the named icon exports (e.g., `comment`, `chevronDown`, `chevronUp`, `close`, `plus`, `funnel`, `inbox`, `columns`, `people`, `category`, `box`, `store`, `shield`, `key`, `external`, `rotateRight`, `check`, `moreVertical`). Always render via `<Icon icon={iconName} size={…} />`.
+
+### WooAgent components (`ui/src/components/`)
+
+Project-specific composites that wrap or extend the above. See the **Components** section above for descriptions: `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing similar shapes.
+
+### Out of scope
+
+- `@wordpress/components` `Notice` (legacy single-component form) — use the `@wordpress/ui` compound `Notice.Root` instead.
+- `TopBar` — removed; replaced by `Page` + `PageGlobalActions`.
+- Raw `<button>` / `<input>` / `<select>` / `<a href>` / mono-style spans — every one needs a `// CUSTOM:` comment immediately above explaining why no WPDS component fits.
 
 ## Do's and Don'ts
 

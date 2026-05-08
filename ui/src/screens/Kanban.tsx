@@ -1,6 +1,7 @@
-import { useNavigate } from 'react-router-dom';
-import { Card, Stack, Text } from '@wordpress/ui';
-import { Notice, Spinner } from '@wordpress/components';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Spinner } from '@wordpress/components';
+import { Page } from '@wordpress/admin-ui';
 import { type Batch, type Issue } from '../api/client';
 import {
   KindBadge,
@@ -9,6 +10,7 @@ import {
   type IssueKind,
 } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 type ColumnKey = 'backlog' | 'drafting' | 'in_review' | 'done';
 
@@ -90,6 +92,17 @@ function batchStateLabel(col: ColumnKey, batch: Batch): string {
   }
 }
 
+// Display name for a persona slug. Mirrors the helper in screens/Agents.tsx;
+// kept inline here to avoid a one-helper shared module — if a third site
+// needs it, lift to a shared util.
+function personaDisplayName(slug: string): string {
+  if (slug === 'marketing') return 'Marketing & SEO';
+  if (slug === 'inventory') return 'Inventory manager';
+  if (slug === 'sales-support') return 'Sales support';
+  if (slug === 'chief') return 'Chief of staff';
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
 // Pluralise the kind for a multi-child meta line.
 function kindNoun(kind: IssueKind, count: number): string {
   switch (kind) {
@@ -134,27 +147,48 @@ interface Props {
   issues: Issue[] | null;
   batches: Batch[];
   error: string | null;
+  onAskAgent: () => void;
 }
 
-export default function Kanban({ issues, batches, error }: Props) {
+export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  // `?persona=<slug>` filters the board to one agent. Set by the "View issues"
+  // action on the Agents roster row menu.
+  const personaFilter = searchParams.get('persona');
+
+  const title = personaFilter
+    ? `${personaDisplayName(personaFilter)} queue`
+    : "Today's marketing queue";
+  const subTitle =
+    'What the marketing agent has staged for you. Approve in review, adjust the queue, or let it work. Every shipped change is reversible.';
 
   if (error) {
     return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
-        <Notice status="error" isDismissible={false}>
-          Failed to load issues: {error}
-        </Notice>
-      </main>
+      <Page
+        title={title}
+        subTitle={subTitle}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      >
+        <Notice.Root intent="error">
+          <Notice.Description>
+            Failed to load issues: {error}
+          </Notice.Description>
+        </Notice.Root>
+      </Page>
     );
   }
   if (issues === null) {
     return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+      <Page
+        title={title}
+        subTitle={subTitle}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      >
         <Stack direction="row" gap="sm" align="center">
           <Spinner /> <Text variant="body-sm">Loading issues…</Text>
         </Stack>
-      </main>
+      </Page>
     );
   }
 
@@ -167,15 +201,18 @@ export default function Kanban({ issues, batches, error }: Props) {
   // batch — they'll be represented by the batch's synthetic card. Issues
   // with a batch_id but no matching batch (stale data) keep rendering as
   // individual cards; better than vanishing.
+  // When `personaFilter` is set, drop items whose persona slug doesn't match.
   const batchIDs = new Set(batches.map((b) => b.id));
   const items: BoardItem[] = [];
   for (const issue of issues) {
     if (issue.batch_id && batchIDs.has(issue.batch_id)) continue;
+    if (personaFilter && issue.persona !== personaFilter) continue;
     const col = columnForIssue(issue.status);
     if (col === null) continue;
     items.push({ kind: 'issue', issue, column: col, sortKey: issue.updated_at });
   }
   for (const batch of batches) {
+    if (personaFilter && batch.persona !== personaFilter) continue;
     const col = columnForBatch(batch);
     if (col === null) continue;
     items.push({ kind: 'batch', batch, column: col, sortKey: batch.updated_at });
@@ -184,67 +221,40 @@ export default function Kanban({ issues, batches, error }: Props) {
   items.sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
 
   return (
-    <main
-      style={{
-        maxWidth: 1500,
-        margin: '0 auto',
-        padding:
-          'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
-      }}
+    <Page
+      title={title}
+      subTitle={subTitle}
+      badges={<Badge intent="stable">Agent online</Badge>}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
     >
       <div
-        className="wa-page-header"
-        style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}
+        style={{
+          marginBottom: 'var(--wpds-dimension-gap-md)',
+          color: 'var(--wpds-color-fg-content-neutral-weak)',
+          fontSize: 'var(--wpds-typography-font-size-xs)',
+        }}
       >
-        <Stack direction="column" gap="xs">
-          <Stack direction="row" gap="xs" align="center">
-            <PersonaAvatar persona="mk" size="xs" dotOnly />
-            <span className="wa-eyebrow wa-eyebrow--persona">
-              Marketing agent · Today
-            </span>
-          </Stack>
-          <Text variant="heading-2xl" render={<h1 />}>
-            Today's marketing queue
-          </Text>
-          <Text
-            variant="body-sm"
-            style={{
-              maxWidth: 600,
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-            }}
-          >
-            What the marketing agent has staged for you. Approve in review,
-            adjust the queue, or let it work. Every shipped change is reversible.
-          </Text>
-        </Stack>
-        <Stack
-          direction="row"
-          gap="md"
-          align="center"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-          }}
-        >
-          <Stack direction="row" gap="xs" align="center">
-            <span
-              style={{
-                height: 8,
-                width: 8,
-                borderRadius: '50%',
-                background: 'var(--wpds-color-fg-content-success)',
-                display: 'inline-block',
-              }}
-            />
-            Agent online
-          </Stack>
-          <span className="wa-mono">
-            {lastUpdate ? `last scan · ${relativeTime(lastUpdate)}` : 'no activity yet'}
-          </span>
-        </Stack>
+        <span className="wa-mono">
+          {lastUpdate ? `last scan · ${relativeTime(lastUpdate)}` : 'no activity yet'}
+        </span>
       </div>
 
-      <div className="wa-kanban-row">
+      {personaFilter && (
+        <div style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
+          <Notice.Root intent="info">
+            <Notice.Description>
+              Filtering by <strong>{personaDisplayName(personaFilter)}</strong>.
+              Dismiss to see the full board.
+            </Notice.Description>
+            <Notice.CloseIcon
+              label="Clear filter"
+              onClick={() => nav('/')}
+            />
+          </Notice.Root>
+        </div>
+      )}
+
+      <div className="wa-kanban-row" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
         {COLUMNS.map((col) => {
           const colItems = items.filter((it) => it.column === col.key);
           const accentClass = `wa-kanban-col__accent wa-kanban-col__accent--${
@@ -294,7 +304,7 @@ export default function Kanban({ issues, batches, error }: Props) {
           );
         })}
       </div>
-    </main>
+    </Page>
   );
 }
 
