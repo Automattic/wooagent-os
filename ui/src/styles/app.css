@@ -99,14 +99,39 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-/* Sticky bottom action bar on IssueDetail. */
+/* Detail-shell layout: a fixed-height column that pins the ActionBar to the
+   viewport bottom. The outer is height: 100vh (no window scroll); the Page
+   inside grows via flex:1 so its `.content` (overflow: auto) becomes the
+   scroll container; the ActionBar is the last sibling and sits at the very
+   bottom of the column = viewport bottom, regardless of content length. */
+.wa-detail-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+/* Force-grow the Page inside the detail shell. WPDS Page defaults to
+   `height: 100%`, which collapses to content-height when its parent has
+   minHeight (no explicit height). The `>` selector + the wrapper class give
+   us the (0,2,0) specificity needed to beat the (0,1,0) hashed module
+   class. */
+.wa-detail-shell > .wa-detail-shell-page {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+/* Bottom action bar on IssueDetail / BatchReview. Lives as the last child
+   of `.wa-detail-shell` — naturally pinned to viewport bottom by flex
+   layout. */
 .wa-action-bar {
-  position: sticky;
-  bottom: 0;
+  flex: none;
   background: var(--wpds-color-bg-surface-neutral);
   border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
   box-shadow: var(--wpds-elevation-md);
-  padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
+  /* Horizontal padding matches WPDS Page's `.content.has-padding` rule
+     (--wpds-dimension-padding-2xl) so the ActionBar's content lines up with
+     the page title and the body content above it. */
+  padding: var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-2xl);
   z-index: 10;
 }
 
@@ -198,7 +223,10 @@ a {
   top: 0;
   flex: none;
   width: 280px;
-  background: var(--wpds-color-bg-interactive-neutral-strong);
+  /* CUSTOM: WooAgent brand purple for the left nav. WPDS has no dark-brand
+     surface token that matches; documented in DESIGN.md as a sidebar-only
+     exception alongside the persona colors. */
+  background: #2C045D;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -210,10 +238,10 @@ a {
   color: rgba(255, 255, 255, 0.78);
 }
 .wa-sidebar .wa-navlink:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: #1F0342;
 }
 .wa-sidebar .wa-navlink--active {
-  background: rgba(0, 0, 0, 0.28);
+  background: #1F0342;
   color: #ffffff;
 }
 .wa-sidebar .wa-navlink--paused {
@@ -1322,8 +1350,10 @@ a {
   }
 
   .wa-action-bar {
+    /* Vertical tightens on mobile, but horizontal stays on the page-content
+       token so the bar still aligns with the title and body. */
     padding:
-      var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+      var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-2xl);
   }
   .wa-action-bar-row {
     flex-direction: column;

@@ -460,7 +460,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     <Page
       title="Abilities"
       subTitle={subTitle}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
     >
       {error ? (
         <Notice.Root intent="error">
