@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
   ExternalLink,
-  Notice,
   SelectControl,
   Spinner,
   TextControl,
@@ -358,21 +357,25 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
                 </Button>
                 {testing && <Spinner />}
                 {testResult?.ok && (
-                  <Notice status="success" isDismissible={false}>
-                    {testResult.message ?? 'Connection works.'}
-                  </Notice>
+                  <Notice.Root intent="success">
+                    <Notice.Description>
+                      {testResult.message ?? 'Connection works.'}
+                    </Notice.Description>
+                  </Notice.Root>
                 )}
                 {testResult && !testResult.ok && (
-                  <Notice status="error" isDismissible={false}>
-                    {testResult.message ?? 'Test failed.'}
-                  </Notice>
+                  <Notice.Root intent="error">
+                    <Notice.Description>
+                      {testResult.message ?? 'Test failed.'}
+                    </Notice.Description>
+                  </Notice.Root>
                 )}
               </Stack>
 
               {error && (
-                <Notice status="error" isDismissible={false}>
-                  {error}
-                </Notice>
+                <Notice.Root intent="error">
+                  <Notice.Description>{error}</Notice.Description>
+                </Notice.Root>
               )}
             </Stack>
           )}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
-import { Button, Notice, Spinner, TextControl } from '@wordpress/components';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Button, Spinner, TextControl } from '@wordpress/components';
 import {
   api,
   loadConnection,
@@ -136,9 +136,9 @@ export default function Step1Daemon({ onConnected }: Props) {
             </Stack>
 
             {error && (
-              <Notice status="error" isDismissible={false}>
-                {error}
-              </Notice>
+              <Notice.Root intent="error">
+                <Notice.Description>{error}</Notice.Description>
+              </Notice.Root>
             )}
 
             <Stack direction="row" gap="md" align="center">
@@ -184,9 +184,9 @@ export default function Step1Daemon({ onConnected }: Props) {
             </Stack>
 
             {error && (
-              <Notice status="error" isDismissible={false}>
-                {error}
-              </Notice>
+              <Notice.Root intent="error">
+                <Notice.Description>{error}</Notice.Description>
+              </Notice.Root>
             )}
 
             <TextControl
@@ -236,9 +236,9 @@ export default function Step1Daemon({ onConnected }: Props) {
           </Stack>
 
           {error && (
-            <Notice status="error" isDismissible={false}>
-              {error}
-            </Notice>
+            <Notice.Root intent="error">
+              <Notice.Description>{error}</Notice.Description>
+            </Notice.Root>
           )}
 
           <TextControl

@@ -1,37 +1,28 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
 import {
-  Button,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { Badge, Notice, Stack, Text } from '@wordpress/ui';
+import {
   FormToggle,
-  Notice,
-  SearchControl,
   SelectControl,
   Spinner,
 } from '@wordpress/components';
-import { funnel, blockTable, moreVertical } from '@wordpress/icons';
+import { Page } from '@wordpress/admin-ui';
+import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
+import type { Action, Field, View } from '@wordpress/dataviews';
+import { useNavigate } from 'react-router-dom';
 import { api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import EditPersonaModal from '../components/EditPersonaModal';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
   connection: Connection;
-}
-
-// DataViews-shaped local types. Kept local so a future migration to
-// `@wordpress/dataviews` can replace these with the upstream `Field<T>` /
-// `Action<T>` and update the few render sites — the consumer shape is
-// already aligned. See post draft for context.
-interface Field<T> {
-  id: string;
-  label: string;
-  render: (item: T) => ReactNode;
-}
-
-interface Action<T> {
-  id: string;
-  label: string;
-  isPrimary?: boolean;
-  callback: (item: T) => void;
+  onAskAgent: () => void;
 }
 
 // Hardcoded V1 metadata per persona — the daemon doesn't surface mandates,
@@ -107,9 +98,8 @@ function metaFor(personaKey: string): PersonaMeta {
   );
 }
 
-// Canonical 7-agent fleet. The daemon may only return a subset (e.g. only
-// agents configured for the connected store); the Roster always renders all
-// seven so operators see the full team. Disabled-by-default for placeholders.
+// Canonical 7-agent fleet. The daemon may only return a subset; the Roster
+// always renders all seven so operators see the full team.
 const ALL_PERSONA_KEYS = [
   'marketing',
   'pricing',
@@ -135,9 +125,7 @@ function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
 }
 
 // V1 model options. Hardcoded until the daemon exposes the available-models
-// endpoint. The persona's current model_preference is prepended if it isn't
-// already in the canonical list, so SelectControl always renders the active
-// value as an option.
+// endpoint.
 const MODEL_OPTIONS: Array<{ label: string; value: string }> = [
   { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4-6' },
   { label: 'Claude Opus 4.7', value: 'anthropic/claude-opus-4-7' },
@@ -164,37 +152,31 @@ function displayName(p: Persona): string {
 }
 
 // === Cells === //
-// Each render function returns a single <td>'s contents. Extracted so the
-// DataViews-shape `fields` config can drop in unchanged when the migration
-// happens.
 
 function PersonaCell({ persona }: { persona: Persona }) {
+  // Plain flex div instead of Stack — Stack's gap is set via internal CSS
+  // that resists inline overrides, and we need an exact 10px gap (between
+  // WPDS gap-sm 8px and gap-md 16px). Slug below the name was removed —
+  // the avatar's two-letter monogram already encodes the slug visually.
   return (
-    <Stack direction="row" gap="sm" align="center">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <PersonaAvatar persona={personaKeyFrom(persona.persona)} size="md" />
-      <Stack direction="column" gap="xs">
-        <Text
-          variant="body-sm"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          {displayName(persona)}
-        </Text>
-        <span
-          style={{
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-          }}
-        >
-          {persona.persona}
-        </span>
-      </Stack>
-    </Stack>
+      <Text
+        variant="body-sm"
+        style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+      >
+        {displayName(persona)}
+      </Text>
+    </div>
   );
 }
 
 function MandateCell({ persona }: { persona: Persona }) {
   return (
-    <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
+    <Text
+      variant="body-sm"
+      style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+    >
       {metaFor(persona.persona).mandate}
     </Text>
   );
@@ -205,29 +187,30 @@ function ModelCell({ persona }: { persona: Persona }) {
   // daemon snapshot; changes don't persist yet.
   const initial = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
   const [model, setModel] = useState<string>(initial);
+  // Wrapper width forces the cell to ~160px regardless of `table-layout: auto`
+  // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
+  // but auto-layout treats it as a preference; sizing the content itself is
+  // the only reliable lever.
   return (
-    <SelectControl
-      __nextHasNoMarginBottom
-      label="Model"
-      hideLabelFromVision
-      value={model}
-      options={modelOptionsFor(model)}
-      onChange={(next) => setModel(next ?? initial)}
-    />
+    <div style={{ minWidth: 160 }}>
+      <SelectControl
+        __nextHasNoMarginBottom
+        label="Model"
+        hideLabelFromVision
+        value={model}
+        options={modelOptionsFor(model)}
+        onChange={(next) => setModel(next ?? initial)}
+      />
+    </div>
   );
 }
 
 function StatusCell({ persona }: { persona: Persona }) {
   const meta = metaFor(persona.persona);
   if (meta.status === 'running') {
-    return (
-      <span className="wa-status wa-status--running">
-        <span className="wa-status-dot" aria-hidden="true" />
-        running
-      </span>
-    );
+    return <Badge intent="stable">Running</Badge>;
   }
-  return <span className="wa-status wa-status--idle">idle</span>;
+  return <Badge intent="none">Idle</Badge>;
 }
 
 function LastRunCell({ persona }: { persona: Persona }) {
@@ -253,6 +236,20 @@ function EnabledCell({
   return <FormToggle checked={enabled} onChange={onToggle} />;
 }
 
+// Click-stopper for cells that own their own click semantics. DataViews makes
+// the row clickable via `onClickItem`; without this wrapper, clicking the model
+// SelectControl or the FormToggle would also fire the row's edit action.
+function NoRowClick({ children }: { children: ReactNode }) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <Stack
@@ -274,14 +271,37 @@ function EmptyState() {
 
 // === Screen === //
 
-export default function Agents({ connection }: Props) {
+const DEFAULT_VIEW: View = {
+  type: 'table',
+  search: '',
+  page: 1,
+  perPage: 25,
+  titleField: 'persona',
+  fields: ['mandate', 'model', 'status', 'last_run', 'enabled'],
+  sort: { field: 'persona', direction: 'asc' },
+  // Comfortable density gives the breathing-room rhythm shown in the
+  // WPDS Payouts reference: ~64–72px row height, hairline dividers
+  // between rows, vertically-centered cell content. Default ('balanced')
+  // crammed the rows; 'compact' is tighter still.
+  layout: {
+    density: 'comfortable',
+    styles: {
+      // Paired with the same minWidth on the ModelCell content wrapper —
+      // see ModelCell. 160px fits short labels like "GPT-5" and the
+      // recommended Claude variants without dominating the row.
+      model: { width: '160px' },
+    },
+  },
+};
+
+export default function Agents({ connection, onAskAgent }: Props) {
+  const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Persona | null>(null);
-  // Local-only enabled state — daemon has no PATCH /v1/agents yet, so toggles
-  // don't persist. Initialised from the daemon snapshot.
+  // Local-only enabled state — daemon has no PATCH /v1/agents yet.
   const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({});
-  const [search, setSearch] = useState('');
+  const [view, setView] = useState<View>(DEFAULT_VIEW);
 
   const fetchAgents = useCallback(
     async (signal: { cancelled: boolean }) => {
@@ -316,157 +336,177 @@ export default function Agents({ connection }: Props) {
     void fetchAgents(signal);
   };
 
-  if (error) {
-    return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)' }}>
-        <Notice
-          status="error"
-          isDismissible={false}
-          actions={[{ label: 'Retry', onClick: handleRetry, variant: 'primary' }]}
-        >
-          Hmm, couldn't load your agents right now. ({error})
-        </Notice>
-      </main>
-    );
-  }
-  if (personas === null) {
-    return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)' }}>
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Getting your agents ready…</Text>
-        </Stack>
-      </main>
-    );
-  }
-
-  // Always render all 7 personas; merge daemon's list onto the canonical roster.
-  const fullRoster = buildFullRoster(personas);
-  const runningCount = fullRoster.filter((p) => metaFor(p.persona).status === 'running').length;
-
-  // Field config — DataViews-shaped. The closure over `enabledMap` /
-  // `setEnabledMap` is intentional; DataViews `render` callbacks accept any
-  // closure, so this transfers cleanly when the migration happens.
-  const fields: Field<Persona>[] = [
-    { id: 'persona',  label: 'Persona',  render: (p) => <PersonaCell persona={p} /> },
-    { id: 'mandate',  label: 'Mandate',  render: (p) => <MandateCell persona={p} /> },
-    { id: 'model',    label: 'Model',    render: (p) => <ModelCell persona={p} /> },
-    { id: 'status',   label: 'Status',   render: (p) => <StatusCell persona={p} /> },
-    { id: 'last_run', label: 'Last run', render: (p) => <LastRunCell persona={p} /> },
-    {
-      id: 'enabled',
-      label: 'Enabled',
-      render: (p) => {
-        const enabled = enabledMap[p.persona] ?? p.enabled;
-        return (
-          <EnabledCell
-            enabled={enabled}
-            onToggle={() => setEnabledMap((m) => ({ ...m, [p.persona]: !enabled }))}
-          />
-        );
+  // Field config — closures over enabledMap / setEnabledMap are intentional.
+  // Memoised so DataViews receives a stable reference between toggle flips.
+  const fields = useMemo<Field<Persona>[]>(
+    () => [
+      {
+        id: 'persona',
+        label: 'Persona',
+        enableHiding: false,
+        enableGlobalSearch: true,
+        getValue: ({ item }) => displayName(item),
+        render: ({ item }) => <PersonaCell persona={item} />,
       },
-    },
-  ];
+      {
+        id: 'mandate',
+        label: 'Mandate',
+        enableSorting: false,
+        enableGlobalSearch: true,
+        getValue: ({ item }) => metaFor(item.persona).mandate,
+        render: ({ item }) => <MandateCell persona={item} />,
+      },
+      {
+        id: 'model',
+        label: 'Model',
+        enableSorting: false,
+        getValue: ({ item }) => item.model_preference ?? '',
+        render: ({ item }) => (
+          <NoRowClick>
+            <ModelCell persona={item} />
+          </NoRowClick>
+        ),
+      },
+      {
+        id: 'status',
+        label: 'Status',
+        elements: [
+          { value: 'running', label: 'Running' },
+          { value: 'idle', label: 'Idle' },
+        ],
+        getValue: ({ item }) => metaFor(item.persona).status,
+        render: ({ item }) => <StatusCell persona={item} />,
+      },
+      {
+        id: 'last_run',
+        label: 'Last run',
+        enableSorting: false,
+        getValue: ({ item }) => metaFor(item.persona).lastRun,
+        render: ({ item }) => <LastRunCell persona={item} />,
+      },
+      {
+        id: 'enabled',
+        label: 'Enabled',
+        enableSorting: false,
+        getValue: ({ item }) =>
+          Boolean(enabledMap[item.persona] ?? item.enabled),
+        render: ({ item }) => {
+          const enabled = enabledMap[item.persona] ?? item.enabled;
+          return (
+            <NoRowClick>
+              <EnabledCell
+                enabled={enabled}
+                onToggle={() =>
+                  setEnabledMap((m) => ({
+                    ...m,
+                    [item.persona]: !enabled,
+                  }))
+                }
+              />
+            </NoRowClick>
+          );
+        },
+      },
+    ],
+    [enabledMap],
+  );
 
-  // Actions config — primary action drives row click; non-primary entries
-  // would render in the ⋮ menu (none yet, but the slot is wired).
-  const actions: Action<Persona>[] = [
-    {
-      id: 'edit',
-      label: 'Edit persona',
-      isPrimary: true,
-      callback: (p) => setEditing(p),
-    },
-  ];
-  const primaryAction = actions.find((a) => a.isPrimary);
+  // Row click drives the edit flow via `onClickItem`. The actions are also
+  // exposed under the per-row ⋮ menu — no `isPrimary` flag on either, so
+  // DataViews keeps them in the secondary-actions dropdown rather than
+  // rendering them inline as text buttons. `supportsBulk` is omitted
+  // everywhere so DataViews does not render a selection column.
+  const actions = useMemo<Action<Persona>[]>(
+    () => [
+      {
+        id: 'edit',
+        label: 'Edit persona',
+        callback: (items) => {
+          const p = items[0];
+          if (p) setEditing(p);
+        },
+      },
+      {
+        id: 'view-issues',
+        label: 'View issues',
+        callback: (items) => {
+          const p = items[0];
+          if (p) navigate(`/?persona=${encodeURIComponent(p.persona)}`);
+        },
+      },
+    ],
+    [navigate],
+  );
+
+  const fullRoster = useMemo(
+    () => (personas ? buildFullRoster(personas) : []),
+    [personas],
+  );
+
+  const { data: shaped, paginationInfo } = useMemo(
+    () => filterSortAndPaginate(fullRoster, view, fields),
+    [fullRoster, view, fields],
+  );
+
+  const runningCount = fullRoster.filter(
+    (p) => metaFor(p.persona).status === 'running',
+  ).length;
+
+  // Subtitle stays usable across error/loading/content states. When personas
+  // are null we still display the canonical fleet size (7); the running count
+  // only shows once the daemon snapshot loads.
+  const subTitle =
+    personas === null
+      ? 'Fleet roster · 7 personas'
+      : `Fleet roster · ${fullRoster.length} personas · ${runningCount} currently running`;
 
   return (
-    <main
-      style={{
-        maxWidth: 1300,
-        margin: '0 auto',
-        padding: 'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
-      }}
+    <Page
+      title="Agents"
+      subTitle={subTitle}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
     >
-      <Stack direction="column" gap="xs" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
-        <Text variant="heading-2xl" render={<h1 />}>
-          Agents
-        </Text>
-        <span className="wa-eyebrow">
-          Fleet roster · {fullRoster.length} personas · {runningCount} currently running
-        </span>
-      </Stack>
+      {error ? (
+        <Notice.Root intent="error">
+          <Notice.Description>
+            Hmm, couldn't load your agents right now. ({error})
+          </Notice.Description>
+          <Notice.Actions>
+            <Notice.ActionButton onClick={handleRetry}>
+              Retry
+            </Notice.ActionButton>
+          </Notice.Actions>
+        </Notice.Root>
+      ) : personas === null ? (
+        <Stack direction="row" gap="sm" align="center">
+          <Spinner />{' '}
+          <Text variant="body-sm">Getting your agents ready…</Text>
+        </Stack>
+      ) : (
+        <>
+          <DataViews<Persona>
+            view={view}
+            onChangeView={setView}
+            fields={fields}
+            actions={actions}
+            data={shaped}
+            getItemId={(p) => p.persona}
+            paginationInfo={paginationInfo}
+            defaultLayouts={{ table: {} }}
+            onClickItem={(p) => setEditing(p)}
+            empty={<EmptyState />}
+          />
 
-      <Card.Root>
-        <div className="wa-roster__toolbar">
-          <div style={{ width: 280 }}>
-            <SearchControl
-              __nextHasNoMarginBottom
-              value={search}
-              onChange={setSearch}
-              label="Search agents"
-              placeholder="Search agents"
-              hideLabelFromVision
+          {editing && (
+            <EditPersonaModal
+              persona={editing}
+              mandate={metaFor(editing.persona).mandate}
+              systemPrompt={metaFor(editing.persona).systemPrompt}
+              onClose={() => setEditing(null)}
             />
-          </div>
-          <Stack direction="row" gap="xs" align="center">
-            <Button icon={funnel} label="Filter" />
-            <Button icon={blockTable} label="Change view" />
-          </Stack>
-        </div>
-
-        {fullRoster.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <table className="wa-roster">
-            <thead>
-              <tr>
-                {fields.map((f) => (
-                  <th key={f.id}>{f.label}</th>
-                ))}
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {fullRoster.map((p) => (
-                <tr
-                  key={p.persona}
-                  className="wa-roster__row"
-                  onClick={primaryAction ? () => primaryAction.callback(p) : undefined}
-                >
-                  {fields.map((f) => {
-                    // Cells whose contents own their click semantics
-                    // (form controls, buttons, dropdowns) need the row click
-                    // to NOT bubble. Mirror DataViews's pattern of treating
-                    // action-bearing cells as a separate concern.
-                    const stop = f.id === 'model' || f.id === 'enabled';
-                    return (
-                      <td key={f.id} onClick={stop ? (e) => e.stopPropagation() : undefined}>
-                        {f.render(p)}
-                      </td>
-                    );
-                  })}
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {/* TODO: open Dropdown of non-primary actions when added. */}
-                    <Button
-                      icon={moreVertical}
-                      label={`Open ${displayName(p)} actions`}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card.Root>
-
-      {editing && (
-        <EditPersonaModal
-          persona={editing}
-          mandate={metaFor(editing.persona).mandate}
-          systemPrompt={metaFor(editing.persona).systemPrompt}
-          onClose={() => setEditing(null)}
-        />
+          )}
+        </>
       )}
-    </main>
+    </Page>
   );
 }

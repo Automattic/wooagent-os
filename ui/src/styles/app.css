@@ -53,15 +53,18 @@ a {
   text-decoration: none;
 }
 
-/* Sidebar nav items — see globals.css commentary in marketing-prototype. */
+/* Sidebar nav items — sized for the WPDS admin-ui dark navigation pattern:
+   slightly larger icons (24px, set inline in LeftNav.tsx) and larger label
+   text (md), but tightly stacked vertically so the rhythm matches the
+   reference screenshot (≈6px top/bottom padding rather than the default sm). */
 .wa-navlink {
   display: flex;
   align-items: center;
-  gap: var(--wpds-dimension-gap-sm);
-  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  gap: 12px;
+  padding: 6px 12px;
   border-radius: var(--wpds-border-radius-md);
   font-family: var(--wpds-typography-font-family-body);
-  font-size: var(--wpds-typography-font-size-sm);
+  font-size: var(--wpds-typography-font-size-md);
   color: var(--wpds-color-fg-content-neutral);
   cursor: var(--wpds-cursor-control);
   transition: background-color 0.1s;
@@ -194,7 +197,7 @@ a {
   position: sticky;
   top: 0;
   flex: none;
-  width: 240px;
+  width: 280px;
   background: var(--wpds-color-bg-interactive-neutral-strong);
   color: #ffffff;
   display: flex;
@@ -495,41 +498,11 @@ a {
   flex: none;
 }
 
-/* ---------- Agent roster table ---------- */
-.wa-roster__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wpds-dimension-gap-md);
-  padding: var(--wpds-dimension-padding-md);
-  border-bottom: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-}
-
-.wa-roster {
-  width: 100%;
-  border-collapse: collapse;
-}
-.wa-roster thead th {
-  text-align: left;
-  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
-  font-size: var(--wpds-typography-font-size-xs);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--wpds-color-fg-content-neutral-weak);
-  font-weight: var(--wpds-typography-font-weight-regular);
-  border-bottom: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-}
-.wa-roster tbody td {
-  padding: var(--wpds-dimension-padding-md);
-  vertical-align: middle;
-}
-.wa-roster__row {
-  cursor: var(--wpds-cursor-control);
-  transition: background-color 0.1s;
-}
-.wa-roster__row:hover {
-  background: var(--wpds-color-bg-surface-neutral-weak);
-}
+/* ---------- Agent roster ----------
+   Roster table chrome (`.wa-roster`, `.wa-roster__row`, `.wa-roster__toolbar`)
+   was retired when the roster moved to <DataViews> — DataViews owns the
+   table rendering and toolbar now. Only the EditPersonaModal faux-select
+   styling (`.wa-roster__model`) stays, since it lives outside the table. */
 
 /* Model dropdown — flat pill that mimics a select. Visual-only for V1. */
 .wa-roster__model {
