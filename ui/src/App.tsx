@@ -8,6 +8,7 @@ import Kanban from './screens/Kanban';
 import IssueDetail from './screens/IssueDetail';
 import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
+import Abilities from './screens/Abilities';
 import Settings from './screens/Settings';
 import Placeholder from './screens/Placeholder';
 import {
@@ -250,11 +251,9 @@ export default function App() {
           <Route
             path="/abilities"
             element={
-              <Placeholder
+              <Abilities
+                connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
-                area="Abilities"
-                description="Browser for every signed ability the agents can call (WooCommerce, Yoast, WordPress.com, etc.). Tune permissions, see version pins, audit recent calls."
-                status="soon"
               />
             }
           />
