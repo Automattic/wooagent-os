@@ -704,11 +704,6 @@ func requireDecimalStringFromTarget(target map[string]any, key string) (string, 
 	}
 }
 
-func (s *Server) handleListAbilities(w http.ResponseWriter, r *http.Request) {
-	// Populated once the MCP client lands Mon Apr 27.
-	writeJSON(w, http.StatusOK, map[string]any{"abilities": []any{}})
-}
-
 // ---------- tiny helpers ----------
 
 func joinAnd(parts []string) string {

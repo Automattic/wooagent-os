@@ -11,6 +11,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
@@ -50,6 +51,7 @@ type Server struct {
 	secrets        secrets.Store
 	modelTester    ModelTester
 	pairing        PairingClient
+	abilities      *abilities.Runner
 	uiSessionToken string
 }
 
@@ -71,11 +73,21 @@ func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, uiSes
 		secrets:        sec,
 		modelTester:    newRealModelTester(),
 		pairing:        pairing.NewClient(),
+		abilities:      abilities.New(st.DB, sec),
 		uiSessionToken: uiSessionToken,
 	}
 	s.router = s.buildRouter()
 	return s
 }
+
+// SetAbilitiesRunner overrides the auto-wired ability discovery runner.
+// Tests inject a runner with a fake MCPClientFactory; the daemon main
+// uses this to override PollInterval / Logger before serving traffic.
+func (s *Server) SetAbilitiesRunner(r *abilities.Runner) { s.abilities = r }
+
+// Abilities returns the runner so the daemon main can drive the startup
+// sweep + periodic ticker without re-creating it.
+func (s *Server) Abilities() *abilities.Runner { return s.abilities }
 
 func (s *Server) Handler() http.Handler { return s.router }
 
@@ -117,6 +129,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/batches/{id}/approve-all", s.handleApproveBatch)
 		r.Post("/v1/batches/{id}/reject-all", s.handleRejectBatch)
 		r.Get("/v1/abilities", s.handleListAbilities)
+		r.Post("/v1/abilities/{id}/trust", s.handleTrustAbility)
 		r.Get("/v1/stores", s.handleListStores)
 		r.Post("/v1/stores", s.handleCreateStore)
 		r.Get("/v1/stores/{id}", s.handleGetStore)

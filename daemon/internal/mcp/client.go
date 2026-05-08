@@ -22,14 +22,17 @@ const protocolVersion = "2025-06-18"
 
 // Config is the bag of inputs for NewClient. Endpoint is the full URL of
 // a single MCP server (e.g. .../wp-json/mcp/mcp-adapter-default-server).
-// Username/Password drive HTTP Basic Auth — the WordPress Application
-// Password path for v0.1. Device-pair tokens (§11.4) slot in here later
-// as a different AuthScheme.
+//
+// Auth: BearerToken takes precedence when set — that's the device-pair
+// token path used by paired stores. Otherwise Username/Password drives
+// HTTP Basic Auth (the WordPress Application Password path used by the
+// pre-pairing spike + mcp-probe).
 type Config struct {
-	Endpoint string
-	Username string
-	Password string
-	Timeout  time.Duration
+	Endpoint    string
+	Username    string
+	Password    string
+	BearerToken string
+	Timeout     time.Duration
 }
 
 // Client is a single-session MCP client. Not safe for concurrent Initialize,
@@ -38,6 +41,7 @@ type Client struct {
 	endpoint  string
 	username  string
 	password  string
+	bearer    string
 	http      *http.Client
 	sessionID string
 	nextID    atomic.Int64
@@ -52,8 +56,113 @@ func NewClient(cfg Config) *Client {
 		endpoint: cfg.Endpoint,
 		username: cfg.Username,
 		password: cfg.Password,
+		bearer:   cfg.BearerToken,
 		http:     &http.Client{Timeout: timeout},
 	}
+}
+
+// MCP-adapter meta-tool names. The WordPress MCP Adapter exposes a fixed
+// set of dispatcher tools via tools/list; the actual abilities (e.g.
+// "wooagent-products/list") sit behind these and are enumerated through
+// discover/info rather than appearing as MCP tools 1:1.
+const (
+	ToolDiscoverAbilities = "mcp-adapter-discover-abilities"
+	ToolGetAbilityInfo    = "mcp-adapter-get-ability-info"
+	ToolExecuteAbility    = "mcp-adapter-execute-ability"
+)
+
+// AbilitySummary is one entry in the discover-abilities response — enough
+// to render a list and detect adds/removes between discovery passes.
+type AbilitySummary struct {
+	Name        string `json:"name"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Version     string `json:"version,omitempty"`
+}
+
+// AbilityInfo is the detailed shape returned by get-ability-info — the
+// full input/output schema we cache and hash to detect schema drift.
+type AbilityInfo struct {
+	Name            string          `json:"name"`
+	Title           string          `json:"title,omitempty"`
+	Description     string          `json:"description,omitempty"`
+	Version         string          `json:"version,omitempty"`
+	InputSchema     json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema    json.RawMessage `json:"output_schema,omitempty"`
+	Permissions     []string        `json:"permissions,omitempty"`
+	RequiredScopes  []string        `json:"required_scopes,omitempty"`
+}
+
+// DiscoverAbilities returns the abilities the paired store exposes. Wraps
+// tools/call with name=ToolDiscoverAbilities and unwraps the JSON envelope
+// the adapter returns in result.content[0].text.
+func (c *Client) DiscoverAbilities(ctx context.Context) ([]AbilitySummary, error) {
+	res, err := c.CallTool(ctx, ToolDiscoverAbilities, map[string]any{})
+	if err != nil {
+		return nil, fmt.Errorf("discover-abilities: %w", err)
+	}
+	if len(res.Content) == 0 {
+		return nil, fmt.Errorf("discover-abilities: empty content")
+	}
+	// The adapter wraps the payload as {"success": bool, "data": {...},
+	// "error": "..."} inside the first text part. Tolerate both that
+	// envelope and a raw [{...}] for portability against alt servers.
+	raw := []byte(res.Content[0].Text)
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+		Error   string          `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Data != nil {
+		if !envelope.Success {
+			return nil, fmt.Errorf("discover-abilities: %s", envelope.Error)
+		}
+		raw = envelope.Data
+	}
+	// data may be {"abilities": [...]} or [...] — accept either.
+	var asObject struct {
+		Abilities []AbilitySummary `json:"abilities"`
+	}
+	if err := json.Unmarshal(raw, &asObject); err == nil && asObject.Abilities != nil {
+		return asObject.Abilities, nil
+	}
+	var asArray []AbilitySummary
+	if err := json.Unmarshal(raw, &asArray); err != nil {
+		return nil, fmt.Errorf("discover-abilities: decode payload: %w", err)
+	}
+	return asArray, nil
+}
+
+// GetAbilityInfo returns the full schema for one ability. Same envelope
+// handling as DiscoverAbilities.
+func (c *Client) GetAbilityInfo(ctx context.Context, name string) (AbilityInfo, error) {
+	res, err := c.CallTool(ctx, ToolGetAbilityInfo, map[string]any{"ability_name": name})
+	if err != nil {
+		return AbilityInfo{}, fmt.Errorf("get-ability-info %s: %w", name, err)
+	}
+	if len(res.Content) == 0 {
+		return AbilityInfo{}, fmt.Errorf("get-ability-info %s: empty content", name)
+	}
+	raw := []byte(res.Content[0].Text)
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+		Error   string          `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Data != nil {
+		if !envelope.Success {
+			return AbilityInfo{}, fmt.Errorf("get-ability-info %s: %s", name, envelope.Error)
+		}
+		raw = envelope.Data
+	}
+	var info AbilityInfo
+	if err := json.Unmarshal(raw, &info); err != nil {
+		return AbilityInfo{}, fmt.Errorf("get-ability-info %s: decode: %w", name, err)
+	}
+	if info.Name == "" {
+		info.Name = name
+	}
+	return info, nil
 }
 
 // ServerInfo is what the server reports on initialize.
@@ -154,7 +263,11 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.SetBasicAuth(c.username, c.password)
+	if c.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearer)
+	} else {
+		req.SetBasicAuth(c.username, c.password)
+	}
 	if c.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", c.sessionID)
 	}
@@ -207,7 +320,11 @@ func (c *Client) doNotification(ctx context.Context, method string, params any) 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.SetBasicAuth(c.username, c.password)
+	if c.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+c.bearer)
+	} else {
+		req.SetBasicAuth(c.username, c.password)
+	}
 	if c.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", c.sessionID)
 	}
