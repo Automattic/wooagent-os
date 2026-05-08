@@ -124,6 +124,13 @@ func newRunCmd() *cobra.Command {
 
 			srv := httpapi.New(st, am, pepInstance, secretStore, uiSessionToken)
 
+			// Sweep paired stores once at startup, then keep them fresh on a
+			// periodic ticker. Both fire-and-forget — the HTTP server starts
+			// immediately so the UI can connect before the first sweep
+			// finishes (a slow store shouldn't bench the daemon).
+			go srv.Abilities().RunAll(ctx)
+			srv.Abilities().SchedulePeriodic(ctx)
+
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)
 			if mcpClient != nil {
