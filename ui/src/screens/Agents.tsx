@@ -187,12 +187,12 @@ function ModelCell({ persona }: { persona: Persona }) {
   // daemon snapshot; changes don't persist yet.
   const initial = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
   const [model, setModel] = useState<string>(initial);
-  // Wrapper width forces the cell to ~160px regardless of `table-layout: auto`
+  // Wrapper width forces the cell to ~180px regardless of `table-layout: auto`
   // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
   // but auto-layout treats it as a preference; sizing the content itself is
   // the only reliable lever.
   return (
-    <div style={{ minWidth: 160 }}>
+    <div style={{ minWidth: 180 }}>
       <SelectControl
         __nextHasNoMarginBottom
         label="Model"
@@ -287,9 +287,9 @@ const DEFAULT_VIEW: View = {
     density: 'comfortable',
     styles: {
       // Paired with the same minWidth on the ModelCell content wrapper —
-      // see ModelCell. 160px fits short labels like "GPT-5" and the
+      // see ModelCell. 180px fits short labels like "GPT-5" and the
       // recommended Claude variants without dominating the row.
-      model: { width: '160px' },
+      model: { width: '180px' },
     },
   },
 };
@@ -464,7 +464,7 @@ export default function Agents({ connection, onAskAgent }: Props) {
     <Page
       title="Agents"
       subTitle={subTitle}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
     >
       {error ? (
         <Notice.Root intent="error">

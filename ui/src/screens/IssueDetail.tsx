@@ -169,6 +169,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       <Page
         title="Issue review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Notice.Root intent="error">
           <Notice.Description>
@@ -183,6 +184,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       <Page
         title="Issue review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Stack direction="row" gap="sm" align="center">
           <Spinner /> <Text variant="body-sm">Loading issue…</Text>
@@ -260,16 +262,12 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     variants?.find((v) => v.id === selectedVariant) ?? variants?.[0] ?? null;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-      }}
-    >
+    <div className="wa-detail-shell">
       <Page
         title="Issue review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
+        className="wa-detail-shell-page"
       >
         {/* Breadcrumb */}
         <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
@@ -707,16 +705,12 @@ function PriceIssueView(props: PriceViewProps) {
     proposal.observedHigh > proposal.observedLow;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-      }}
-    >
+    <div className="wa-detail-shell">
       <Page
         title="Issue review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
+        className="wa-detail-shell-page"
       >
         {/* Breadcrumb */}
         <Stack
@@ -1253,16 +1247,12 @@ function MessageIssueView(props: MessageViewProps) {
   const charCount = proposal.message.length;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: '100vh',
-      }}
-    >
+    <div className="wa-detail-shell">
       <Page
         title="Issue review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
+        className="wa-detail-shell-page"
       >
         {/* Breadcrumb */}
         <Stack
