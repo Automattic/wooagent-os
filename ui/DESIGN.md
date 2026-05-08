@@ -54,6 +54,10 @@ The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variabl
 
 **Don't expand this exception.** A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
 
+### Sidebar brand color (WooAgent-owned)
+
+The left nav uses two brand-purple hex values that have no WPDS equivalent: `#2C045D` for the sidebar surface and `#1F0342` for nav-link hover and active states. These two hex values live **only** in `.wa-sidebar` rules in `app.css` — nowhere else in the app. If a WPDS dark-brand surface token ships later, swap to it.
+
 ### Primary action
 
 Primary CTAs are **WPDS indigo** — the same color across every screen, every persona context, every depth of navigation. Persona color never appears as a button fill, hover state, or focus ring. Approve, save, continue, send, retry: all indigo. If a CTA needs to be elevated, use scale or position, not color.
@@ -78,14 +82,16 @@ Two WooAgent-specific notes:
 
 Every WooAgent screen lives in the same frame:
 
-- **`LeftNav` (dark surface)** — vertical sidebar, persistent across screens. WooAgent wordmark + nav. Uses WPDS dark surface tokens.
-- **`Page` (light, thin)** — page-aware header from `@wordpress/admin-ui`. Title + subtitle on the left, `actions` slot on the right. Every screen wraps its content in `<Page>` and passes the shared `<PageGlobalActions>` (global search + Ask agent) into its `actions` slot, so the heading + search + Ask agent always sit on a single horizontal band.
+- **`LeftNav` (brand-purple surface)** — vertical sidebar, persistent across screens. WooAgent wordmark + nav. Uses the brand-purple hex pair documented under "Sidebar brand color"; everything inside (persona avatar, badges, eyebrows) still uses WPDS / persona tokens.
+- **`Page` (light, thin)** — page-aware header from `@wordpress/admin-ui`. Title + subtitle on the left, `actions` slot on the right. Every screen wraps its content in `<Page>` and passes the shared `<PageGlobalActions>` (global search + Ask agent) into its `actions` slot, so the heading + search + Ask agent always sit on a single horizontal band. **Always pass `hasPadding`** so the content area inherits the same horizontal token (`--wpds-dimension-padding-2xl`) as the header — without it, body content sits flush left and the leftmost element no longer aligns with the title.
 - **Content area (light surface)** — rendered as `<Page>` children. Generous padding, max width that respects WPDS dimension tokens. Whitespace > density.
-- **`ActionBar` (sticky bottom, when applicable)** — for review / approve / batch actions. Indigo primary CTA right, secondary actions left.
+- **`ActionBar` (pinned to viewport bottom, when applicable)** — for review / approve / batch actions. Indigo primary CTA right, secondary actions left. Lives inside the **detail-shell layout** (`.wa-detail-shell` flex column + `<Page className="wa-detail-shell-page">`) — the shell is `height: 100vh`, the Page grows via `flex: 1; min-height: 0;`, and the ActionBar is the last sibling so it sits at the bottom of the column = bottom of the viewport regardless of content length. Horizontal padding on the bar uses the same `--wpds-dimension-padding-2xl` token as the Page content, so the bar's badge and buttons line up with the title. The 13.1 review-and-approve view is the reference.
 
 ### Queues, not dashboards
 
-WooAgent's primary work surface is a **queue** — table or kanban — not a KPI dashboard. "Today's marketing queue" is the canonical pattern: page heading → optional 1–2 metric strip → list of work items. Operators scan; they don't stare at six tiles of mixed data.
+WooAgent's primary work surface is a **queue** — table or kanban — not a KPI dashboard. "Today's queue" is the canonical pattern: page heading → optional 1–2 metric strip → list of work items. Operators scan; they don't stare at six tiles of mixed data.
+
+The board is **cross-agent** — it holds work staged by every agent in the fleet, not just marketing. Persona-filtered views (`?persona=…`) get per-agent copy; the default board copy stays plural ("Everything your agents have staged for you…"). Don't slip back into marketing-specific phrasing on the default view.
 
 When KPIs are needed (e.g., the review-and-approve summary in 13.1), they go in a flat horizontal strip above the work, not in card grids.
 
@@ -118,7 +124,7 @@ Dark vertical sidebar. WooAgent wordmark at top, nav items below. Persistent acr
 
 ### `ActionBar` (`ui/src/components/ActionBar.tsx`)
 
-Sticky bottom bar on review / approve / batch surfaces. Indigo primary CTA right, secondary actions left. Replaces inline per-row action buttons in batch contexts. The 13.1 review-and-approve view is the reference.
+Bottom bar on review / approve / batch surfaces, pinned to the viewport via the detail-shell layout (see Layout > The frame). Indigo primary CTA right, secondary actions left. Replaces inline per-row action buttons in batch contexts. The 13.1 review-and-approve view is the reference.
 
 ### `Kpi` (`ui/src/components/Kpi.tsx`)
 
@@ -130,7 +136,7 @@ Uses WPDS intent variants only (`high`, `medium`, `low`, `stable`, `informationa
 
 ### `AskAgentDrawer` (`ui/src/components/AskAgentDrawer.tsx`)
 
-Right-side drawer triggered from `TopBar`. Conversational chat with the relevant persona. Streaming is a single steady spinner — no typewriter, no shimmer.
+Right-side drawer triggered from the "Ask agent" button in `PageGlobalActions` (or globally via ⌘K / Ctrl+K). Conversational chat with the relevant persona. Streaming is a single steady spinner — no typewriter, no shimmer.
 
 ### `EditPersonaModal` (`ui/src/components/EditPersonaModal.tsx`)
 
@@ -146,7 +152,9 @@ Centered card on a neutral background, WooAgent wordmark above, sequential `Step
 
 ### `PageGlobalActions` (`ui/src/components/PageGlobalActions.tsx`)
 
-Right-side actions slot shared across every WPDS `<Page>` in WooAgent: the global search input (stub for V1) and the "Ask agent" button. Each screen passes it via Page's `actions` prop so heading + search + Ask agent always sit on a single horizontal band. Replaces the prior standalone `TopBar` component, which has been retired.
+Right-side actions slot shared across every WPDS `<Page>` in WooAgent: an optional global search input (stub for V1) and the "Ask agent" button. Each screen passes it via Page's `actions` prop so heading + search + Ask agent always sit on a single horizontal band. Replaces the prior standalone `TopBar` component, which has been retired.
+
+**Pages that render their own search via DataViews (Agents, Abilities) pass `showSearch={false}`** to drop the redundant top-bar search. Don't carry two search inputs on the same screen — DataViews owns the in-table filter when it's there.
 
 ## Component inventory
 
@@ -158,7 +166,7 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### `@wordpress/ui` — primary surfaces, layout, type, status
 
-- **`Badge`** — status/identity pill. Allowed intents: `high`, `medium`, `low`, `none`, `stable`, `informational`, `draft`. (Used: agent online indicator, status column on the roster, kind pill via `StatusBadge`.)
+- **`Badge`** — status/identity pill. Allowed intents: `high`, `medium`, `low`, `none`, `stable`, `informational`, `draft`. (Used: status column on the agent roster, kind pill via `StatusBadge`, the in-review counter on the sidebar's "Board" item.)
 - **`Card.Root`** / **`Card.Header`** / **`Card.Content`** — bordered surface for grouped content. Wraps form sections (Settings) and proposal panels (IssueDetail).
 - **`Notice.Root`** + **`Notice.Description`** + **`Notice.Actions`** + **`Notice.ActionButton`** + **`Notice.CloseIcon`** — compound notice component (intents: `neutral`, `info`, `warning`, `success`, `error`). The legacy `Notice` from `@wordpress/components` is **not** used; all notices are the compound form.
 - **`Stack`** — default layout primitive (flex with token-based gaps). Reach for this before plain CSS flex.
@@ -166,9 +174,9 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### `@wordpress/components` — gap-fillers (forms, controls, utilities)
 
-- **`Button`** — primary/secondary/tertiary actions and icon-only buttons (`Button icon={…} label="…"`). Use in place of any `<button>`.
+- **`Button`** — primary/secondary/tertiary actions and icon-only buttons (`Button icon={…} label="…"`). Use in place of any `<button>`. **Always pass `__next40pxDefaultSize`** — this opts into the canonical 40px height the rest of the WPDS form controls use; without it Button renders at the legacy ~32px size and looks short next to a default `SearchControl` or `InputControl`. **Pass icons via the `icon` prop directly** (e.g., `icon={comment}`) — don't wrap them in `<Icon icon={comment} size={…} />`. Button's `icon` prop takes the icon definition and handles sizing itself; manually wrapping bypasses Button's icon-size handling.
 - **`Spinner`** — async-loading indicator.
-- **`TextControl`** / **`SearchControl`** / **`SelectControl`** — text input, search input, and select dropdown. Use in place of any `<input>` / `<select>`.
+- **`TextControl`** / **`SearchControl`** / **`SelectControl`** — text input, search input, and select dropdown. Use in place of any `<input>` / `<select>`. **Use the default size** (40px) so they align with `Button` + `__next40pxDefaultSize` on the same row. Don't pass `size="compact"` unless you genuinely want a smaller control — and if you do, the *whole* row needs to be compact, not just one element.
 - **`FormToggle`** — on/off boolean toggle (used inline in the agent roster's "Enabled" column).
 - **`Modal`** — modal dialog (used by `EditPersonaModal`).
 - **`ExternalLink`** — outbound URL with built-in icon and `rel="noopener"`. Use in place of any `<a href>` for external destinations.
@@ -180,7 +188,9 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### `@wordpress/icons`
 
-- Use the named icon exports (e.g., `comment`, `chevronDown`, `chevronUp`, `close`, `plus`, `funnel`, `inbox`, `columns`, `people`, `category`, `box`, `store`, `shield`, `key`, `external`, `rotateRight`, `check`, `moreVertical`). Always render via `<Icon icon={iconName} size={…} />`.
+- Use the named icon exports (e.g., `comment`, `chevronDown`, `chevronUp`, `close`, `plus`, `funnel`, `inbox`, `columns`, `people`, `category`, `box`, `store`, `shield`, `key`, `external`, `rotateRight`, `check`, `moreVertical`).
+- For **standalone icons**: render via `<Icon icon={iconName} size={…} />`.
+- For **Button's `icon` prop**: pass the icon definition directly (`<Button icon={comment}>…</Button>`) — Button handles sizing internally.
 
 ### WooAgent components (`ui/src/components/`)
 
@@ -224,4 +234,16 @@ Before drawing anything custom: check WPDS via the MCP server (`mcp__wordpress-d
 
 ### Sticky action bar for batch actions
 
-Multi-item approval, rejection, or any batch operation goes in `ActionBar` at the bottom of the screen — not in inline per-row buttons. The 13.1 review-and-approve view is the reference.
+Multi-item approval, rejection, or any batch operation goes in `ActionBar` at the bottom of the screen — not in inline per-row buttons. The 13.1 review-and-approve view is the reference. Use the **detail-shell layout** (`.wa-detail-shell` + `<Page className="wa-detail-shell-page">`) so the bar pins to viewport bottom, not page-content bottom.
+
+### Match control heights on the same row
+
+Anything that sits next to a `Button` on a row must share its height. The default WPDS `Button` is the legacy ~32px size; opt every Button into 40px via `__next40pxDefaultSize`, and use the *default* size on `SearchControl`/`InputControl`/`SelectControl` (40px) — not `size="compact"`. If you find yourself overriding control heights with CSS, that's the cue to revisit the row's component choices instead.
+
+### Don't double up on search
+
+If a screen renders DataViews (which carries its own filter input), pass `showSearch={false}` to `<PageGlobalActions>` — two search inputs on the same page is always wrong. The same rule applies to any future in-content search affordance: only one search per screen.
+
+### Page content alignment
+
+Always pass `hasPadding` to `<Page>`. Without it, body content sits flush left while the title sits at `--wpds-dimension-padding-2xl` — your leftmost card / table / form will visually misalign with the heading. The exception is when content is already padded by another container (DataViews, Onboarding's centered card, etc.) — and even there, `hasPadding` is rarely wrong.
