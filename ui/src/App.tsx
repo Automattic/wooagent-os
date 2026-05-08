@@ -3,7 +3,6 @@ import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import { Text } from '@wordpress/ui';
 import OnboardingShell from './onboarding/OnboardingShell';
 import LeftNav from './components/LeftNav';
-import TopBar from './components/TopBar';
 import AskAgentDrawer from './components/AskAgentDrawer';
 import Kanban from './screens/Kanban';
 import IssueDetail from './screens/IssueDetail';
@@ -21,6 +20,11 @@ import {
 import { useIsMobile } from './lib/useMediaQuery';
 
 export default function App() {
+  // Every screen renders its own header via the WPDS <Page> component
+  // (heading + global search + Ask agent on a single row, via the shared
+  // PageGlobalActions helper), so the standalone TopBar component has been
+  // retired. `useLocation` is still used by the inner Shell to auto-close
+  // the mobile drawer on route changes.
   const [connection, setConnection] = useState<Connection | null>(null);
   const [probed, setProbed] = useState(false);
   // Onboarding gate. Tri-state until probed: null = checking, true = ready
@@ -181,7 +185,6 @@ export default function App() {
               </button>
               <Text variant="heading-sm">WooAgent OS</Text>
             </header>
-            <TopBar onAskAgent={() => setAskAgentOpen(true)} />
             <AskAgentDrawer
               isOpen={askAgentOpen}
               onClose={() => setAskAgentOpen(false)}
@@ -191,7 +194,12 @@ export default function App() {
           <Route
             path="/"
             element={
-              <Kanban issues={issues} batches={batches} error={issuesError} />
+              <Kanban
+                issues={issues}
+                batches={batches}
+                error={issuesError}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
             }
           />
           <Route
@@ -200,6 +208,7 @@ export default function App() {
               <IssueDetail
                 connection={connection}
                 onChanged={() => refreshIssues(connection)}
+                onAskAgent={() => setAskAgentOpen(true)}
               />
             }
           />
@@ -209,6 +218,7 @@ export default function App() {
               <BatchReview
                 connection={connection}
                 onChanged={() => refreshIssues(connection)}
+                onAskAgent={() => setAskAgentOpen(true)}
               />
             }
           />
@@ -222,6 +232,7 @@ export default function App() {
                   setIssues(null);
                   setBatches([]);
                 }}
+                onAskAgent={() => setAskAgentOpen(true)}
               />
             }
           />
@@ -229,6 +240,7 @@ export default function App() {
             path="/activity"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Activity"
                 description="Audit log of every agent action with the underlying tool calls, ability versions, and operator approvals. Coming online with the daemon's run history endpoint."
                 status="soon"
@@ -239,6 +251,7 @@ export default function App() {
             path="/abilities"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Abilities"
                 description="Browser for every signed ability the agents can call (WooCommerce, Yoast, WordPress.com, etc.). Tune permissions, see version pins, audit recent calls."
                 status="soon"
@@ -249,17 +262,27 @@ export default function App() {
             path="/my-issues"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="My issues"
                 description="User-generated issues you'd like the agents to take a look at. Coming in V2."
                 status="soon"
               />
             }
           />
-          <Route path="/agents" element={<Agents connection={connection} />} />
+          <Route
+            path="/agents"
+            element={
+              <Agents
+                connection={connection}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
+            }
+          />
           <Route
             path="/runtimes"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Runtimes"
                 description="Daemons, MCP servers, and the LLM endpoints they connect to. Health, latency, model in use."
                 status="soon"
@@ -270,6 +293,7 @@ export default function App() {
             path="/guardrails"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Guardrails"
                 description="Policy enforcement rules — what each agent can do without your sign-off, what always needs review."
                 status="soon"
@@ -280,6 +304,7 @@ export default function App() {
             path="/secrets"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Secrets"
                 description="API keys and tokens used by the abilities. Rotate, scope, and audit access."
                 status="soon"
@@ -291,6 +316,7 @@ export default function App() {
             path="/agents/chief"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Chief of staff"
                 description="Orchestrates the specialist agents, dispatches work, and keeps the queue balanced. Out of scope for phase 1."
               />
@@ -300,6 +326,7 @@ export default function App() {
             path="/agents/pricing"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Pricing agent"
                 description="Watches margins, competitor signals, and sales velocity to propose price moves. Paused for phase 1."
               />
@@ -309,6 +336,7 @@ export default function App() {
             path="/agents/inventory"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Inventory agent"
                 description="Reorder points, supplier nudges, low-stock alerts. Paused for phase 1."
               />
@@ -318,6 +346,7 @@ export default function App() {
             path="/agents/accounting"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Accounting agent"
                 description="Reconciles WooPayments + Stripe + bank, drafts month-end summaries. Paused for phase 1."
               />
@@ -327,6 +356,7 @@ export default function App() {
             path="/agents/reporting"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Reporting agent"
                 description="Weekly digests, anomaly alerts, ad-hoc questions. Paused for phase 1."
               />
@@ -336,6 +366,7 @@ export default function App() {
             path="/agents/sales-support"
             element={
               <Placeholder
+                onAskAgent={() => setAskAgentOpen(true)}
                 area="Sales support agent"
                 description="Drafts customer replies, handles refund triage, escalates edge cases. Paused for phase 1."
               />

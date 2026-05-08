@@ -5,21 +5,24 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
+import { Badge, Notice, Stack, Text } from '@wordpress/ui';
 import {
   FormToggle,
-  Notice,
   SelectControl,
   Spinner,
 } from '@wordpress/components';
+import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
+import { useNavigate } from 'react-router-dom';
 import { api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import EditPersonaModal from '../components/EditPersonaModal';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
   connection: Connection;
+  onAskAgent: () => void;
 }
 
 // Hardcoded V1 metadata per persona — the daemon doesn't surface mandates,
@@ -151,26 +154,20 @@ function displayName(p: Persona): string {
 // === Cells === //
 
 function PersonaCell({ persona }: { persona: Persona }) {
+  // Plain flex div instead of Stack — Stack's gap is set via internal CSS
+  // that resists inline overrides, and we need an exact 10px gap (between
+  // WPDS gap-sm 8px and gap-md 16px). Slug below the name was removed —
+  // the avatar's two-letter monogram already encodes the slug visually.
   return (
-    <Stack direction="row" gap="sm" align="center">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <PersonaAvatar persona={personaKeyFrom(persona.persona)} size="md" />
-      <Stack direction="column" gap="xs">
-        <Text
-          variant="body-sm"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          {displayName(persona)}
-        </Text>
-        <span
-          style={{
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-          }}
-        >
-          {persona.persona}
-        </span>
-      </Stack>
-    </Stack>
+      <Text
+        variant="body-sm"
+        style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+      >
+        {displayName(persona)}
+      </Text>
+    </div>
   );
 }
 
@@ -190,29 +187,30 @@ function ModelCell({ persona }: { persona: Persona }) {
   // daemon snapshot; changes don't persist yet.
   const initial = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
   const [model, setModel] = useState<string>(initial);
+  // Wrapper width forces the cell to ~160px regardless of `table-layout: auto`
+  // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
+  // but auto-layout treats it as a preference; sizing the content itself is
+  // the only reliable lever.
   return (
-    <SelectControl
-      __nextHasNoMarginBottom
-      label="Model"
-      hideLabelFromVision
-      value={model}
-      options={modelOptionsFor(model)}
-      onChange={(next) => setModel(next ?? initial)}
-    />
+    <div style={{ minWidth: 160 }}>
+      <SelectControl
+        __nextHasNoMarginBottom
+        label="Model"
+        hideLabelFromVision
+        value={model}
+        options={modelOptionsFor(model)}
+        onChange={(next) => setModel(next ?? initial)}
+      />
+    </div>
   );
 }
 
 function StatusCell({ persona }: { persona: Persona }) {
   const meta = metaFor(persona.persona);
   if (meta.status === 'running') {
-    return (
-      <span className="wa-status wa-status--running">
-        <span className="wa-status-dot" aria-hidden="true" />
-        running
-      </span>
-    );
+    return <Badge intent="stable">Running</Badge>;
   }
-  return <span className="wa-status wa-status--idle">idle</span>;
+  return <Badge intent="none">Idle</Badge>;
 }
 
 function LastRunCell({ persona }: { persona: Persona }) {
@@ -281,9 +279,23 @@ const DEFAULT_VIEW: View = {
   titleField: 'persona',
   fields: ['mandate', 'model', 'status', 'last_run', 'enabled'],
   sort: { field: 'persona', direction: 'asc' },
+  // Comfortable density gives the breathing-room rhythm shown in the
+  // WPDS Payouts reference: ~64–72px row height, hairline dividers
+  // between rows, vertically-centered cell content. Default ('balanced')
+  // crammed the rows; 'compact' is tighter still.
+  layout: {
+    density: 'comfortable',
+    styles: {
+      // Paired with the same minWidth on the ModelCell content wrapper —
+      // see ModelCell. 160px fits short labels like "GPT-5" and the
+      // recommended Claude variants without dominating the row.
+      model: { width: '160px' },
+    },
+  },
 };
 
-export default function Agents({ connection }: Props) {
+export default function Agents({ connection, onAskAgent }: Props) {
+  const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Persona | null>(null);
@@ -399,11 +411,10 @@ export default function Agents({ connection }: Props) {
     [enabledMap],
   );
 
-  // Row click drives the edit flow via `onClickItem`. The action is also
-  // exposed under the per-row ⋮ menu — no `isPrimary` flag, so DataViews
-  // keeps it in the secondary-actions dropdown rather than rendering it
-  // inline as a text button (which made the Actions column read as a
-  // labelled button instead of an icon menu). `supportsBulk` is omitted
+  // Row click drives the edit flow via `onClickItem`. The actions are also
+  // exposed under the per-row ⋮ menu — no `isPrimary` flag on either, so
+  // DataViews keeps them in the secondary-actions dropdown rather than
+  // rendering them inline as text buttons. `supportsBulk` is omitted
   // everywhere so DataViews does not render a selection column.
   const actions = useMemo<Action<Persona>[]>(
     () => [
@@ -415,8 +426,16 @@ export default function Agents({ connection }: Props) {
           if (p) setEditing(p);
         },
       },
+      {
+        id: 'view-issues',
+        label: 'View issues',
+        callback: (items) => {
+          const p = items[0];
+          if (p) navigate(`/?persona=${encodeURIComponent(p.persona)}`);
+        },
+      },
     ],
-    [],
+    [navigate],
   );
 
   const fullRoster = useMemo(
@@ -429,91 +448,65 @@ export default function Agents({ connection }: Props) {
     [fullRoster, view, fields],
   );
 
-  if (error) {
-    return (
-      <main
-        style={{
-          padding:
-            'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
-        }}
-      >
-        <Notice
-          status="error"
-          isDismissible={false}
-          actions={[
-            { label: 'Retry', onClick: handleRetry, variant: 'primary' },
-          ]}
-        >
-          Hmm, couldn't load your agents right now. ({error})
-        </Notice>
-      </main>
-    );
-  }
-  if (personas === null) {
-    return (
-      <main
-        style={{
-          padding:
-            'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
-        }}
-      >
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Getting your agents ready…</Text>
-        </Stack>
-      </main>
-    );
-  }
-
   const runningCount = fullRoster.filter(
     (p) => metaFor(p.persona).status === 'running',
   ).length;
 
+  // Subtitle stays usable across error/loading/content states. When personas
+  // are null we still display the canonical fleet size (7); the running count
+  // only shows once the daemon snapshot loads.
+  const subTitle =
+    personas === null
+      ? 'Fleet roster · 7 personas'
+      : `Fleet roster · ${fullRoster.length} personas · ${runningCount} currently running`;
+
   return (
-    <main
-      style={{
-        maxWidth: 1300,
-        margin: '0 auto',
-        padding:
-          'var(--wpds-dimension-padding-2xl) var(--wa-page-pad-x)',
-      }}
+    <Page
+      title="Agents"
+      subTitle={subTitle}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
     >
-      <Stack
-        direction="column"
-        gap="xs"
-        style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}
-      >
-        <Text variant="heading-2xl" render={<h1 />}>
-          Agents
-        </Text>
-        <span className="wa-eyebrow">
-          Fleet roster · {fullRoster.length} personas · {runningCount}{' '}
-          currently running
-        </span>
-      </Stack>
+      {error ? (
+        <Notice.Root intent="error">
+          <Notice.Description>
+            Hmm, couldn't load your agents right now. ({error})
+          </Notice.Description>
+          <Notice.Actions>
+            <Notice.ActionButton onClick={handleRetry}>
+              Retry
+            </Notice.ActionButton>
+          </Notice.Actions>
+        </Notice.Root>
+      ) : personas === null ? (
+        <Stack direction="row" gap="sm" align="center">
+          <Spinner />{' '}
+          <Text variant="body-sm">Getting your agents ready…</Text>
+        </Stack>
+      ) : (
+        <>
+          <DataViews<Persona>
+            view={view}
+            onChangeView={setView}
+            fields={fields}
+            actions={actions}
+            data={shaped}
+            getItemId={(p) => p.persona}
+            paginationInfo={paginationInfo}
+            defaultLayouts={{ table: {} }}
+            onClickItem={(p) => setEditing(p)}
+            empty={<EmptyState />}
+          />
 
-      <Card.Root>
-        <DataViews<Persona>
-          view={view}
-          onChangeView={setView}
-          fields={fields}
-          actions={actions}
-          data={shaped}
-          getItemId={(p) => p.persona}
-          paginationInfo={paginationInfo}
-          defaultLayouts={{ table: {} }}
-          onClickItem={(p) => setEditing(p)}
-          empty={<EmptyState />}
-        />
-      </Card.Root>
-
-      {editing && (
-        <EditPersonaModal
-          persona={editing}
-          mandate={metaFor(editing.persona).mandate}
-          systemPrompt={metaFor(editing.persona).systemPrompt}
-          onClose={() => setEditing(null)}
-        />
+          {editing && (
+            <EditPersonaModal
+              persona={editing}
+              mandate={metaFor(editing.persona).mandate}
+              systemPrompt={metaFor(editing.persona).systemPrompt}
+              onClose={() => setEditing(null)}
+            />
+          )}
+        </>
       )}
-    </main>
+    </Page>
   );
 }

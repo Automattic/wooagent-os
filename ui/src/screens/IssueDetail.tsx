@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, Stack, Text } from '@wordpress/ui';
-import { Notice, Spinner, Button } from '@wordpress/components';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Spinner, Button } from '@wordpress/components';
 import { Icon, rotateRight, check, external } from '@wordpress/icons';
+import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
   api,
@@ -23,10 +24,12 @@ import {
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import Kpi from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
   connection: Connection;
   onChanged?: () => void;
+  onAskAgent: () => void;
 }
 
 function relativeTime(iso: string): string {
@@ -75,7 +78,7 @@ function formatDelta(prev: number, next: number, currency: string): string {
   return `${sign}${formatPrice(Math.abs(diff), currency)}`;
 }
 
-export default function IssueDetail({ connection, onChanged }: Props) {
+export default function IssueDetail({ connection, onChanged, onAskAgent }: Props) {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
   const [data, setData] = useState<IssueDetailPayload | null>(null);
@@ -163,20 +166,28 @@ export default function IssueDetail({ connection, onChanged }: Props) {
 
   if (error) {
     return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
-        <Notice status="error" isDismissible={false}>
-          Failed to load issue: {error} <Link to="/">Back to board</Link>
-        </Notice>
-      </main>
+      <Page
+        title="Issue review"
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      >
+        <Notice.Root intent="error">
+          <Notice.Description>
+            Failed to load issue: {error} <Link to="/">Back to board</Link>
+          </Notice.Description>
+        </Notice.Root>
+      </Page>
     );
   }
   if (!data) {
     return (
-      <main style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}>
+      <Page
+        title="Issue review"
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      >
         <Stack direction="row" gap="sm" align="center">
           <Spinner /> <Text variant="body-sm">Loading issue…</Text>
         </Stack>
-      </main>
+      </Page>
     );
   }
 
@@ -206,6 +217,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
         onCancel={() => nav('/')}
         onUndo={() => nav('/')}
         onView={() => nav('/')}
+        onAskAgent={onAskAgent}
       />
     );
   }
@@ -228,6 +240,7 @@ export default function IssueDetail({ connection, onChanged }: Props) {
         onCancel={() => nav('/')}
         onUndo={() => nav('/')}
         onView={() => nav('/')}
+        onAskAgent={onAskAgent}
       />
     );
   }
@@ -254,14 +267,9 @@ export default function IssueDetail({ connection, onChanged }: Props) {
         minHeight: '100vh',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          maxWidth: 1100,
-          width: '100%',
-          margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
-        }}
+      <Page
+        title="Issue review"
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       >
         {/* Breadcrumb */}
         <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
@@ -430,9 +438,11 @@ export default function IssueDetail({ connection, onChanged }: Props) {
             </Stack>
 
             {!proposal ? (
-              <Notice status="info" isDismissible={false}>
-                The agent hasn't produced a proposal for this issue yet.
-              </Notice>
+              <Notice.Root intent="info">
+                <Notice.Description>
+                  The agent hasn't produced a proposal for this issue yet.
+                </Notice.Description>
+              </Notice.Root>
             ) : variants ? (
               variants
                 .filter((v) => !isDone || v.id === (approvedVariant ?? selectedVariant))
@@ -607,16 +617,15 @@ export default function IssueDetail({ connection, onChanged }: Props) {
             )}
 
             {actionMsg && (
-              <Notice
-                status={actionMsg.kind === 'success' ? 'success' : 'error'}
-                isDismissible={false}
+              <Notice.Root
+                intent={actionMsg.kind === 'success' ? 'success' : 'error'}
               >
-                {actionMsg.text}
-              </Notice>
+                <Notice.Description>{actionMsg.text}</Notice.Description>
+              </Notice.Root>
             )}
           </div>
         </div>
-      </main>
+      </Page>
 
       {isDone ? (
         <ActionBar
@@ -660,9 +669,11 @@ interface PriceViewProps {
   onCancel: () => void;
   onUndo: () => void;
   onView: () => void;
+  onAskAgent: () => void;
 }
 
 function PriceIssueView(props: PriceViewProps) {
+  const { onAskAgent } = props;
   const { issue, proposal, rationale, kind, personaKey, personaLabel } = props;
   const productBound = typeof proposal.productId === 'number';
   const scope = proposal.productName ?? proposal.productSku ?? '—';
@@ -703,14 +714,9 @@ function PriceIssueView(props: PriceViewProps) {
         minHeight: '100vh',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          maxWidth: 1100,
-          width: '100%',
-          margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
-        }}
+      <Page
+        title="Issue review"
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       >
         {/* Breadcrumb */}
         <Stack
@@ -943,10 +949,12 @@ function PriceIssueView(props: PriceViewProps) {
               </Card.Header>
               <Card.Content>
                 {proposal.sources.length === 0 ? (
-                  <Notice status="warning" isDismissible={false}>
-                    Proposal has no cited sources. The skill requires at least 3
-                    — this should not happen and indicates a daemon-side bug.
-                  </Notice>
+                  <Notice.Root intent="warning">
+                    <Notice.Description>
+                      Proposal has no cited sources. The skill requires at least 3
+                      — this should not happen and indicates a daemon-side bug.
+                    </Notice.Description>
+                  </Notice.Root>
                 ) : (
                   <Stack direction="column" gap="sm">
                     {proposal.sources.map((s, idx) => (
@@ -963,16 +971,15 @@ function PriceIssueView(props: PriceViewProps) {
             </Card.Root>
 
             {props.actionMsg && (
-              <Notice
-                status={props.actionMsg.kind === 'success' ? 'success' : 'error'}
-                isDismissible={false}
+              <Notice.Root
+                intent={props.actionMsg.kind === 'success' ? 'success' : 'error'}
               >
-                {props.actionMsg.text}
-              </Notice>
+                <Notice.Description>{props.actionMsg.text}</Notice.Description>
+              </Notice.Root>
             )}
           </div>
         </div>
-      </main>
+      </Page>
 
       {props.isDone ? (
         <ActionBar
@@ -1223,9 +1230,11 @@ interface MessageViewProps {
   onCancel: () => void;
   onUndo: () => void;
   onView: () => void;
+  onAskAgent: () => void;
 }
 
 function MessageIssueView(props: MessageViewProps) {
+  const { onAskAgent } = props;
   const { issue, proposal, kind, personaKey, personaLabel } = props;
   const isInternal = proposal.noteType === 'internal';
   const customerName = proposal.customerName ?? 'the customer';
@@ -1251,14 +1260,9 @@ function MessageIssueView(props: MessageViewProps) {
         minHeight: '100vh',
       }}
     >
-      <main
-        style={{
-          flex: 1,
-          maxWidth: 1100,
-          width: '100%',
-          margin: '0 auto',
-          padding: 'var(--wpds-dimension-padding-xl) var(--wa-page-pad-x)',
-        }}
+      <Page
+        title="Issue review"
+        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       >
         {/* Breadcrumb */}
         <Stack
@@ -1495,16 +1499,15 @@ function MessageIssueView(props: MessageViewProps) {
             </Card.Root>
 
             {props.actionMsg && (
-              <Notice
-                status={props.actionMsg.kind === 'success' ? 'success' : 'error'}
-                isDismissible={false}
+              <Notice.Root
+                intent={props.actionMsg.kind === 'success' ? 'success' : 'error'}
               >
-                {props.actionMsg.text}
-              </Notice>
+                <Notice.Description>{props.actionMsg.text}</Notice.Description>
+              </Notice.Root>
             )}
           </div>
         </div>
-      </main>
+      </Page>
 
       {props.isDone ? (
         <ActionBar

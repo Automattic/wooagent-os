@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
-import { Button, Notice, Spinner } from '@wordpress/components';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Button, Spinner } from '@wordpress/components';
 import { Icon, plus } from '@wordpress/icons';
+import { Page } from '@wordpress/admin-ui';
 import {
   api,
   clearConnection,
   type Connection,
   type ModelProvider,
 } from '../api/client';
+import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
   connection: Connection;
   onDisconnect(): void;
+  onAskAgent: () => void;
 }
 
 const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
@@ -39,7 +42,7 @@ function relativeTime(iso?: string): string {
   return `${days}d ago`;
 }
 
-export default function Settings({ connection, onDisconnect }: Props) {
+export default function Settings({ connection, onDisconnect, onAskAgent }: Props) {
   const [providers, setProviders] = useState<ModelProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,10 +68,12 @@ export default function Settings({ connection, onDisconnect }: Props) {
   };
 
   return (
-    <div className="wa-settings">
+    <Page
+      title="Settings"
+      subTitle="Model providers and daemon connection."
+      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+    >
       <Stack direction="column" gap="xl">
-        <Text variant="heading-lg">Settings</Text>
-
         {/* Models — multiple-provider management */}
         <Card.Root>
           <Card.Header>
@@ -101,7 +106,9 @@ export default function Settings({ connection, onDisconnect }: Props) {
             )}
 
             {error && (
-              <Notice status="error" isDismissible={false}>{error}</Notice>
+              <Notice.Root intent="error">
+                <Notice.Description>{error}</Notice.Description>
+              </Notice.Root>
             )}
 
             {providers && providers.length === 0 && !error && (
@@ -189,11 +196,13 @@ export default function Settings({ connection, onDisconnect }: Props) {
           </Card.Content>
         </Card.Root>
 
-        <Notice status="info" isDismissible={false}>
-          Guardrails, redaction rules, and per-persona opt-in settings land
-          in later phases.
-        </Notice>
+        <Notice.Root intent="info">
+          <Notice.Description>
+            Guardrails, redaction rules, and per-persona opt-in settings land
+            in later phases.
+          </Notice.Description>
+        </Notice.Root>
       </Stack>
-    </div>
+    </Page>
   );
 }

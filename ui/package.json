@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@wordpress/admin-ui": "^2.0.0",
     "@wordpress/components": "^28.0.0",
     "@wordpress/dataviews": "^14.2.0",
     "@wordpress/i18n": "^5.0.0",
