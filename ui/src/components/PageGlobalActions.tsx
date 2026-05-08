@@ -13,11 +13,18 @@ interface Props {
 // TopBar component, which has been removed.
 export default function PageGlobalActions({ onAskAgent }: Props) {
   const [query, setQuery] = useState('');
+  // Wrap search + Ask agent in a single flex group so Page's actions slot
+  // treats them as one item (sitting together on the right) rather than
+  // splitting them across the available width with space-between.
+  // `size="compact"` matches the @wordpress/dataviews in-table search; we
+  // intentionally leave SearchControl with its WPDS default styling rather
+  // than overriding internals.
   return (
-    <>
-      <div style={{ width: 480 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 280 }}>
         <SearchControl
           __nextHasNoMarginBottom
+          size="compact"
           value={query}
           onChange={setQuery}
           label="Search"
@@ -32,6 +39,6 @@ export default function PageGlobalActions({ onAskAgent }: Props) {
       >
         Ask agent
       </Button>
-    </>
+    </div>
   );
 }
