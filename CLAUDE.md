@@ -13,6 +13,8 @@ This file is loaded into every Claude Code session in this repo. It captures con
 
 ## UI stack — WordPress Design System (WPDS)
 
+**Before doing any UI work in `ui/`, read [`ui/DESIGN.md`](./ui/DESIGN.md) first.** It captures the canonical components in use across the app (the **Component inventory** section), the layout frame (sidebar + `Page` header + content), the persona-color exception, and the Do's/Don'ts that go beyond CLAUDE.md. Reach for one of the listed components before writing custom UI. If you find yourself adding a new dependency or a new bespoke component, that's the cue to escalate in #design-systems and update DESIGN.md alongside the change.
+
 `ui/` uses the WordPress Design System **exclusively**. **Only WPDS components.** No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults, no custom-styled HTML elements (`<button>`, `<input>`, `<select>`, badges, dropdowns) without a WPDS wrapper. If WPDS doesn't have what you need, escalate in #design-systems first.
 
 **If you must draw something custom, you MUST add a `// CUSTOM:` code comment immediately above it explaining (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md / a P2 / an issue).** Reviewers should reject custom UI that isn't called out.
