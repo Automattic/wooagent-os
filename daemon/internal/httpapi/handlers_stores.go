@@ -388,6 +388,22 @@ func (s *Server) pollPairing(ctx context.Context, id, storeURL, code string) {
 			 WHERE id=? AND status='pairing'`,
 			now, tokenRef, deviceName, now, id,
 		)
+		// Kick off ability discovery in the background so the operator
+		// arrives at the Abilities screen with a populated cache. Failure
+		// here is non-fatal — pairing is already saved; the periodic
+		// sweep will retry. Use a detached context so an HTTP-request
+		// cancellation (the operator closing the onboarding tab) doesn't
+		// abort discovery mid-flight.
+		if s.abilities != nil {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				if _, err := s.abilities.RunForStore(ctx, id); err != nil {
+					// Best-effort. Surfacing failures here is the runner's job.
+					_ = err
+				}
+			}()
+		}
 
 	case pairing.StatusRejected:
 		_, _ = s.store.DB.ExecContext(ctx,
