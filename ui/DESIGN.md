@@ -79,8 +79,8 @@ Two WooAgent-specific notes:
 Every WooAgent screen lives in the same frame:
 
 - **`LeftNav` (dark surface)** — vertical sidebar, persistent across screens. WooAgent wordmark + nav. Uses WPDS dark surface tokens.
-- **`TopBar` (light, thin)** — page-aware header. Breadcrumbs left, search center, "Ask Agent" trigger right.
-- **Content area (light surface)** — generous padding, max width that respects WPDS dimension tokens. Whitespace > density.
+- **`Page` (light, thin)** — page-aware header from `@wordpress/admin-ui`. Title + subtitle on the left, `actions` slot on the right. Every screen wraps its content in `<Page>` and passes the shared `<PageGlobalActions>` (global search + Ask agent) into its `actions` slot, so the heading + search + Ask agent always sit on a single horizontal band.
+- **Content area (light surface)** — rendered as `<Page>` children. Generous padding, max width that respects WPDS dimension tokens. Whitespace > density.
 - **`ActionBar` (sticky bottom, when applicable)** — for review / approve / batch actions. Indigo primary CTA right, secondary actions left.
 
 ### Queues, not dashboards
