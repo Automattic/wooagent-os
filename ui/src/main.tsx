@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 
 import '@wordpress/components/build-style/style.css';
+import '@wordpress/dataviews/build-style/style.css';
 import './styles/app.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

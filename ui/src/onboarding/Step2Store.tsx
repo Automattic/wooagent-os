@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Card, Stack, Text } from '@wordpress/ui';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
   ExternalLink,
-  Notice,
   Spinner,
   TextControl,
 } from '@wordpress/components';
@@ -242,9 +241,9 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
             )}
 
             {error && (
-              <Notice status="error" isDismissible={false}>
-                {error}
-              </Notice>
+              <Notice.Root intent="error">
+                <Notice.Description>{error}</Notice.Description>
+              </Notice.Root>
             )}
 
             <Stack
@@ -370,9 +369,9 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
           </Stack>
 
           {error && (
-            <Notice status="error" isDismissible={false}>
-              {error}
-            </Notice>
+            <Notice.Root intent="error">
+              <Notice.Description>{error}</Notice.Description>
+            </Notice.Root>
           )}
 
           <TextControl

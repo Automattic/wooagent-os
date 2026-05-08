@@ -189,7 +189,7 @@ function NavGroup({ label, items, active, onItemClick }: NavGroupProps) {
 
         const inner = (
           <>
-            <Icon icon={item.icon as never} size={18} />
+            <Icon icon={item.icon as never} size={24} />
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {item.label}
             </span>
