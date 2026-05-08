@@ -227,6 +227,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
       <Page
         title="Batch review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Notice.Root intent="error">
           <Notice.Description>
@@ -241,6 +242,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
       <Page
         title="Batch review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Stack direction="row" gap="sm" align="center">
           <Spinner /> <Text variant="body-sm">Loading batch…</Text>
@@ -256,10 +258,12 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   const pendingCount = batch.pending;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="wa-detail-shell">
       <Page
         title="Batch review"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
+        className="wa-detail-shell-page"
       >
         {/* Breadcrumb */}
         <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>

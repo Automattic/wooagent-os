@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { type Batch, type Issue } from '../api/client';
@@ -159,9 +159,10 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
 
   const title = personaFilter
     ? `${personaDisplayName(personaFilter)} queue`
-    : "Today's marketing queue";
-  const subTitle =
-    'What the marketing agent has staged for you. Approve in review, adjust the queue, or let it work. Every shipped change is reversible.';
+    : "Today's queue";
+  const subTitle = personaFilter
+    ? `What the ${personaDisplayName(personaFilter).toLowerCase()} agent has staged for you. Approve in review, adjust the queue, or let it work.`
+    : 'Everything your agents have staged for you. Approve in review, adjust the queue, or let them work.';
 
   if (error) {
     return (
@@ -169,6 +170,7 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
         title={title}
         subTitle={subTitle}
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Notice.Root intent="error">
           <Notice.Description>
@@ -184,6 +186,7 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
         title={title}
         subTitle={subTitle}
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        hasPadding
       >
         <Stack direction="row" gap="sm" align="center">
           <Spinner /> <Text variant="body-sm">Loading issues…</Text>
@@ -224,8 +227,8 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
     <Page
       title={title}
       subTitle={subTitle}
-      badges={<Badge intent="stable">Agent online</Badge>}
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      hasPadding
     >
       <div
         style={{
