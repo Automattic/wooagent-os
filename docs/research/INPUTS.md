@@ -28,7 +28,7 @@ Motivated users will cross these; flag them as onboarding cost, not as filters.
 What WooAgent does TODAY (not roadmap):
 
 - Generates **draft improvements to product descriptions** for merchant review (Marketing persona).
-- Suggests **individual pricing updates** based on competitive context (Pricing persona).
+- Suggests **pricing updates** for merchant review — individual SKUs, **bulk discount sweeps**, and **pricing strategy advice** (e.g., margin/competitor-informed recommendations) (Pricing persona).
 - **Drafts customer-facing sales support messages** for the merchant to review, edit, and send (Sales Support persona).
 - All operations that write to the store require **explicit merchant approval** before they execute.
 
@@ -40,11 +40,11 @@ Realistic first-week "aha" moment:
 What it doesn't do yet:
 
 - **Marketing agent** today covers product descriptions only — campaigns and email are not shipped yet.
-- **Pricing agent** today covers individual-product recommendations only — bulk pricing operations (e.g., discount sweeps) are not shipped yet.
+- **Pricing agent** does not cover **B2B / wholesale tiered pricing rules** or **dynamic/automated pricing without merchant approval** (the approval-gate principle still applies to all pricing actions).
 - **Inventory** agent (stock, reorder, supplier) — under construction.
 - **Reporting** agent (analytics, dashboards) — under construction.
 - **Accounting** and **Chief of Staff** agents — under construction.
-- Of the seven personas in the agent grid, only **Marketing / Pricing / Sales Support** ship working capabilities today, and all three are partial.
+- Of the seven personas in the agent grid, only **Marketing / Pricing / Sales Support** ship working capabilities today. Marketing and Sales Support are partial; Pricing covers individual + bulk + strategy advice in v1 but excludes B2B-tiered and dynamic pricing.
 
 ## The seven personas (jobs WooAgent represents)
 
