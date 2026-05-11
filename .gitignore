@@ -57,6 +57,9 @@ yarn-error.log*
 /uxtesting.md
 /wooagent-design-md-post-2026-05-07.md
 
+# Personal brainstorming/spec workspace (superpowers workflow)
+/docs/superpowers/
+
 # Internal-only planning + pitch docs (kept local, not in repo)
 /WooAgent_plan.md
 /WooAgent_Pitch.md
