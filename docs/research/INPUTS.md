@@ -25,7 +25,26 @@ Motivated users will cross these; flag them as onboarding cost, not as filters.
 
 ## Value prop, current state
 
-*To be filled in with Elizabeth in Task 5. What WooAgent does TODAY — not roadmap.*
+What WooAgent does TODAY (not roadmap):
+
+- Generates **draft improvements to product descriptions** for merchant review (Marketing persona).
+- Suggests **individual pricing updates** based on competitive context (Pricing persona).
+- **Drafts customer-facing sales support messages** for the merchant to review, edit, and send (Sales Support persona).
+- All operations that write to the store require **explicit merchant approval** before they execute.
+
+Realistic first-week "aha" moment:
+
+- A drafted message or product description the merchant ships, saving the hour they'd have spent writing it themselves.
+- A pricing change recommendation they hadn't thought of and decide to apply.
+
+What it doesn't do yet:
+
+- **Marketing agent** today covers product descriptions only — campaigns and email are not shipped yet.
+- **Pricing agent** today covers individual-product recommendations only — bulk pricing operations (e.g., discount sweeps) are not shipped yet.
+- **Inventory** agent (stock, reorder, supplier) — under construction.
+- **Reporting** agent (analytics, dashboards) — under construction.
+- **Accounting** and **Chief of Staff** agents — under construction.
+- Of the seven personas in the agent grid, only **Marketing / Pricing / Sales Support** ship working capabilities today, and all three are partial.
 
 ## The seven personas (jobs WooAgent represents)
 
