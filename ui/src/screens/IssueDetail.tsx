@@ -482,7 +482,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   fontWeight: 700,
-                                  fontSize: 12,
+                                  fontSize: 'var(--wpds-typography-font-size-sm)',
                                   flex: 'none',
                                   background: isSelected
                                     ? 'var(--wpds-color-bg-interactive-brand-strong)'
@@ -577,7 +577,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                     <Stack direction="row" gap="sm" align="center">
                       <span
                         style={{
-                          fontSize: 12,
+                          fontSize: 'var(--wpds-typography-font-size-sm)',
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 'var(--wpds-border-radius-sm)',

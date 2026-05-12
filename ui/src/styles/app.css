@@ -182,7 +182,7 @@ a {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--wpds-dimension-gap-xs);
-  font-size: 11px;
+  font-size: var(--wpds-typography-font-size-xs);
   color: var(--wpds-color-fg-content-neutral-weak);
 }
 .wa-card-meta > * {
@@ -381,6 +381,12 @@ a {
   letter-spacing: 0;
   user-select: none;
 }
+/* CUSTOM: persona-avatar size variants use a pixel-scaled font-size that
+   tracks the container height (xs/sm/md = 14/18/24 px). (a) WPDS body
+   type tokens (xs=11px is the smallest) don't go small enough for the
+   xs/sm avatars without breaking the monogram-fits-the-circle proportion.
+   (b) Inline px tied to height/width. (c) Follow-up: revisit if WPDS
+   adds a 2xs body size or an avatar-monogram component. */
 .wa-persona-avatar--xs { height: 14px; width: 14px; font-size: 7px; }
 .wa-persona-avatar--sm { height: 18px; width: 18px; font-size: 8px; }
 .wa-persona-avatar--md { height: 24px; width: 24px; font-size: 10px; }
@@ -494,7 +500,7 @@ a {
   border-radius: var(--wpds-border-radius-sm);
   background: var(--wpds-color-bg-surface-neutral-weak);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-  font-size: 10px;
+  font-size: var(--wpds-typography-font-size-xs);
   color: var(--wpds-color-fg-content-neutral);
 }
 
@@ -859,7 +865,7 @@ a {
   align-items: center;
   justify-content: center;
   font-weight: var(--wpds-typography-font-weight-medium);
-  font-size: 11px;
+  font-size: var(--wpds-typography-font-size-xs);
   flex: none;
 }
 .wa-batch-col__scores {
@@ -993,7 +999,7 @@ a {
   align-items: center;
   padding: 2px var(--wpds-dimension-padding-sm);
   border-radius: var(--wpds-border-radius-sm);
-  font-size: 10px;
+  font-size: var(--wpds-typography-font-size-xs);
   font-weight: var(--wpds-typography-font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1092,7 +1098,7 @@ a {
   width: 24px;
   border-radius: 50%;
   font-family: var(--wpds-typography-font-family-body);
-  font-size: 11px;
+  font-size: var(--wpds-typography-font-size-xs);
   line-height: 1;
   font-weight: var(--wpds-typography-font-weight-medium);
   background: transparent;
@@ -1147,6 +1153,11 @@ a {
 
 /* Big, copy-on-click pairing code block. Mono, oversize, with a subtle
    button affordance so the click target reads as interactive. */
+/* CUSTOM: oversize pairing-code display at 28px. (a) WPDS body type
+   tops out at xl=20px / 2xl=32px — neither matches the deliberate
+   in-between size designed for one-line legibility of a short pairing
+   code. (b) Inline 28px. (c) Follow-up: revisit if WPDS adds a heading
+   ramp suited to single-glyph oversize affordances. */
 .wa-onboarding-pairing-code {
   font-size: 28px;
   letter-spacing: 0.18em;
@@ -1229,7 +1240,7 @@ a {
   align-items: center;
   padding: 1px var(--wpds-dimension-padding-xs);
   border-radius: var(--wpds-border-radius-sm);
-  font-size: 10px;
+  font-size: var(--wpds-typography-font-size-xs);
   letter-spacing: 0.04em;
   font-weight: var(--wpds-typography-font-weight-medium);
 }

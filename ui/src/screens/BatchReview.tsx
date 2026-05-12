@@ -676,7 +676,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 700,
-                fontSize: 12,
+                fontSize: 'var(--wpds-typography-font-size-sm)',
                 background: 'var(--wpds-color-bg-interactive-brand-strong)',
                 color: 'var(--wpds-color-fg-interactive-brand-strong)',
                 flex: 'none',
