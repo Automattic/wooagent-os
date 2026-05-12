@@ -326,6 +326,7 @@ function renderIssueCard(
         ? 'wa-card-meta--success'
         : '';
   return (
+    // CUSTOM: whole-card issue click target. (a) WPDS has no clickable-card component. (b) <button> wraps <Card.Root> with reset chrome (transparent bg, no border) so Card.Root owns visuals. (c) Follow-up: introduce a CardLink composite if the pattern repeats outside the kanban.
     <button
       key={`issue-${issue.id}`}
       type="button"
@@ -400,6 +401,7 @@ function renderBatchCard(batch: Batch, col: ColumnKey, onClick: () => void) {
         : '';
   const meta = batchMetaLabel(batch, kind);
   return (
+    // CUSTOM: whole-card batch click target. Same pattern as the issue card-as-button above — (a) no WPDS clickable-card, (b) reset chrome wraps <Card.Root>, (c) see CardLink follow-up note above.
     <button
       key={`batch-${batch.id}`}
       type="button"

@@ -174,6 +174,7 @@ export default function App() {
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <header className="wa-mobile-bar">
+              {/* CUSTOM: mobile sidebar-toggle icon button. (a) WPDS has no compact mobile-chrome icon-button matching .wa-icon-btn. (b) Unicode glyph child + shared .wa-icon-btn styles. (c) Follow-up: migrate to <Button icon={menu}> when .wa-icon-btn retires. */}
               <button
                 type="button"
                 className="wa-icon-btn"

@@ -239,11 +239,12 @@ function InspectorModal({
         )}
 
         <Stack direction="row" gap="sm" justify="flex-end">
-          <Button variant="tertiary" onClick={onClose} disabled={busy}>
+          <Button variant="tertiary" __next40pxDefaultSize onClick={onClose} disabled={busy}>
             Close
           </Button>
           {trustable && (
             <Button
+              __next40pxDefaultSize
               variant="primary"
               onClick={() => onTrust(ability.id)}
               isBusy={busy}

@@ -176,10 +176,10 @@ function DoneBar(props: DoneProps) {
           </Stack>
         </div>
         <div className="wa-action-bar-actions">
-          <Button variant="tertiary" onClick={props.onUndo}>
+          <Button variant="tertiary" __next40pxDefaultSize onClick={props.onUndo}>
             Undo
           </Button>
-          <Button variant="primary" onClick={props.onView}>
+          <Button variant="primary" __next40pxDefaultSize onClick={props.onView}>
             View in WooCommerce
           </Button>
         </div>
@@ -296,6 +296,7 @@ function ReviewBar(props: ReviewProps) {
             Reversible · always
           </span>
           <Button
+            __next40pxDefaultSize
             variant="tertiary"
             isDestructive
             onClick={props.onReject}
@@ -307,10 +308,11 @@ function ReviewBar(props: ReviewProps) {
                 ? 'Reject'
                 : 'Reject all'}
           </Button>
-          <Button variant="tertiary" onClick={props.onCancel}>
+          <Button variant="tertiary" __next40pxDefaultSize onClick={props.onCancel}>
             Cancel
           </Button>
           <Button
+            __next40pxDefaultSize
             variant="primary"
             onClick={props.onApprove}
             disabled={props.disabled || props.busy !== null}

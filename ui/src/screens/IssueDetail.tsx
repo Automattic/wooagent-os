@@ -427,6 +427,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 </Text>
               </Stack>
               <Button
+                __next40pxDefaultSize
                 variant="tertiary"
                 icon={<Icon icon={rotateRight} size={16} />}
                 disabled
@@ -446,6 +447,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 .filter((v) => !isDone || v.id === (approvedVariant ?? selectedVariant))
                 .map((v) => {
                   const isSelected = selectedVariant === v.id;
+                  // CUSTOM: whole-card variant selector. Same pattern as Kanban card-as-button — (a) no WPDS clickable-card / radio-card component, (b) reset chrome wraps <Card.Root>, (c) Follow-up: see CardLink composite note in Kanban.tsx.
                   return (
                     <button
                       key={v.id}

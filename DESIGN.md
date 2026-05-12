@@ -31,6 +31,67 @@ This file extends the WordPress Design System (WPDS) with the decisions specific
 
 The reference designs are the 13.0 / 13.1 / 13.2 pages in the WooAgent Figma file.
 
+## Working on UI
+
+A behavioral lens for customer-facing UI work in `ui/`. Apply when the change touches a screen, page, modal, component, copy string, or operator-visible flow. Skip it for daemon-side work, build tooling, or purely internal refactors.
+
+**Execute it as a sequence**, not as background reference: state assumptions, walk the pattern-matching tier order below, ask the smallest-version question, run the verify-before-done checklist, and surface designer-review triggers by name. Other workflows (brainstorming clarifying questions, mockup tools, visual companions) come *after* the lens, not instead of it. If you're explicitly asked to skip the lens, say so out loud before proceeding.
+
+### State your assumptions before building
+
+Before writing UI code, surface what you're assuming and tag each as **confident**, **assuming**, or **unclear**:
+
+- **Visual treatment** — placement, hierarchy, which WPDS component, which intent variant.
+- **Scope** — what's in this change, what's deliberately not.
+- **Edge cases** — empty, loading, error, over-full; narrow widths (≥320px).
+- **Adjacent impact** — what else on the page or in the flow this touches.
+
+Ask the user to confirm anything tagged **assuming** or **unclear** before writing code. This catches the implicit choices a designer would have flagged in review, at a much lower cost.
+
+### Pattern matching: where to look first
+
+When choosing a component, layout, or interaction for a customer-facing change, look in this order — don't skip a tier:
+
+1. **`@wordpress/admin-ui`** — page-level shell. `Page` is the only component currently used; every screen wraps content in `<Page title subTitle actions hasPadding>`.
+2. **`@wordpress/ui`** — primary surfaces, layout, typography, status. `Card.Root` / `Stack` / `Text` / `Badge` / `Notice.Root` (compound). The default first stop for new UI.
+3. **`@wordpress/components`** — gap-fillers (`Button`, `Modal`, `Spinner`, `TextControl` / `SearchControl` / `SelectControl`, `FormToggle`, `ExternalLink`). Always verify the component's **Status** in Storybook is `stable` — query the WPDS MCP server (`mcp__wordpress-design-system__get_component_details`) if uncertain. Pass `__next40pxDefaultSize` to every `Button`.
+4. **`@wordpress/dataviews`** — when the shape is tabular. The agent roster and abilities screens are the references.
+5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
+6. **Bespoke with a `// CUSTOM:` comment** — last resort. The comment must explain (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers reject custom UI that isn't called out.
+
+Query the WPDS MCP (`mcp__wordpress-design-system__get_components`, `…__get_design_tokens`) before guessing whether a tier 2 / 3 component or token exists. The principle: **don't shout against the WPDS** — a screen built from bespoke divs inside a WPDS app reads as the one wrong note on the page.
+
+### Smallest version
+
+Before adding a new field, option, tab, modal, or screen, ask: **what is the smallest change that solves the problem?** New surface area has a cost — every option dilutes the queue, every modal slows the flow, every tab forces a navigation decision. The agent personas earn their separation; other UI generally doesn't. A new filter is cheaper than a new queue. A reused empty state is cheaper than a new one. A WPDS intent variant is cheaper than a new `// CUSTOM:` badge.
+
+### Verify before claiming done
+
+When wrapping up a customer-facing change, verify each item below or confirm it with the user. Flag anything missing.
+
+- **Hierarchy** — primary action visually dominant; secondary looks secondary.
+- **Alignment** — elements line up; `hasPadding` on `<Page>`; row controls share the 40px height.
+- **Spacing** — `--wpds-dimension-*` tokens, not magic pixels; `Stack` gaps over hand-rolled margins.
+- **Copy** — sentence case everywhere user-facing; plain language; warm body voice, calm chrome.
+- **States** — hover, focus, disabled, loading, empty, error all considered. Steady spinner for activity, no streaming flourishes.
+- **Tokens** — every color is `--wpds-*` or `--wa-persona-*`; no hex literals. Body font on identifiers; no mono.
+- **A11y basics** — keyboard navigable, visible focus, sufficient contrast, labelled inputs, sensible heading order.
+- **Responsive** — works at ≥320px and wide; nothing clips; the action bar stays pinned; content reflows.
+- **Localisation** — strings survive ~1.5× expansion without breaking the layout (German is the canonical worst case).
+- **WPDS-first** — components sourced from `@wordpress/ui` / `@wordpress/components`; any custom drawing carries a `// CUSTOM:` comment.
+
+### When to loop in a designer
+
+Don't block on review, but tell the user the change is worth a designer's eye before merging if it touches any of the following:
+
+- A new screen, modal, or full page (not just an addition to an existing one).
+- A new pattern or component WPDS doesn't have yet — i.e., something headed for a `// CUSTOM:` comment.
+- More than a sentence or two of customer-facing copy (empty-state body, onboarding step description, error explanation).
+- Information architecture changes — moving items between the sidebar, the page header, settings groups, or modal tabs.
+- A primary CTA for a flow — the button that completes the operator's job (approve, send, publish, run).
+- Anything touching onboarding, the persona system, or the approve / review surface — the highest-trust moments in the product.
+- Persona-color usage beyond the two pre-approved sites (`PersonaAvatar` + kind pill).
+
 ## Colors
 
 **The rule:** every color in component code must be a `--wpds-*` CSS variable or a `--wa-persona-*` variable. Hex literals are a smell — they indicate that a WPDS token wasn't found, which usually means a WPDS lookup wasn't attempted. Query the WPDS MCP server (`mcp__wordpress-design-system__get_components`, `…__get_design_tokens`) before reaching for hex.

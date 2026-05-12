@@ -86,6 +86,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
 
         <Stack direction="column" gap="xs">
           <span className="wa-eyebrow">Model</span>
+          {/* CUSTOM: model-picker affordance — currently a stub, no menu wired. (a) WPDS SelectControl doesn't render a mono-value + chevron disclosure shape. (b) one-shot disclosure stub with .wa-roster__model chrome. (c) Follow-up: migrate to WPDS Dropdown when the picker is wired. */}
           <button type="button" className="wa-roster__model wa-edit-persona-modal__select">
             <span className="wa-mono">
               {persona.model_preference ?? 'claude-sonnet-4.6'}
@@ -120,6 +121,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
           <div className="wa-edit-persona-modal__chips">
             {BEHAVIORS.map((b) => {
               const active = behaviors[b.id];
+              // CUSTOM: behavior chip toggle. (a) WPDS has no chip-group / multi-select toggle — FormToggle is a single boolean, Button has no selected/pressed state, no chip-group primitive. (b) pill with .wa-chip + .wa-chip--active state. (c) Follow-up: propose a ToggleGroupControl-style chip pattern in #design-systems.
               return (
                 <button
                   key={b.id}
@@ -137,14 +139,14 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
         </Stack>
 
         <Stack direction="row" justify="space-between" align="center" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-          <Button variant="tertiary" isDestructive onClick={onClose}>
+          <Button variant="tertiary" __next40pxDefaultSize isDestructive onClick={onClose}>
             Delete agent
           </Button>
           <Stack direction="row" gap="sm" align="center">
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" __next40pxDefaultSize onClick={onClose}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={onClose}>
+            <Button variant="primary" __next40pxDefaultSize onClick={onClose}>
               Save changes
             </Button>
           </Stack>

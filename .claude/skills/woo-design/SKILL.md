@@ -5,7 +5,7 @@ description: Use when building, reviewing, or modifying UI in WooAgent's /ui/ di
 
 # WooAgent design language
 
-Read **`ui/DESIGN.md`** before generating, modifying, or reviewing any UI in `ui/`. The full spec lives there — front-matter tokens (the WooAgent-owned persona palette) plus prose covering Overview / Colors / Typography / Layout / Elevation / Shapes / Components / Do's and Don'ts.
+Read **`DESIGN.md`** (at the repo root) before generating, modifying, or reviewing any UI in `ui/`. The full spec lives there — front-matter tokens (the WooAgent-owned persona palette) plus prose covering Overview / Working on UI / Colors / Typography / Layout / Elevation / Shapes / Components / Do's and Don'ts.
 
 ## Critical rules (the things people get wrong)
 
