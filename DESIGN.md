@@ -108,12 +108,13 @@ Don't block on review, but tell the user the change is worth a designer's eye be
 
 The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variables `--wa-persona-{xx}-bg` / `--wa-persona-{xx}-ink`. Keys: `mk` (Marketing), `pr` (Pricing), `in` (Inventory), `ac` (Accounting), `rp` (Reporting), `ss` (Sales Support), `cs` (Chief of Staff).
 
-**Used in two places only:**
+**Used in three places only:**
 
 1. The `PersonaAvatar` component — sidebar header, queue card corners, page eyebrows. The persona's identity tile.
-2. The kind pill on cards (CONTENT / CAMPAIGN / EMAIL) — colored by the owning persona.
+2. The kind pill on cards (CONTENT / CAMPAIGN / EMAIL) — colored by the owning persona. The canonical wrapper is `KindBadge` in `StatusBadge.tsx`; the supporting CSS lives in `app.css`.
+3. The brand-header "W" tile in `LeftNav` — uses the marketing persona color (`--wa-persona-mk-*`) since marketing is the V1 product surface. The only place persona color appears outside agent-identity contexts.
 
-**Don't expand this exception.** A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
+**Don't expand this exception further.** A fourth persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
 
 ### Sidebar brand color (WooAgent-owned)
 
@@ -267,7 +268,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 ### Don't expand the persona-color exception
 
-Persona color appears in `PersonaAvatar` and the kind pill on cards. **That's it.** A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
+Persona color appears in `PersonaAvatar`, the kind pill on cards (`KindBadge` + supporting `app.css` rules), and the brand "W" tile in `LeftNav`. **That's it.** A future need for a fourth persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
 ### No monospace fonts
 
@@ -291,7 +292,7 @@ Every shell, control, surface, and form element MUST be a WPDS component (`@word
 
 Before drawing anything custom: check WPDS via the MCP server (`mcp__wordpress-design-system__get_components`), then check `@wordpress/ui` and `@wordpress/components` Storybook. If nothing fits, raise it in #design-systems before forking.
 
-**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The persona avatars and the kind pill are the two pre-approved customs (see Colors); anything else is new territory and needs a flag.
+**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The same `CUSTOM:` marker pattern is the escape hatch for any rule with a genuine WPDS gap — including raw HTML interactive elements (no WPDS wrapper fits) and bespoke font-sizes (no WPDS token matches). The persona avatars, the kind pill, and the LeftNav brand "W" are the three pre-approved persona-color customs (see Colors); anything else is new territory and needs a flag.
 
 ### Sticky action bar for batch actions
 

@@ -46,9 +46,10 @@ Every color in component code is a `--wpds-*` or `--wa-persona-*` CSS variable.
 
 ### Rule 2 — Persona color usage is bounded
 
-Persona-color variables (`--wa-persona-*-bg`, `--wa-persona-*-ink`) appear in **exactly two surfaces:**
+Persona-color variables (`--wa-persona-*-bg`, `--wa-persona-*-ink`) appear in **exactly three surfaces:**
 1. The `PersonaAvatar` component (`ui/src/components/PersonaAvatar.tsx`).
-2. The kind pill on queue cards (CSS rules in `ui/src/styles/app.css`).
+2. The kind pill on queue cards — both the `KindBadge` component (`ui/src/components/StatusBadge.tsx`, the canonical React wrapper) and the supporting kind-pill rules in `ui/src/styles/app.css`.
+3. The brand-header "W" tile in the left nav (`ui/src/components/LeftNav.tsx`) — uses the marketing persona color since marketing is the V1 product surface. This is the only place persona color appears outside agent-identity contexts.
 
 **Violation:** persona-color variables referenced from any other component, button fill, hover state, focus ring, or surface.
 
@@ -78,7 +79,9 @@ Status badges and notices use the WPDS intent system: `high`, `medium`, `low`, `
 
 Use `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*` exclusively. No `Inter`, no `system-ui`, no hardcoded `font-size`.
 
-**Violation:** hardcoded `font-size: 14px` (etc.) or `font-family: Inter, ...`.
+WPDS body-type ramp (`xs=11`, `sm=12`, `md=13`, `lg=15`, `xl=20`, `2xl=32` px) covers nearly every operator-UI use; reach for the closest token before reaching for raw px. A 1-2 px upsize on micro-captions is visually negligible — fight for the token.
+
+**Violation:** hardcoded `font-size: 14px` (etc.) or `font-family: Inter, ...` — **unless** a `CUSTOM:` marker appears within 2 lines above (see "`CUSTOM:` marker syntax" at the top of this file for accepted forms). The marker must cover (a) why no WPDS token fits, (b) what's custom, (c) follow-up. Today's two real gaps: persona-avatar monogram sizing tied to container height (`.wa-persona-avatar--xs/sm/md`), and the onboarding pairing-code at 28px (deliberate in-between size for one-line legibility).
 
 ### Rule 7 — Sentence case for user-facing strings
 

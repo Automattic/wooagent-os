@@ -58,16 +58,17 @@ Apply the skip list before scanning.
 Walk each file once, top to bottom. For each in-scope file, run the rules in this order:
 
 1. **Hex literals** — grep `#[0-9a-fA-F]{3,8}\b`. Filter out comment lines before flagging: lines containing `//`, `/*`, or `{/*` are documentation, not enforceable code. Apply Rule 1's allowed-hex exceptions: `var(--token, #fallback)`; `:root` persona-var declarations in `app.css` (lines defining `--wa-persona-*-{bg,ink}`); and `.wa-sidebar` rules in `app.css` (`#2C045D`, `#1F0342`, `#ffffff`). Front matter in `DESIGN.md` is documentation, not code (and `DESIGN.md` is in the skip list).
-2. **Persona color usage** — grep `--wa-persona-`. Allow only inside `PersonaAvatar.tsx` and the kind-pill rules in `app.css`.
+2. **Persona color usage** — grep `--wa-persona-`. Allow only inside `PersonaAvatar.tsx`, `StatusBadge.tsx` (the canonical `KindBadge` wrapper), the kind-pill rules in `app.css`, and the brand-header "W" tile rules in `LeftNav.tsx`.
 3. **Mono fonts** — grep `font-family-mono\|Menlo\|SF Mono\|Consolas\|Roboto Mono\|font-family:\s*monospace`.
-4. **Raw HTML interactive elements** — grep with line-start anchor: `^\s*<button\b\|^\s*<input\b\|^\s*<select\b\|^\s*<a\s+href`. Anchoring to start-of-line avoids false positives where these tags appear as text inside `CUSTOM:` comments. Allow when a `CUSTOM:` marker appears within 2 lines above — accept `// CUSTOM:`, `{/* CUSTOM:`, or `/* CUSTOM:` (see RULES.md "`CUSTOM:` marker syntax"). Two lines of slack covers the common `return (` line sitting between the marker and the element.
-5. **Button props** — grep `<Button` in `.tsx` / `.jsx`. Verify each call site has `__next40pxDefaultSize`. Verify icon-only buttons (no text children) pass a `label` prop.
-6. **Page props** — grep `<Page` occurrences in `.tsx` / `.jsx`. Verify `hasPadding` is set, **unless** the same file imports from `@wordpress/dataviews` (grep `from\s+['"]@wordpress/dataviews['"]`) or the page is the onboarding centered-card flow (under `ui/src/onboarding/`) — both provide their own padding.
-7. **Legacy Notice import** — grep `import\s+{[^}]*\bNotice\b[^}]*}\s+from\s+['"]@wordpress/components['"]`. Always a violation — use compound `Notice.Root` from `@wordpress/ui`.
-8. **Streaming flourishes** — grep `@keyframes\s+\w*\(shimmer\|pulse\|typewriter\|glow\)\w*`. Verify it's not a flourish on agent-status surfaces.
-9. **Search redundancy** — for files that import `DataViews`, grep the same file for `<PageGlobalActions` and check that `showSearch={false}` is passed.
-10. **Inline SVG** — grep `^\s*<svg\b` (line-start anchored) in `.tsx` / `.jsx`. Flag if no `CUSTOM:` marker within 2 lines above — accept any of the three comment styles per RULES.md.
-11. **Sentence case** — grep `title=|subTitle=|label=|placeholder=` and inspect string values. Flag obvious Title Case (e.g. `"Edit Persona"`, `"Inventory Manager"`) — but tolerate proper nouns and known acronyms (SEO, KPI, UI, AI, URL).
+4. **Bespoke type ramps** — grep `font-family:\s*(Inter|system-ui|-apple-system)\|font-size:\s*[0-9]+(px|rem|em|%)` in `.css` / `.scss` and `fontSize:\s*[0-9]+\b` in `.tsx` / `.jsx`. Skip matches where a `CUSTOM:` marker appears within 2 lines above — accept any of the three comment styles per RULES.md. Recommend the closest WPDS body-type token: `xs=11`, `sm=12`, `md=13`, `lg=15`, `xl=20`, `2xl=32` px.
+5. **Raw HTML interactive elements** — grep with line-start anchor: `^\s*<button\b\|^\s*<input\b\|^\s*<select\b\|^\s*<a\s+href`. Anchoring to start-of-line avoids false positives where these tags appear as text inside `CUSTOM:` comments. Allow when a `CUSTOM:` marker appears within 2 lines above — accept `// CUSTOM:`, `{/* CUSTOM:`, or `/* CUSTOM:` (see RULES.md "`CUSTOM:` marker syntax"). Two lines of slack covers the common `return (` line sitting between the marker and the element.
+6. **Button props** — grep `<Button` in `.tsx` / `.jsx`. Verify each call site has `__next40pxDefaultSize`. Verify icon-only buttons (no text children) pass a `label` prop.
+7. **Page props** — grep `<Page` occurrences in `.tsx` / `.jsx`. Verify `hasPadding` is set, **unless** the same file imports from `@wordpress/dataviews` (grep `from\s+['"]@wordpress/dataviews['"]`) or the page is the onboarding centered-card flow (under `ui/src/onboarding/`) — both provide their own padding.
+8. **Legacy Notice import** — grep `import\s+{[^}]*\bNotice\b[^}]*}\s+from\s+['"]@wordpress/components['"]`. Always a violation — use compound `Notice.Root` from `@wordpress/ui`.
+9. **Streaming flourishes** — grep `@keyframes\s+\w*\(shimmer\|pulse\|typewriter\|glow\)\w*`. Verify it's not a flourish on agent-status surfaces.
+10. **Search redundancy** — for files that import `DataViews`, grep the same file for `<PageGlobalActions` and check that `showSearch={false}` is passed.
+11. **Inline SVG** — grep `^\s*<svg\b` (line-start anchored) in `.tsx` / `.jsx`. Flag if no `CUSTOM:` marker within 2 lines above — accept any of the three comment styles per RULES.md.
+12. **Sentence case** — grep `title=|subTitle=|label=|placeholder=` and inspect string values. Flag obvious Title Case (e.g. `"Edit Persona"`, `"Inventory Manager"`) — but tolerate proper nouns and known acronyms (SEO, KPI, UI, AI, URL).
 
 For each violation, capture `file:line` + rule + severity + suggested fix.
 

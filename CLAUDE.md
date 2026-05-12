@@ -71,7 +71,7 @@ The seven agent identities (Marketing / Pricing / Inventory / Accounting / Repor
 - `--wa-persona-ss-bg` / `--wa-persona-ss-ink` — Sales Support (teal: `#CCFBF1` / `#0F766E`)
 - `--wa-persona-cs-bg` / `--wa-persona-cs-ink` — Chief of Staff (indigo gradient: `#6366F1` → `#8B5CF6` / `#FFFFFF`)
 
-Used in **two places only**: the agent avatar squares in the sidebar, and the kind pill on cards (CONTENT / CAMPAIGN / EMAIL — colored by the owning persona). Everything else (status badges, KPI cards, action buttons, notices) uses native WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). **Don't expand this exception.** Any new color need is a WPDS need.
+Used in **three places only**: the agent avatar squares in the sidebar (`PersonaAvatar`), the kind pill on cards (CONTENT / CAMPAIGN / EMAIL — `KindBadge` in `StatusBadge.tsx` is the canonical wrapper), and the brand-header "W" tile in `LeftNav` (marketing color, since marketing is the V1 product surface). Everything else (status badges, KPI cards, action buttons, notices) uses native WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). **Don't expand this exception.** Any new color need is a WPDS need.
 
 ### Layout
 
