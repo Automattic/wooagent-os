@@ -150,7 +150,7 @@ export default function LeftNav({
           />
           <span
             style={{
-              fontSize: 11,
+              fontSize: 'var(--wpds-typography-font-size-xs)',
               color: 'rgba(255, 255, 255, 0.6)',
             }}
           >

@@ -349,7 +349,7 @@ function renderIssueCard(
               <span
                 className="wa-mono"
                 style={{
-                  fontSize: 10,
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
                   color: 'var(--wpds-color-fg-content-neutral-weak)',
                 }}
               >
@@ -424,7 +424,7 @@ function renderBatchCard(batch: Batch, col: ColumnKey, onClick: () => void) {
               <span
                 className="wa-mono"
                 style={{
-                  fontSize: 10,
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
                   color: 'var(--wpds-color-fg-content-neutral-weak)',
                   fontWeight: 'var(--wpds-typography-font-weight-medium)',
                 }}

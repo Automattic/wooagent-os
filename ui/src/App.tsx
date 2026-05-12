@@ -181,7 +181,13 @@ export default function App() {
                 aria-label={drawer.isOpen ? 'Close menu' : 'Open menu'}
                 onClick={drawer.toggle}
               >
-                <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 'var(--wpds-typography-font-size-xl)',
+                    lineHeight: 1,
+                  }}
+                >
                   ☰
                 </span>
               </button>
