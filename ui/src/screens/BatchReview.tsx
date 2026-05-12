@@ -530,7 +530,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                     ? 'var(--wpds-color-bg-interactive-brand-strong)'
                                     : 'transparent',
                                   color: isSelected
-                                    ? '#ffffff'
+                                    ? 'var(--wpds-color-fg-interactive-brand-strong)'
                                     : 'var(--wpds-color-fg-content-neutral)',
                                   border: isSelected
                                     ? 'none'
@@ -678,7 +678,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                 fontWeight: 700,
                 fontSize: 12,
                 background: 'var(--wpds-color-bg-interactive-brand-strong)',
-                color: '#ffffff',
+                color: 'var(--wpds-color-fg-interactive-brand-strong)',
                 flex: 'none',
               }}
             >

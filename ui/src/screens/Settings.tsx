@@ -72,6 +72,7 @@ export default function Settings({ connection, onDisconnect, onAskAgent }: Props
       title="Settings"
       subTitle="Model providers and daemon connection."
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      hasPadding
     >
       <Stack direction="column" gap="xl">
         {/* Models — multiple-provider management */}

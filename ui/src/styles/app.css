@@ -166,7 +166,7 @@ a {
   letter-spacing: 0.08em;
   padding: 3px 8px;
   background: var(--wa-persona-mk-ink);
-  color: #ffffff;
+  color: var(--wpds-color-fg-interactive-brand-strong);
   border-radius: var(--wpds-border-radius-sm);
   text-transform: uppercase;
   font-weight: var(--wpds-typography-font-weight-medium);
@@ -682,7 +682,7 @@ a {
 .wa-radio-mark--selected {
   background: var(--wpds-color-bg-interactive-brand-strong);
   border-color: var(--wpds-color-bg-interactive-brand-strong);
-  color: #ffffff;
+  color: var(--wpds-color-fg-interactive-brand-strong);
 }
 
 /* "Agent pick" inline pill — moved into the variant header row instead of
@@ -1113,7 +1113,7 @@ a {
 .wa-stepper__step--current .wa-stepper__marker {
   background: var(--wpds-color-bg-interactive-neutral-strong);
   border-color: var(--wpds-color-bg-interactive-neutral-strong);
-  color: #ffffff;
+  color: var(--wpds-color-fg-interactive-neutral-strong);
 }
 /* Done = outlined circle with a dark check (no fill). The label still
    reads "completed" via dark text — only the marker treatment changes. */

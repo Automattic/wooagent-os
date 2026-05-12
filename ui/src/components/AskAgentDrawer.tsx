@@ -38,11 +38,11 @@ export default function AskAgentDrawer({ isOpen, onClose, contextLabel }: Props)
       <aside
         className={`wa-drawer${isOpen ? ' is-open' : ''}`}
         role="dialog"
-        aria-label="Ask Agent"
+        aria-label="Ask agent"
         aria-hidden={!isOpen}
       >
         <div className="wa-drawer__header">
-          <Text variant="heading-sm">Ask Agent</Text>
+          <Text variant="heading-sm">Ask agent</Text>
           {/* CUSTOM: drawer-chrome close button using shared .wa-icon-btn class. (a) WPDS <Button icon={close} variant="tertiary"> doesn't match drawer-header size/padding. (b) icon-only close with .wa-icon-btn shared chrome. (c) Follow-up: migrate when .wa-icon-btn retires. */}
           <button
             type="button"
