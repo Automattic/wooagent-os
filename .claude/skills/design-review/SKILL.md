@@ -57,12 +57,12 @@ Apply the skip list before scanning.
 
 Walk each file once, top to bottom. For each in-scope file, run the rules in this order:
 
-1. **Hex literals** — grep `#[0-9a-fA-F]{3,8}\b`. Allow `var(--token, #fallback)` and the `.wa-sidebar` pre-approval in `ui/src/styles/app.css` (`#2C045D` surface, `#1F0342` hover/active). Front matter in `DESIGN.md` is documentation, not code.
+1. **Hex literals** — grep `#[0-9a-fA-F]{3,8}\b`. Filter out comment lines before flagging: lines containing `//`, `/*`, or `{/*` are documentation, not enforceable code. Apply Rule 1's allowed-hex exceptions: `var(--token, #fallback)`; `:root` persona-var declarations in `app.css` (lines defining `--wa-persona-*-{bg,ink}`); and `.wa-sidebar` rules in `app.css` (`#2C045D`, `#1F0342`, `#ffffff`). Front matter in `DESIGN.md` is documentation, not code (and `DESIGN.md` is in the skip list).
 2. **Persona color usage** — grep `--wa-persona-`. Allow only inside `PersonaAvatar.tsx` and the kind-pill rules in `app.css`.
 3. **Mono fonts** — grep `font-family-mono\|Menlo\|SF Mono\|Consolas\|Roboto Mono\|font-family:\s*monospace`.
 4. **Raw HTML interactive elements** — grep with line-start anchor: `^\s*<button\b\|^\s*<input\b\|^\s*<select\b\|^\s*<a\s+href`. Anchoring to start-of-line avoids false positives where these tags appear as text inside `CUSTOM:` comments. Allow when a `CUSTOM:` marker appears within 2 lines above — accept `// CUSTOM:`, `{/* CUSTOM:`, or `/* CUSTOM:` (see RULES.md "`CUSTOM:` marker syntax"). Two lines of slack covers the common `return (` line sitting between the marker and the element.
 5. **Button props** — grep `<Button` in `.tsx` / `.jsx`. Verify each call site has `__next40pxDefaultSize`. Verify icon-only buttons (no text children) pass a `label` prop.
-6. **Page props** — grep `<Page` occurrences. Verify `hasPadding` is set (or the page renders `<DataViews>` / the onboarding centered card, which provide their own padding).
+6. **Page props** — grep `<Page` occurrences in `.tsx` / `.jsx`. Verify `hasPadding` is set, **unless** the same file imports from `@wordpress/dataviews` (grep `from\s+['"]@wordpress/dataviews['"]`) or the page is the onboarding centered-card flow (under `ui/src/onboarding/`) — both provide their own padding.
 7. **Legacy Notice import** — grep `import\s+{[^}]*\bNotice\b[^}]*}\s+from\s+['"]@wordpress/components['"]`. Always a violation — use compound `Notice.Root` from `@wordpress/ui`.
 8. **Streaming flourishes** — grep `@keyframes\s+\w*\(shimmer\|pulse\|typewriter\|glow\)\w*`. Verify it's not a flourish on agent-status surfaces.
 9. **Search redundancy** — for files that import `DataViews`, grep the same file for `<PageGlobalActions` and check that `showSearch={false}` is passed.

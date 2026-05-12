@@ -90,7 +90,8 @@ export default function LeftNav({
           >
             W
           </div>
-          <Text variant="heading-sm" style={{ color: '#ffffff' }}>
+          {/* Wordmark inherits `color: #ffffff` from .wa-sidebar (see app.css). No inline color needed. */}
+          <Text variant="heading-sm">
             WooAgent
           </Text>
         </Stack>

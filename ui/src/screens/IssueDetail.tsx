@@ -488,7 +488,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                     ? 'var(--wpds-color-bg-interactive-brand-strong)'
                                     : 'transparent',
                                   color: isSelected
-                                    ? '#ffffff'
+                                    ? 'var(--wpds-color-fg-interactive-brand-strong)'
                                     : 'var(--wpds-color-fg-content-neutral)',
                                   border: isSelected
                                     ? 'none'
@@ -582,7 +582,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           padding: '2px 8px',
                           borderRadius: 'var(--wpds-border-radius-sm)',
                           background: 'var(--wpds-color-bg-interactive-brand-strong)',
-                          color: '#ffffff',
+                          color: 'var(--wpds-color-fg-interactive-brand-strong)',
                         }}
                       >
                         A
@@ -1084,7 +1084,7 @@ function ObservedRange({ low, median, high, proposed, currency }: ObservedRangeP
             width: 16,
             borderRadius: '50%',
             background: markerColor,
-            border: '2px solid #ffffff',
+            border: 'var(--wpds-border-width-md) solid var(--wpds-color-bg-surface-neutral)',
             boxShadow: 'var(--wpds-elevation-sm)',
             transform: 'translateX(-8px)',
           }}

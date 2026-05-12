@@ -31,6 +31,7 @@ export default function Placeholder({
           : 'Reference area.'
       }
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      hasPadding
     >
       <Card.Root
         style={{
