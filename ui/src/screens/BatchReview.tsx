@@ -411,6 +411,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
 
             return (
               <Card.Root key={issue.id}>
+                {/* CUSTOM: row-header click target to toggle expansion. (a) WPDS has no expandable-row primitive — DataViews owns its own row chrome; this is a non-DataViews list. (b) <button> wraps the row header with shared .wa-batch-row__header chrome + aria-expanded. (c) Follow-up: revisit if DataViews adds expandable-row support. */}
                 <button
                   type="button"
                   className="wa-batch-row__header"
@@ -507,6 +508,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       {/* Variant columns */}
                       {(variants ?? []).map((v) => {
                         const isSelected = selectedVariantID === v.id;
+                        // CUSTOM: variant-column click target inside a batch row. (a) WPDS has no selectable-column / radio-card component. (b) <button> wraps the column with .wa-batch-col chrome and selected state. (c) Follow-up: see CardLink composite note in Kanban.tsx.
                         return (
                           <button
                             key={v.id}
@@ -621,6 +623,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       </Text>
                       <div className="wa-batch-row__footer-actions">
                         <Button
+                          __next40pxDefaultSize
                           variant="tertiary"
                           isDestructive
                           onClick={() => rejectRow(issue.id)}
@@ -629,6 +632,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                           {busy === `reject-row:${issue.id}` ? 'Rejecting…' : 'Reject'}
                         </Button>
                         <Button
+                          __next40pxDefaultSize
                           variant="secondary"
                           onClick={() => approveRow(issue.id)}
                           disabled={!reviewable || !selectedVariantID || rowBusy || busy !== null}
@@ -712,6 +716,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               Reversible · always
             </span>
             <Button
+              __next40pxDefaultSize
               variant="tertiary"
               isDestructive
               onClick={rejectAll}
@@ -719,10 +724,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             >
               {busy === 'reject-all' ? 'Rejecting…' : 'Reject all'}
             </Button>
-            <Button variant="tertiary" onClick={() => nav('/')}>
+            <Button variant="tertiary" __next40pxDefaultSize onClick={() => nav('/')}>
               Cancel
             </Button>
             <Button
+              __next40pxDefaultSize
               variant="primary"
               onClick={approveAll}
               disabled={pendingCount === 0 || busy !== null}

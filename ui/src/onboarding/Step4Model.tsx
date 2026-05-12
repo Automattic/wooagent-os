@@ -200,6 +200,7 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
 
           <div className="wa-onboarding-providers">
             {PROVIDERS.map((p) => (
+              // CUSTOM: LLM provider tile — selectable card with multi-line content. (a) WPDS has no selectable-tile / radio-card component. (b) <button> with .wa-onboarding-provider chrome + aria-pressed. (c) Follow-up: revisit if the onboarding-picker pattern repeats elsewhere.
               <button
                 type="button"
                 key={p.kind}

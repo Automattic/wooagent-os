@@ -13,7 +13,9 @@ This file is loaded into every Claude Code session in this repo. It captures con
 
 ## UI stack — WordPress Design System (WPDS)
 
-**Before doing any UI work in `ui/`, read [`ui/DESIGN.md`](./ui/DESIGN.md) first.** It captures the canonical components in use across the app (the **Component inventory** section), the layout frame (sidebar + `Page` header + content), the persona-color exception, and the Do's/Don'ts that go beyond CLAUDE.md. Reach for one of the listed components before writing custom UI. If you find yourself adding a new dependency or a new bespoke component, that's the cue to call it out as a decision to be made and update DESIGN.md alongside the change.
+**Before doing any UI work in `ui/`, read [`DESIGN.md`](./DESIGN.md) first.** It captures the canonical components in use across the app (the **Component inventory** section), the layout frame (sidebar + `Page` header + content), the persona-color exception, and the Do's/Don'ts that go beyond CLAUDE.md. Reach for one of the listed components before writing custom UI. If you find yourself adding a new dependency or a new bespoke component, that's the cue to call it out as a decision to be made and update DESIGN.md alongside the change.
+
+**For customer-facing UI changes, also apply DESIGN.md's [Working on UI](./DESIGN.md#working-on-ui) lens:** state assumptions as *confident / assuming / unclear* before writing code; ask "what's the smallest version that solves this?"; run the verify-before-done checklist before claiming done; flag designer-review triggers (new screen, new pattern, primary CTA, onboarding / persona / approve-review touch, IA change, >1 sentence of customer copy) so the user can decide whether to loop in design.
 
 `ui/` uses the WordPress Design System **exclusively**. **Only WPDS components.** No Tailwind, no bespoke token systems, no Inter / Roboto / system-font defaults, no custom-styled HTML elements (`<button>`, `<input>`, `<select>`, badges, dropdowns) without a WPDS wrapper. If WPDS doesn't have what you need, call it out as a decision to be made first and update DESIGN.md alongside the change.
 
@@ -34,7 +36,7 @@ This file is loaded into every Claude Code session in this repo. It captures con
 
 When building or reviewing UI in this repo, invoke these skills:
 
-- `woo-design` — WooAgent's design language (visual identity, voice, component patterns); wraps `ui/DESIGN.md` and extends WPDS with project-specific decisions. Pair with `wpds`.
+- `woo-design` — WooAgent's design language (visual identity, voice, component patterns); wraps `DESIGN.md` and extends WPDS with project-specific decisions. Pair with `wpds`.
 - `wpds` — design system rules, MCP-server-backed component & token lookup.
 - `frontend-design` — distinctive, polished frontend principles (apply within WPDS, not against it).
 - `wordpress-mockups` — when prototyping WordPress admin / Site Editor concepts.
@@ -51,7 +53,7 @@ When building or reviewing UI in this repo, invoke these skills:
 Use `--wpds-*` CSS variables only:
 - Color: `--wpds-color-bg-surface-*`, `--wpds-color-fg-content-*`, `--wpds-color-stroke-*`, `--wpds-color-bg-interactive-*`.
 - Dimension: `--wpds-dimension-padding-*`, `--wpds-dimension-gap-*`, `--wpds-dimension-surface-width-*`.
-- Typography: `--wpds-typography-font-family-{body,heading}`, `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*`. **No `mono`** — body font for identifiers, hostnames, slugs, model names, everything. See `ui/DESIGN.md` Typography section for rationale.
+- Typography: `--wpds-typography-font-family-{body,heading}`, `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*`. **No `mono`** — body font for identifiers, hostnames, slugs, model names, everything. See `DESIGN.md` Typography section for rationale.
 - Elevation: `--wpds-elevation-{xs,sm,md,lg}`.
 - Border: `--wpds-border-radius-*`, `--wpds-border-width-*`.
 

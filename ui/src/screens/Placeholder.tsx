@@ -65,7 +65,7 @@ export default function Placeholder({
             >
               {description}
             </Text>
-            <Button variant="primary" onClick={() => nav(ctaTo)}>
+            <Button variant="primary" __next40pxDefaultSize onClick={() => nav(ctaTo)}>
               {ctaLabel}
             </Button>
           </Stack>

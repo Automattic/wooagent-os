@@ -43,6 +43,7 @@ export default function AskAgentDrawer({ isOpen, onClose, contextLabel }: Props)
       >
         <div className="wa-drawer__header">
           <Text variant="heading-sm">Ask Agent</Text>
+          {/* CUSTOM: drawer-chrome close button using shared .wa-icon-btn class. (a) WPDS <Button icon={close} variant="tertiary"> doesn't match drawer-header size/padding. (b) icon-only close with .wa-icon-btn shared chrome. (c) Follow-up: migrate when .wa-icon-btn retires. */}
           <button
             type="button"
             className="wa-icon-btn"
@@ -56,6 +57,7 @@ export default function AskAgentDrawer({ isOpen, onClose, contextLabel }: Props)
         <div className="wa-drawer__body">
           <label className="wa-topbar__search" style={{ width: '100%' }}>
             <Icon icon={plus} size={16} />
+            {/* CUSTOM: compound input with embedded leading icon + trailing esc kbd hint inside one .wa-topbar__search shell. (a) WPDS SearchControl/InputControl don't expose a trailing slot for kbd hints. (b) <input> wrapped in a <label> with side icons. (c) Follow-up: revisit if WPDS adds input-slots. */}
             <input
               ref={inputRef}
               type="text"

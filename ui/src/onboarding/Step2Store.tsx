@@ -207,6 +207,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               <Text variant="body-sm" style={MUTED}>
                 PAIRING CODE
               </Text>
+              {/* CUSTOM: pairing-code display as a click-to-copy target. (a) WPDS Button chrome doesn't fit prominent code display. (b) <button> with .wa-onboarding-pairing-code chrome rendering the code as its label. (c) Follow-up: revisit if WPDS adds a CodeDisplay / copyable-token primitive. */}
               <button
                 type="button"
                 className="wa-onboarding-pairing-code"
@@ -338,6 +339,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               borderRadius: 'var(--wpds-border-radius-md)',
             }}
           >
+            {/* CUSTOM: manual disclosure / accordion toggle. (a) WPDS has CollapsibleCard from @wordpress/ui — should fit. (b) <button> with .wa-onboarding-disclosure chrome and aria-expanded. (c) Follow-up: migrate to CollapsibleCard. */}
             <button
               type="button"
               onClick={() => setPluginPanelOpen((o) => !o)}

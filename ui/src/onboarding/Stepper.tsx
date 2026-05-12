@@ -51,6 +51,7 @@ export default function Stepper({ currentKey, highestCompleted }: Props) {
             {i > 0 && (
               <span className="wa-stepper__connector" aria-hidden="true" />
             )}
+            {/* CUSTOM: onboarding stepper step button — marker + label with done/current/upcoming/locked states. (a) WPDS has no Stepper component. (b) <button> with .wa-stepper__step chrome and aria-current. (c) Documented as the Stepper composite in DESIGN.md (Onboarding card section). */}
             <button
               type="button"
               className={`wa-stepper__step ${stateClass}`}
