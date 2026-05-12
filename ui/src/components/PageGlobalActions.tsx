@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Stack } from '@wordpress/ui';
 import { Button, SearchControl } from '@wordpress/components';
 import { comment } from '@wordpress/icons';
 
@@ -24,7 +25,7 @@ export default function PageGlobalActions({ onAskAgent, showSearch = true }: Pro
   // intentionally leave SearchControl with its WPDS default styling rather
   // than overriding internals.
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <Stack direction="row" align="center" gap="md">
       {showSearch && (
         <div style={{ width: 280 }}>
           {/* Default size (40px) matches the Button's __next40pxDefaultSize
@@ -47,6 +48,6 @@ export default function PageGlobalActions({ onAskAgent, showSearch = true }: Pro
       >
         Ask agent
       </Button>
-    </div>
+    </Stack>
   );
 }

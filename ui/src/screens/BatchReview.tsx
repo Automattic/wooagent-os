@@ -547,8 +547,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                   fontSize: 'var(--wpds-typography-font-size-xs)',
                                   padding: '2px 8px',
                                   borderRadius: 'var(--wpds-border-radius-sm)',
-                                  background: 'var(--wa-persona-mk-bg)',
-                                  color: 'var(--wa-persona-mk-ink)',
+                                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                                  color: 'var(--wpds-color-fg-content-neutral)',
                                 }}
                               >
                                 {v.label}
