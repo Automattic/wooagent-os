@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Button, Spinner } from '@wordpress/components';
-import { Icon, plus } from '@wordpress/icons';
+import { plus } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   api,
@@ -91,10 +91,8 @@ export default function Settings({ connection, onDisconnect, onAskAgent }: Props
                   fallback when a persona doesn't override it.
                 </Text>
               </Stack>
-              <Button variant="primary" __next40pxDefaultSize>
-                <Stack direction="row" gap="xs" align="center">
-                  <Icon icon={plus} size={16} /> Add model
-                </Stack>
+              <Button variant="primary" icon={plus} __next40pxDefaultSize>
+                Add model
               </Button>
             </Stack>
           </Card.Header>

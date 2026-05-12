@@ -36,7 +36,7 @@ export default function Placeholder({
       <Card.Root
         style={{
           background:
-            'radial-gradient(circle at 30% 20%, var(--wa-persona-mk-bg) 0%, transparent 60%), var(--wpds-color-bg-surface-neutral)',
+            'radial-gradient(circle at 30% 20%, var(--wpds-color-bg-surface-info-weak) 0%, transparent 60%), var(--wpds-color-bg-surface-neutral)',
         }}
       >
         <Card.Content>
@@ -51,7 +51,7 @@ export default function Placeholder({
               style={{
                 color:
                   status === 'soon'
-                    ? 'var(--wa-persona-mk-ink)'
+                    ? 'var(--wpds-color-fg-content-info)'
                     : 'var(--wpds-color-fg-interactive-brand)',
               }}
             >

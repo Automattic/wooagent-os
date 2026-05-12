@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
-import { Text } from '@wordpress/ui';
+import { Stack, Text } from '@wordpress/ui';
 import OnboardingShell from './onboarding/OnboardingShell';
 import LeftNav from './components/LeftNav';
 import AskAgentDrawer from './components/AskAgentDrawer';
@@ -449,6 +449,8 @@ function Shell({ children }: ShellProps) {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>{children(drawer)}</div>
+    <Stack direction="row" style={{ minHeight: '100vh' }}>
+      {children(drawer)}
+    </Stack>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner, Button } from '@wordpress/components';
-import { Icon, rotateRight, check, external } from '@wordpress/icons';
+import { Spinner, Button, ExternalLink } from '@wordpress/components';
+import { Icon, rotateRight, check } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -429,7 +429,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
               <Button
                 __next40pxDefaultSize
                 variant="tertiary"
-                icon={<Icon icon={rotateRight} size={16} />}
+                icon={rotateRight}
                 disabled
               >
                 Regenerate
@@ -505,8 +505,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                   fontSize: 'var(--wpds-typography-font-size-xs)',
                                   padding: '2px 8px',
                                   borderRadius: 'var(--wpds-border-radius-sm)',
-                                  background: 'var(--wa-persona-mk-bg)',
-                                  color: 'var(--wa-persona-mk-ink)',
+                                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                                  color: 'var(--wpds-color-fg-content-neutral)',
                                 }}
                               >
                                 {v.label}
@@ -1145,8 +1145,8 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
                 fontWeight: 'var(--wpds-typography-font-weight-medium)',
                 padding: '2px 8px',
                 borderRadius: 'var(--wpds-border-radius-sm)',
-                background: 'var(--wa-persona-pr-bg)',
-                color: 'var(--wa-persona-pr-ink)',
+                background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                color: 'var(--wpds-color-fg-content-neutral)',
               }}
             >
               {source.retailer}
@@ -1159,22 +1159,9 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
             {source.comparable_product}
           </Text>
         </Stack>
-        <a
-          href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-            color: 'var(--wpds-color-fg-content-link)',
-            textDecoration: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          {host}
-          <Icon icon={external} size={12} />
-        </a>
+        <span style={{ fontSize: 'var(--wpds-typography-font-size-xs)' }}>
+          <ExternalLink href={source.url}>{host}</ExternalLink>
+        </span>
         {source.note && (
           <Text
             variant="body-sm"
@@ -1443,8 +1430,8 @@ function MessageIssueView(props: MessageViewProps) {
                           fontSize: 'var(--wpds-typography-font-size-xs)',
                           padding: '2px 8px',
                           borderRadius: 'var(--wpds-border-radius-sm)',
-                          background: 'var(--wa-persona-ss-bg)',
-                          color: 'var(--wa-persona-ss-ink)',
+                          background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                          color: 'var(--wpds-color-fg-content-neutral)',
                         }}
                       >
                         {proposal.subjectHint}
