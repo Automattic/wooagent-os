@@ -479,7 +479,8 @@ export type AbilityEffectiveTrust =
   | 'built-in'
   | 'trusted'
   | 'needs_review'
-  | 'schema_changed';
+  | 'schema_changed'
+  | 'revoked';
 
 export interface Ability {
   id: string;
@@ -495,6 +496,8 @@ export interface Ability {
   schema_hash?: string;
   trust_state: AbilityTrustState;
   effective_trust?: AbilityEffectiveTrust;
+  revoked_at?: string;
+  revoked_by?: string;
   trusted_at?: string;
   last_seen_at?: string;
 }
@@ -559,6 +562,10 @@ export const api = {
     },
     trust: (c: Connection, id: string) =>
       request<Ability>(c, `/v1/abilities/${id}/trust`, { method: 'POST' }),
+    revoke: (c: Connection, id: string) =>
+      request<Ability>(c, `/v1/abilities/${id}/revoke`, { method: 'POST' }),
+    restore: (c: Connection, id: string) =>
+      request<Ability>(c, `/v1/abilities/${id}/restore`, { method: 'POST' }),
   },
   modelProviders: {
     list: (c: Connection) =>

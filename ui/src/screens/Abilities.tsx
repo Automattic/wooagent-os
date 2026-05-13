@@ -23,25 +23,28 @@ interface Props {
 }
 
 // Effective-trust vocabulary the daemon returns on /v1/abilities. Labels
-// sentence case per DESIGN.md; intents reuse WPDS intents — `stable` for
-// trusted (operator-approved or built-in), `informational` for fresh
-// discoveries that need a review pass, `high` for the schema-drift case
-// (operator action needed; the cached approval no longer matches).
+// sentence case per DESIGN.md; intents reuse WPDS intents — `none` for
+// trusted (operator-approved or built-in) so the badge reads as a neutral
+// state marker rather than competing for attention, `informational` for
+// fresh discoveries that need a review pass, `high` for the schema-drift
+// case (operator action needed; the cached approval no longer matches).
 const TRUST_LABEL: Record<AbilityEffectiveTrust, string> = {
   'built-in': 'Built-in',
   trusted: 'Trusted',
   needs_review: 'Needs review',
   schema_changed: 'Schema changed',
+  revoked: 'Revoked',
 };
 
 const TRUST_INTENT: Record<
   AbilityEffectiveTrust,
-  'stable' | 'informational' | 'high'
+  'stable' | 'informational' | 'high' | 'low'
 > = {
   'built-in': 'stable',
   trusted: 'stable',
   needs_review: 'informational',
   schema_changed: 'high',
+  revoked: 'low',
 };
 
 // DataViews 'elements' for the trust-state filter dropdown. The `value`
@@ -51,6 +54,7 @@ const TRUST_ELEMENTS: Array<{ value: AbilityEffectiveTrust; label: string }> = [
   { value: 'trusted', label: 'Trusted' },
   { value: 'needs_review', label: 'Needs review' },
   { value: 'schema_changed', label: 'Schema changed' },
+  { value: 'revoked', label: 'Revoked' },
 ];
 
 // Fallback when the daemon hasn't been redeployed yet and effective_trust
@@ -59,6 +63,7 @@ const TRUST_ELEMENTS: Array<{ value: AbilityEffectiveTrust; label: string }> = [
 // for back-compat during the deploy window.
 function effectiveTrustOf(ability: Ability): AbilityEffectiveTrust {
   if (ability.effective_trust) return ability.effective_trust;
+  if (ability.revoked_at) return 'revoked';
   switch (ability.trust_state) {
     case 'trusted':
       return 'trusted';
@@ -76,6 +81,15 @@ function effectiveTrustOf(ability: Ability): AbilityEffectiveTrust {
 function isTrustable(ability: Ability): boolean {
   const e = effectiveTrustOf(ability);
   return e === 'needs_review' || e === 'schema_changed';
+}
+
+function isRevocable(ability: Ability): boolean {
+  const e = effectiveTrustOf(ability);
+  return e === 'built-in' || e === 'trusted' || e === 'schema_changed';
+}
+
+function isRestorable(ability: Ability): boolean {
+  return effectiveTrustOf(ability) === 'revoked';
 }
 
 function relativeTime(iso: string | undefined): string {
@@ -336,6 +350,9 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   const [view, setView] = useState<View>(DEFAULT_VIEW);
   const [inspecting, setInspecting] = useState<Ability | null>(null);
   const [trustBusy, setTrustBusy] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState<Ability | null>(null);
+  const [revokeBusy, setRevokeBusy] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const fetchAbilities = useCallback(
     async (signal: { cancelled: boolean }) => {
@@ -388,6 +405,38 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     const signal = { cancelled: false };
     void fetchAbilities(signal);
   };
+
+  const handleRevoke = useCallback(async () => {
+    if (!confirmRevoke || !connection) return;
+    setRevokeBusy(true);
+    setRevokeError(null);
+    try {
+      await api.abilities.revoke(connection, confirmRevoke.id);
+      setConfirmRevoke(null);
+      const signal = { cancelled: false };
+      await fetchAbilities(signal);
+    } catch (e) {
+      setRevokeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRevokeBusy(false);
+    }
+  }, [confirmRevoke, connection, fetchAbilities]);
+
+  const handleRestore = useCallback(
+    async (ability: Ability) => {
+      if (!connection) return;
+      try {
+        await api.abilities.restore(connection, ability.id);
+        const signal = { cancelled: false };
+        await fetchAbilities(signal);
+      } catch {
+        // Restore failures are quiet — no modal to surface them. The
+        // list reload (if it succeeded) will show the unchanged state
+        // and the operator can retry.
+      }
+    },
+    [connection, fetchAbilities],
+  );
 
   const fields = useMemo<Field<Ability>[]>(
     () => [
@@ -448,6 +497,30 @@ export default function Abilities({ connection, onAskAgent }: Props) {
         },
       },
       {
+        id: 'revoke',
+        label: 'Revoke',
+        isPrimary: false,
+        isDestructive: true,
+        isEligible: (ability) => isRevocable(ability),
+        callback: (items) => {
+          const ability = items[0];
+          if (!ability) return;
+          setRevokeError(null);
+          setConfirmRevoke(ability);
+        },
+      },
+      {
+        id: 'restore',
+        label: 'Restore',
+        isPrimary: false,
+        isEligible: (ability) => isRestorable(ability),
+        callback: (items) => {
+          const ability = items[0];
+          if (!ability) return;
+          void handleRestore(ability);
+        },
+      },
+      {
         id: 'inspect',
         label: 'Inspect',
         callback: (items) => {
@@ -456,7 +529,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
         },
       },
     ],
-    [handleTrust],
+    [handleTrust, handleRestore],
   );
 
   const data = abilities ?? [];
@@ -467,11 +540,13 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   );
 
   const counts = useMemo(() => {
-    const c = { total: data.length, trusted: 0, needsReview: 0 };
+    const c = { total: data.length, trusted: 0, needsReview: 0, revoked: 0 };
     for (const a of data) {
       const effective = effectiveTrustOf(a);
       if (effective === 'built-in' || effective === 'trusted') {
         c.trusted += 1;
+      } else if (effective === 'revoked') {
+        c.revoked += 1;
       } else {
         c.needsReview += 1;
       }
@@ -484,7 +559,15 @@ export default function Abilities({ connection, onAskAgent }: Props) {
       ? 'Tools your agents can call'
       : counts.total === 0
         ? 'Tools your agents can call'
-        : `Tools your agents can call · ${counts.total} total · ${counts.trusted} trusted · ${counts.needsReview} need review`;
+        : (() => {
+            const parts = [
+              `${counts.total} total`,
+              `${counts.trusted} trusted`,
+              `${counts.needsReview} need review`,
+            ];
+            if (counts.revoked > 0) parts.push(`${counts.revoked} revoked`);
+            return `Tools your agents can call · ${parts.join(' · ')}`;
+          })();
 
   const filteredEmpty = Boolean(view.search) || Boolean(view.filters?.length);
 
@@ -530,6 +613,47 @@ export default function Abilities({ connection, onAskAgent }: Props) {
               onTrust={handleTrust}
               onClose={() => setInspecting(null)}
             />
+          )}
+          {confirmRevoke && (
+            <Modal
+              title="Revoke this ability?"
+              onRequestClose={() => {
+                if (!revokeBusy) setConfirmRevoke(null);
+              }}
+              shouldCloseOnClickOutside={!revokeBusy}
+              shouldCloseOnEsc={!revokeBusy}
+            >
+              <Stack direction="column" gap="md">
+                <Text variant="body-md">
+                  Agents will no longer be able to call <code>{confirmRevoke.name}</code>.
+                  You can restore it later from this same screen.
+                </Text>
+                {revokeError && (
+                  <Notice.Root intent="error">
+                    <Notice.Description>{revokeError}</Notice.Description>
+                  </Notice.Root>
+                )}
+                <Stack direction="row" gap="sm" justify="flex-end">
+                  <Button
+                    variant="tertiary"
+                    __next40pxDefaultSize
+                    disabled={revokeBusy}
+                    onClick={() => setConfirmRevoke(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    isDestructive
+                    __next40pxDefaultSize
+                    disabled={revokeBusy}
+                    onClick={handleRevoke}
+                  >
+                    {revokeBusy ? 'Revoking…' : 'Revoke'}
+                  </Button>
+                </Stack>
+              </Stack>
+            </Modal>
           )}
         </>
       )}
