@@ -67,6 +67,9 @@ func (l *Loop) tickOnce(ctx context.Context) error {
 		}
 		schedules = append(schedules, a)
 	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate agents: %w", err)
+	}
 
 	for _, a := range schedules {
 		// One persona's failure must not block the rest.
@@ -129,7 +132,12 @@ func (l *Loop) hasActiveRun(ctx context.Context, persona string) (bool, error) {
 }
 
 // writeSkipRow inserts a row and immediately marks it skipped so the
-// operator sees the would-have-run-but reasoning.
+// operator sees the would-have-run-but reasoning. Bumping
+// agents.last_run_at via MarkTerminal is intentional: a skip is a
+// decision to consume this cadence cycle, so the next due-check waits
+// a full cadence interval. Without this, the loop would write a skip
+// row every tick (every 60s) while open work persists, instead of once
+// per cadence boundary.
 func (l *Loop) writeSkipRow(ctx context.Context, persona string, now time.Time, reason string) error {
 	r, err := l.Queue.Enqueue(ctx, EnqueueParams{
 		Persona: persona, Trigger: TriggerTick, ScheduledAt: now,
