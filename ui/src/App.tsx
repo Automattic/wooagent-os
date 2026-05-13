@@ -241,6 +241,15 @@ export default function App() {
                   setIssues(null);
                   setBatches([]);
                 }}
+                onStoreDisconnected={() => {
+                  // Flip onboarding state so App's render branch picks
+                  // OnboardingRoutes on the next render. OnboardingShell
+                  // will re-probe /v1/stores, find none, and land the
+                  // user on "Connect store".
+                  setOnboardingComplete(false);
+                  setIssues(null);
+                  setBatches([]);
+                }}
                 onAskAgent={() => setAskAgentOpen(true)}
               />
             }
