@@ -220,6 +220,41 @@ func TestWorker_Skip_RecordsSkipReason(t *testing.T) {
 	}
 }
 
+func TestWorker_TransientFailure_EmptyBackoff_NoPanic(t *testing.T) {
+	db := openTestDB(t)
+	fixed := time.Unix(1700000000, 0).UTC()
+	q := &Queue{DB: db, Now: func() time.Time { return fixed }}
+	sp := &stubPersona{slug: "marketing"}
+	_, _ = q.Enqueue(context.Background(), EnqueueParams{
+		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
+	})
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+		return personas.Result{}, mcp.ErrSessionLost
+	}}
+	w := &Worker{
+		Queue: q, Runner: runner,
+		Personas: map[string]personas.Persona{"marketing": sp},
+		Now:      func() time.Time { return fixed.Add(time.Second) },
+		Backoff:  nil, // empty/nil — must not panic
+	}
+	_, err := w.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	// Retry row should exist with scheduled_at == end (zero delay).
+	var scheduledAt string
+	err = db.QueryRowContext(context.Background(),
+		`SELECT scheduled_at FROM runs WHERE attempt = 2 LIMIT 1`,
+	).Scan(&scheduledAt)
+	if err != nil {
+		t.Fatalf("no retry row: %v", err)
+	}
+	want := fixed.Add(time.Second).Format(time.RFC3339)
+	if scheduledAt != want {
+		t.Errorf("scheduled_at = %s, want %s (zero delay)", scheduledAt, want)
+	}
+}
+
 func TestQueue_ClaimRace_OnlyOneWinner(t *testing.T) {
 	db := openTestDB(t)
 	fixed := time.Unix(1700000000, 0).UTC()
