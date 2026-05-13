@@ -22,10 +22,10 @@ func TestRunJSONShape(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	got := string(b)
-	if !strings.Contains(got, `"retryOf":null`) {
-		t.Errorf(`retryOf not rendered as null: %s`, got)
+	if !strings.Contains(got, `"retry_of":null`) {
+		t.Errorf(`retry_of not rendered as null: %s`, got)
 	}
-	if !strings.Contains(got, `"failureClass":""`) {
-		t.Errorf(`failureClass not rendered as empty string: %s`, got)
+	if !strings.Contains(got, `"failure_class":""`) {
+		t.Errorf(`failure_class not rendered as empty string: %s`, got)
 	}
 }
