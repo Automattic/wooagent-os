@@ -30,8 +30,34 @@ type Ability struct {
 	Schema      json.RawMessage `json:"schema,omitempty"`
 	SchemaHash  string          `json:"schema_hash,omitempty"`
 	TrustState  string          `json:"trust_state"`
+	// EffectiveTrust is the UI-facing trust label, derived from
+	// TrustState and manifest-pre-signing. Allowed values:
+	// "built-in" | "trusted" | "needs_review" | "schema_changed".
+	// Manifest-pre-signed abilities surface as "built-in" even when
+	// TrustState == "new", because the PEP admits them regardless.
+	EffectiveTrust string `json:"effective_trust"`
 	TrustedAt   string          `json:"trusted_at,omitempty"`
 	LastSeenAt  string          `json:"last_seen_at,omitempty"`
+}
+
+// computeEffectiveTrust derives the UI-facing trust label from the raw
+// DB trust_state and whether the ability is pre-signed in the bundled
+// manifest. The PEP already admits manifest-pre-signed calls regardless
+// of trust_state (pep.checkTrustState); this surface mirrors that so the
+// UI stops claiming "needs review" for abilities that already work.
+func computeEffectiveTrust(trustState string, manifestSigned bool) string {
+	switch {
+	case manifestSigned && trustState == "schema_changed":
+		return "schema_changed"
+	case manifestSigned:
+		return "built-in"
+	case trustState == "trusted":
+		return "trusted"
+	case trustState == "schema_changed":
+		return "schema_changed"
+	default:
+		return "needs_review"
+	}
 }
 
 // handleListAbilities returns abilities for one or all paired stores.
@@ -96,6 +122,11 @@ func (s *Server) handleListAbilities(w http.ResponseWriter, r *http.Request) {
 		if schemaJSON != "" {
 			ab.Schema = json.RawMessage(schemaJSON)
 		}
+		manifestSigned := false
+		if m := s.pep.Manifest(); m != nil && m.Get(ab.Name) != nil {
+			manifestSigned = true
+		}
+		ab.EffectiveTrust = computeEffectiveTrust(ab.TrustState, manifestSigned)
 		out = append(out, ab)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"abilities": out})
@@ -159,5 +190,10 @@ func (s *Server) respondAbilityByID(w http.ResponseWriter, r *http.Request, id s
 	if schemaJSON != "" {
 		ab.Schema = json.RawMessage(schemaJSON)
 	}
+	manifestSigned := false
+	if m := s.pep.Manifest(); m != nil && m.Get(ab.Name) != nil {
+		manifestSigned = true
+	}
+	ab.EffectiveTrust = computeEffectiveTrust(ab.TrustState, manifestSigned)
 	writeJSON(w, status, ab)
 }
