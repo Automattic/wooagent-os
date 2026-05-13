@@ -246,11 +246,18 @@ function wooagent_companion_pair_approve_code( string $code ): bool {
 	if ( ! is_array( $devices ) ) {
 		$devices = array();
 	}
+	// Capture the WP user_id of the admin clicking Approve so the auth-bridge
+	// filter (auth-bridge.php) can map this device's bearer back to a
+	// known WP user identity. Falls back to 0 when called from a context
+	// without a logged-in user (shouldn't happen — the wp-admin pair
+	// screen requires manage_options — but defensive).
+	$approver = get_current_user_id();
 	$devices[] = array(
-		'id'         => $device_id,
-		'name'       => $data['device_name'] ?? 'wooagent-device',
-		'token_hash' => hash( 'sha256', $device_token ),
-		'created_at' => gmdate( 'c' ),
+		'id'                => $device_id,
+		'name'              => $data['device_name'] ?? 'wooagent-device',
+		'token_hash'        => hash( 'sha256', $device_token ),
+		'paired_by_user_id' => $approver,
+		'created_at'        => gmdate( 'c' ),
 	);
 	update_option( WOOAGENT_DEVICES_OPTION, $devices );
 

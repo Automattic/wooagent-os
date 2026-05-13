@@ -22,6 +22,7 @@ require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-products.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-orders.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-customers.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/pair-rest.php';
+require_once WOOAGENT_COMPANION_PATH . 'includes/auth-bridge.php';
 require_once WOOAGENT_COMPANION_PATH . 'includes/admin-pair-screen.php';
 
 add_action( 'wp_abilities_api_categories_init', 'wooagent_companion_register_categories' );

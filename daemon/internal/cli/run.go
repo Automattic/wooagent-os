@@ -21,6 +21,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 
 	// Side-effect imports register the persona implementations. Adding a
 	// new persona is a one-line change here plus a new package under
@@ -197,10 +198,11 @@ func runPersonas(ctx context.Context, st *store.Store, sec secrets.Store, mcpCli
 	env := resolvePersonaEnv(ctx, st.DB, sec, envFromOS(), out)
 
 	deps := personas.Deps{
-		Store:  st,
-		MCP:    mcpClient,
-		Skills: skills,
-		Env:    env,
+		Store:    st,
+		MCP:      mcpClient,
+		Skills:   skills,
+		Env:      env,
+		Recorder: telemetry.NewSQLiteRecorder(st.DB),
 	}
 
 	all := personas.All()

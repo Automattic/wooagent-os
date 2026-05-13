@@ -32,6 +32,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 // Persona is what a child package implements. Slug must match the value in
@@ -47,10 +48,13 @@ type Persona interface {
 // here is purely additive; personas only read what they need. Personas
 // MUST NOT touch process env directly — Env is the surfaced subset.
 type Deps struct {
-	Store  *store.Store
-	MCP    *mcp.Client
-	Skills map[string]registry.Skill
-	Env    Env
+	Store    *store.Store
+	MCP      *mcp.Client
+	Skills   map[string]registry.Skill
+	Env      Env
+	// Recorder persists the per-turn telemetry. May be nil in tests; the
+	// tracker helpers are nil-safe. DSGWOO-1236.
+	Recorder telemetry.Recorder
 }
 
 // Env is the env-var surface area a persona is allowed to consult. We
@@ -199,11 +203,20 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		return res, nil
 	}
 
-	d, err := p.Draft(ctx, deps)
+	// Start a turn-event tracker. Helpers inside Draft (callAbility,
+	// draftRewrite*) read it from context and append model + skill calls.
+	// Recorder is nil-safe (tests pass nil; the persona still works), so
+	// we always wrap the context — the cost is a context.WithValue alloc.
+	tracker := telemetry.NewTracker(uuid.NewString(), slug)
+	tctx := telemetry.WithTracker(ctx, tracker)
+
+	d, err := p.Draft(tctx, deps)
 	if err != nil {
+		recordTurn(ctx, deps.Recorder, tracker, "", d)
 		return res, err
 	}
 	if d.Skipped {
+		recordTurn(ctx, deps.Recorder, tracker, "", d)
 		res.Skipped = true
 		res.SkipReason = d.SkipReason
 		return res, nil
@@ -211,10 +224,37 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 
 	id, err := insertIssue(ctx, deps.Store, slug, d)
 	if err != nil {
+		recordTurn(ctx, deps.Recorder, tracker, "", d)
 		return res, fmt.Errorf("insert issue: %w", err)
 	}
+	recordTurn(ctx, deps.Recorder, tracker, id, d)
 	res.IssueID = id
 	return res, nil
+}
+
+// recordTurn finalizes the tracker and persists the TurnEvent. Best-effort
+// — a recorder failure is logged but does not abort the persona run.
+// Called from every exit path of RunAndPersist so skipped/errored turns
+// still leave a row behind for the GEPA pipeline.
+func recordTurn(
+	ctx context.Context,
+	rec telemetry.Recorder,
+	tracker *telemetry.Tracker,
+	issueID string,
+	d Drafted,
+) {
+	if rec == nil || tracker == nil {
+		return
+	}
+	event := tracker.Finalize()
+	event.IssueID = issueID
+	if d.ProposalContent != "" {
+		event.ProposalText = d.ProposalContent
+	}
+	// Skipped turns still write a row so the GEPA pipeline sees the
+	// "agent decided not to propose" signal — captured via an empty
+	// proposal + the skill/model calls that preceded the skip.
+	_ = rec.Record(ctx, event)
 }
 
 func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted) (string, error) {

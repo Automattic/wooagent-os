@@ -16,6 +16,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 // Persona is the v0.1 agent-persona wire shape. Mirrors docs/api-contract-v1.md.
@@ -546,6 +547,14 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Attach the operator verdict to the issue's most-recent turn so the
+	// GEPA pipeline can pair the proposal with the approval signal.
+	// Best-effort; the approve already succeeded. DSGWOO-1236.
+	_ = telemetry.RecordVerdict(r.Context(), s.store.DB, res.IssueID, telemetry.Verdict{
+		Kind:      telemetry.VerdictApprove,
+		DecidedAt: time.Now().UTC(),
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":         res.IssueID,
 		"status":     res.Status,
@@ -620,6 +629,11 @@ func (s *Server) handleRejectIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = telemetry.RecordVerdict(ctx, s.store.DB, id, telemetry.Verdict{
+		Kind:      telemetry.VerdictReject,
+		DecidedAt: time.Now().UTC(),
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":         id,
 		"status":     "rejected",
@@ -690,6 +704,13 @@ func (s *Server) handleDismissIssue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
+
+	_ = telemetry.RecordVerdict(ctx, s.store.DB, id, telemetry.Verdict{
+		Kind:       telemetry.VerdictDismiss,
+		ReasonTag:  req.Reason,
+		ReasonText: req.Comment,
+		DecidedAt:  time.Now().UTC(),
+	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":              id,
