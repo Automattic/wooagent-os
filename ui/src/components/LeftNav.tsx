@@ -13,6 +13,7 @@ import {
   shield,
   key,
   cog,
+  backup,
 } from '@wordpress/icons';
 import type { Connection } from '../api/client';
 
@@ -87,6 +88,9 @@ export default function LeftNav({
     { to: '/runtimes', label: 'Routines', icon: box },
     { to: '/models', label: 'Models', icon: cog },
   ];
+  const activity_items: NavItem[] = [
+    { to: '/runs', label: 'Runs', icon: backup },
+  ];
   const settings_items: NavItem[] = [
     { to: '/stores', label: 'Stores', icon: store },
     { to: '/guardrails', label: 'Guardrails', icon: shield },
@@ -138,6 +142,7 @@ export default function LeftNav({
       >
         <NavGroup label="Inbox" items={inbox_items} active={onBoard ? '/' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Fleet" items={fleet_items} active={loc.pathname.startsWith('/agents') ? '/agents' : loc.pathname} onItemClick={onItemClick} />
+        <NavGroup label="Activity" items={activity_items} active={loc.pathname.startsWith('/runs') ? '/runs' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Settings" items={settings_items} active={loc.pathname} onItemClick={onItemClick} />
       </nav>
 

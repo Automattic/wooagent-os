@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
 import { Icon, arrowUpRight, rotateRight, check } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
@@ -15,6 +15,7 @@ import {
   type IssueDetail as IssueDetailPayload,
   type MessageProposal,
   type PriceProposal,
+  type Run,
   type Variant,
 } from '../api/client';
 import {
@@ -23,6 +24,7 @@ import {
   kindFromProposalType,
 } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import { RunStatusBadge } from '../components/RunStatusBadge';
 import Kpi from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
 import DismissDialog from '../components/DismissDialog';
@@ -234,6 +236,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         busy={busy}
         reviewable={reviewable}
         isDone={isDone}
+        connection={connection}
         onApprove={onApprove}
         onReject={onReject}
         onCancel={() => nav('/')}
@@ -257,6 +260,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         busy={busy}
         reviewable={reviewable}
         isDone={isDone}
+        connection={connection}
         onApprove={onApprove}
         onReject={onReject}
         onCancel={() => nav('/')}
@@ -643,6 +647,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 <Notice.Description>{actionMsg.text}</Notice.Description>
               </Notice.Root>
             )}
+
+            <IssueRuns connection={connection} issueId={issue.id} />
           </div>
         </div>
       </Page>
@@ -692,6 +698,7 @@ interface PriceViewProps {
   busy: 'approve' | 'reject' | null;
   reviewable: boolean;
   isDone: boolean;
+  connection: Connection;
   onApprove: () => void;
   onReject: () => void;
   onCancel: () => void;
@@ -1001,6 +1008,8 @@ function PriceIssueView(props: PriceViewProps) {
                 <Notice.Description>{props.actionMsg.text}</Notice.Description>
               </Notice.Root>
             )}
+
+            <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
         </div>
       </Page>
@@ -1251,6 +1260,7 @@ interface MessageViewProps {
   busy: 'approve' | 'reject' | null;
   reviewable: boolean;
   isDone: boolean;
+  connection: Connection;
   onApprove: () => void;
   onReject: () => void;
   onCancel: () => void;
@@ -1527,6 +1537,8 @@ function MessageIssueView(props: MessageViewProps) {
                 <Notice.Description>{props.actionMsg.text}</Notice.Description>
               </Notice.Root>
             )}
+
+            <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
         </div>
       </Page>
@@ -1556,6 +1568,73 @@ function MessageIssueView(props: MessageViewProps) {
         />
       )}
     </div>
+  );
+}
+
+// Collapsed runs card shown in the issue detail sidebar area. Loads runs
+// matching the issue_id and renders them newest-first. Hidden entirely when
+// there are no runs yet — don't dominate the layout with an empty section.
+function IssueRuns({
+  connection,
+  issueId,
+}: {
+  connection: Connection;
+  issueId: string;
+}) {
+  const [runs, setRuns] = useState<Run[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.runs
+      .list(connection, { issueId })
+      .then((res) => {
+        if (!cancelled) setRuns(res.runs);
+      })
+      .catch(() => {
+        // Best-effort — don't surface a blocking error in the detail view.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, issueId]);
+
+  if (runs.length === 0) return null;
+
+  return (
+    <CollapsibleCard.Root>
+      <CollapsibleCard.Header>
+        <Card.Title>Runs ({runs.length})</Card.Title>
+      </CollapsibleCard.Header>
+      <CollapsibleCard.Content>
+        <Stack direction="column" gap="sm">
+          {runs.map((r) => (
+            <Stack key={r.id} direction="row" gap="md" align="center">
+              <RunStatusBadge status={r.status} />
+              <Text
+                variant="body-sm"
+                style={{
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                }}
+              >
+                {r.scheduled_at
+                  ? new Date(r.scheduled_at).toLocaleString()
+                  : '—'}
+              </Text>
+              <Link
+                to={`/runs/${r.id}`}
+                style={{
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                }}
+              >
+                {r.id.slice(0, 8).toUpperCase()}
+              </Link>
+            </Stack>
+          ))}
+        </Stack>
+      </CollapsibleCard.Content>
+    </CollapsibleCard.Root>
   );
 }
 
