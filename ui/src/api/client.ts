@@ -113,6 +113,46 @@ export interface Persona {
   name: string;
   model_preference?: string;
   enabled: boolean;
+  cadence_seconds?: number;
+  max_attempts?: number;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+}
+
+// Run domain — scheduler activity feed. See daemon/internal/scheduler/*.
+export type RunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'skipped'
+  | 'failed'
+  | 'failed_permanent';
+
+export type RunTrigger = 'tick' | 'manual' | 'bootstrap' | 'retry';
+export type FailureClass = 'transient' | 'permanent' | '';
+
+export interface Run {
+  id: string;
+  persona: string;
+  trigger: RunTrigger;
+  status: RunStatus;
+  attempt: number;
+  retry_of: string | null;
+  scheduled_at: string;
+  claimed_at: string | null;
+  completed_at: string | null;
+  latency_ms: number | null;
+  issue_id: string | null;
+  turn_id: string | null;
+  skip_reason: string | null;
+  failure_reason: string | null;
+  failure_class: FailureClass;
+}
+
+export interface RunDetailResponse {
+  run: Run;
+  turn_event: unknown | null;
+  retry_chain: Run[];
 }
 
 /** Canonical dismiss reasons exposed in the Dismiss dialog. Free-text
@@ -505,6 +545,37 @@ export interface Ability {
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
+  runs: {
+    list: (
+      c: Connection,
+      params: {
+        persona?: string;
+        status?: string[];
+        issueId?: string;
+        limit?: number;
+        cursor?: string;
+      } = {},
+    ) => {
+      const q = new URLSearchParams();
+      if (params.persona) q.set('persona', params.persona);
+      if (params.status?.length) q.set('status', params.status.join(','));
+      if (params.issueId) q.set('issue_id', params.issueId);
+      if (params.limit) q.set('limit', String(params.limit));
+      if (params.cursor) q.set('cursor', params.cursor);
+      const suffix = q.toString() ? `?${q.toString()}` : '';
+      return request<{ runs: Run[]; next_cursor: string | null }>(
+        c,
+        `/v1/runs${suffix}`,
+      );
+    },
+    get: (c: Connection, id: string) =>
+      request<RunDetailResponse>(c, `/v1/runs/${id}`),
+    trigger: (c: Connection, persona: string) =>
+      request<{ run: Run }>(c, '/v1/runs', {
+        method: 'POST',
+        body: JSON.stringify({ persona }),
+      }),
+  },
   issues: (c: Connection) => request<{ issues: Issue[] }>(c, '/v1/issues'),
   issue: (c: Connection, id: string) => request<IssueDetail>(c, `/v1/issues/${id}`),
   createIssue: (c: Connection, body: Partial<Issue>) =>

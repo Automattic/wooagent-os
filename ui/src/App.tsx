@@ -13,6 +13,8 @@ import Archived from './screens/Archived';
 import Stores from './screens/Stores';
 import Models from './screens/Models';
 import Placeholder from './screens/Placeholder';
+import Runs from './screens/Runs';
+import RunDetail from './screens/RunDetail';
 import {
   clearConnection,
   isEmbedded,
@@ -264,15 +266,26 @@ export default function App() {
             }
           />
           <Route
-            path="/activity"
+            path="/runs"
             element={
-              <Placeholder
+              <Runs
+                connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
-                area="Activity"
-                description="Audit log of every agent action with the underlying tool calls, skill versions, and operator approvals. Coming online with WooAgent's run history endpoint."
-                status="soon"
               />
             }
+          />
+          <Route
+            path="/runs/:id"
+            element={
+              <RunDetail
+                connection={connection}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
+            }
+          />
+          <Route
+            path="/activity"
+            element={<Navigate to="/runs" replace />}
           />
           <Route
             path="/abilities"

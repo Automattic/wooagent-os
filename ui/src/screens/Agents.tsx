@@ -18,7 +18,7 @@ import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { useNavigate } from 'react-router-dom';
-import { api, type Connection, type Persona } from '../api/client';
+import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import EditPersonaModal from '../components/EditPersonaModal';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -282,7 +282,7 @@ const DEFAULT_VIEW: View = {
   page: 1,
   perPage: 25,
   titleField: 'persona',
-  fields: ['mandate', 'model', 'enabled'],
+  fields: ['mandate', 'model', 'enabled', 'run_now'],
   // No default sort — `ALL_PERSONA_KEYS` orders implemented personas first
   // and the "Coming soon" group last; an asc sort by displayName would
   // interleave them ("Accounting" lands above "Marketing & SEO").
@@ -338,6 +338,38 @@ export default function Agents({ connection, onAskAgent }: Props) {
     void fetchAgents(signal);
   };
 
+  // Run-now state: tracks which persona is being triggered (busy) and
+  // per-persona error messages (if triggerRun throws).
+  const [runBusy, setRunBusy] = useState<string | null>(null);
+  const [runErrors, setRunErrors] = useState<Record<string, string>>({});
+
+  const handleRunNow = useCallback(
+    async (persona: Persona) => {
+      if (!IMPLEMENTED_PERSONAS.has(persona.persona)) return;
+      setRunBusy(persona.persona);
+      setRunErrors((prev) => {
+        const next = { ...prev };
+        delete next[persona.persona];
+        return next;
+      });
+      try {
+        const { run } = await api.runs.trigger(connection, persona.persona);
+        navigate(`/runs/${run.id}`);
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        setRunErrors((prev) => ({ ...prev, [persona.persona]: msg }));
+      } finally {
+        setRunBusy(null);
+      }
+    },
+    [connection, navigate],
+  );
+
   const fields = useMemo<Field<Persona>[]>(
     () => [
       {
@@ -379,8 +411,46 @@ export default function Agents({ connection, onAskAgent }: Props) {
           </NoRowClick>
         ),
       },
+      {
+        id: 'run_now',
+        label: 'Run',
+        enableSorting: false,
+        getValue: () => '',
+        render: ({ item }) => {
+          if (!IMPLEMENTED_PERSONAS.has(item.persona)) return null;
+          const isBusy = runBusy === item.persona;
+          const err = runErrors[item.persona];
+          return (
+            <NoRowClick>
+              <Stack direction="column" gap="xs">
+                <Button
+                  variant="secondary"
+                  __next40pxDefaultSize
+                  isBusy={isBusy}
+                  disabled={isBusy}
+                  onClick={() => void handleRunNow(item)}
+                >
+                  Run now
+                </Button>
+                {err && (
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-warning)',
+                      maxWidth: 160,
+                    }}
+                  >
+                    {err}
+                  </Text>
+                )}
+              </Stack>
+            </NoRowClick>
+          );
+        },
+      },
     ],
-    [],
+    [runBusy, runErrors, handleRunNow],
   );
 
   // Row click drives the edit flow via `onClickItem`. The actions are also
