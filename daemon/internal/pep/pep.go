@@ -43,6 +43,17 @@ func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB) *PEP {
 	}
 }
 
+// Manifest returns the bundled pre-signed manifest lookup so callers (the
+// abilities HTTP handler in particular) can derive the "this ability is
+// built-in" UI signal without re-loading the manifest themselves. Read-only
+// — callers must not mutate the returned Lookup.
+func (p *PEP) Manifest() *manifest.Lookup {
+	if p == nil {
+		return nil
+	}
+	return p.manifest
+}
+
 // ErrMCPNotConfigured is returned by Invoke when the daemon is running
 // without an MCP client. Callers map it to 503.
 var ErrMCPNotConfigured = errors.New("pep: mcp client not configured")

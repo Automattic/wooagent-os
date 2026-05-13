@@ -96,6 +96,21 @@ func TestListAbilities_All(t *testing.T) {
 		if a.SchemaHash == "" {
 			t.Errorf("missing schema_hash: %+v", a)
 		}
+		if a.EffectiveTrust == "" {
+			t.Errorf("missing effective_trust: %+v", a)
+		}
+	}
+	// None of the seeded abilities are in the manifest; verify the expected
+	// effective_trust for each trust_state value.
+	wantET := map[string]string{
+		"ab/one":   "needs_review",
+		"ab/two":   "trusted",
+		"ab/three": "schema_changed",
+	}
+	for _, a := range body.Abilities {
+		if want, ok := wantET[a.Name]; ok && a.EffectiveTrust != want {
+			t.Errorf("effective_trust for %q = %q; want %q", a.Name, a.EffectiveTrust, want)
+		}
 	}
 }
 
@@ -227,5 +242,34 @@ func TestTrustAbility_FromSchemaChanged(t *testing.T) {
 	}
 	if state != "trusted" || trustedHash != "new-hash" {
 		t.Errorf("state=%q trusted_hash=%q, want trusted/new-hash", state, trustedHash)
+	}
+}
+
+func TestComputeEffectiveTrust(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name           string
+		trustState     string
+		manifestSigned bool
+		want           string
+	}{
+		{"manifest pre-signed, fresh", "new", true, "built-in"},
+		{"manifest pre-signed, schema drift wins", "schema_changed", true, "schema_changed"},
+		{"manifest pre-signed, also operator-trusted", "trusted", true, "built-in"},
+		{"not in manifest, operator trusted", "trusted", false, "trusted"},
+		{"not in manifest, schema changed", "schema_changed", false, "schema_changed"},
+		{"not in manifest, fresh discovery", "new", false, "needs_review"},
+		{"not in manifest, unknown state defaults to needs_review", "garbage", false, "needs_review"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := computeEffectiveTrust(tc.trustState, tc.manifestSigned)
+			if got != tc.want {
+				t.Fatalf("computeEffectiveTrust(%q, %v) = %q; want %q",
+					tc.trustState, tc.manifestSigned, got, tc.want)
+			}
+		})
 	}
 }
