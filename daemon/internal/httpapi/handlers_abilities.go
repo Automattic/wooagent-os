@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -71,27 +70,21 @@ func computeEffectiveTrust(trustState string, manifestSigned bool, revoked bool)
 }
 
 // writeOperatorAudit appends a row to audit_invocations describing an
-// operator-initiated trust mutation. Best-effort — a failed insert is
-// logged but does not fail the operator's request, because the
-// authoritative state change (the UPDATE on abilities) has already
-// succeeded by the time we get here.
-//
-// Schema notes: persona is set to "operator" (sentinel value used only
-// for operator-driven rows). intent is the verb. outcome is
-// "operator_action". The args_hash is set to sha256(verb) so the row
-// has a non-empty value as the column requires.
-func (s *Server) writeOperatorAudit(ctx context.Context, operator, verb, abilityName string) {
-	hash := sha256.Sum256([]byte(verb))
+// operator-initiated trust mutation. Returns an error on failure so the
+// caller can decide whether to surface it; audit integrity is a launch
+// requirement and silent loss is unacceptable. Callers MUST handle the
+// error (return 500 to the operator).
+func (s *Server) writeOperatorAudit(ctx context.Context, operator, verb, abilityName string) error {
+	hash := sha256.Sum256([]byte("operator-action"))
 	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := s.store.DB.ExecContext(ctx,
+	_, err := s.store.DB.ExecContext(ctx,
 		`INSERT INTO audit_invocations
 		   (persona, ability, args_hash, intent, outcome, operator, created_at, completed_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		"operator", abilityName, hex.EncodeToString(hash[:]), verb, "operator_action",
 		operator, now, now,
-	); err != nil {
-		log.Printf("operator audit insert failed: verb=%s ability=%s err=%v", verb, abilityName, err)
-	}
+	)
+	return err
 }
 
 // handleListAbilities returns abilities for one or all paired stores.
@@ -174,10 +167,12 @@ func (s *Server) handleListAbilities(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleTrustAbility flips an ability's trust_state to 'trusted' and
-// captures its current schema_hash as trusted_hash. Also clears any
-// prior revocation (trust-implies-restore). Idempotent — already
-// trusted rows are returned unchanged. Used by the operator-clicks-Approve
-// path in the Abilities browser.
+// captures its current schema_hash as trusted_hash. Always runs the
+// UPDATE — re-trusting an already-trusted ability refreshes trusted_at
+// to the current time and produces a fresh audit row. Also clears
+// revoked_at/revoked_by (Trust implies Restore — fewer modal dialogs
+// for the operator). Used by the operator-clicks-Trust path in the
+// Abilities browser.
 func (s *Server) handleTrustAbility(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
@@ -211,7 +206,10 @@ func (s *Server) handleTrustAbility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeOperatorAudit(ctx, operatorName(r), "trust", name)
+	if err := s.writeOperatorAudit(ctx, operatorName(r), "trust", name); err != nil {
+		writeError(w, http.StatusInternalServerError, "audit_error", "could not write audit row: "+err.Error())
+		return
+	}
 	s.respondAbilityByID(w, r, id, http.StatusOK)
 }
 
@@ -237,7 +235,7 @@ func (s *Server) handleRevokeAbility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if revokedAt.Valid && revokedAt.String != "" {
+	if revokedAt.Valid {
 		s.respondAbilityByID(w, r, id, http.StatusOK)
 		return
 	}
@@ -256,7 +254,10 @@ func (s *Server) handleRevokeAbility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeOperatorAudit(ctx, op, "revoke", name)
+	if err := s.writeOperatorAudit(ctx, op, "revoke", name); err != nil {
+		writeError(w, http.StatusInternalServerError, "audit_error", "could not write audit row: "+err.Error())
+		return
+	}
 	s.respondAbilityByID(w, r, id, http.StatusOK)
 }
 
@@ -283,7 +284,7 @@ func (s *Server) handleRestoreAbility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !revokedAt.Valid || revokedAt.String == "" {
+	if !revokedAt.Valid {
 		s.respondAbilityByID(w, r, id, http.StatusOK)
 		return
 	}
@@ -301,7 +302,10 @@ func (s *Server) handleRestoreAbility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeOperatorAudit(ctx, operatorName(r), "restore", name)
+	if err := s.writeOperatorAudit(ctx, operatorName(r), "restore", name); err != nil {
+		writeError(w, http.StatusInternalServerError, "audit_error", "could not write audit row: "+err.Error())
+		return
+	}
 	s.respondAbilityByID(w, r, id, http.StatusOK)
 }
 
