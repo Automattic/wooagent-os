@@ -1,0 +1,149 @@
+package scheduler
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+)
+
+// PersonaRunner is the interface the worker uses to actually run a persona.
+// Production wires it to personas.RunAndPersist via personaRunnerAdapter
+// (see scheduler.go in Task 7). Tests inject a stub.
+type PersonaRunner interface {
+	Run(ctx context.Context, p personas.Persona) (personas.Result, error)
+}
+
+// Worker is the single-goroutine claim-and-run loop. One Worker per
+// Scheduler — MCP session-id forces serial.
+type Worker struct {
+	Queue       *Queue
+	Runner      PersonaRunner
+	Personas    map[string]personas.Persona // persona slug → registered impl
+	Now         func() time.Time
+	Backoff     []time.Duration
+	MaxAttempts int // default 3 if zero
+}
+
+// RunOnce claims the next due run and processes it. Returns ran=true when a
+// row was processed. Used in tests and by Run() in production.
+func (w *Worker) RunOnce(ctx context.Context) (ran bool, err error) {
+	if w.MaxAttempts == 0 {
+		w.MaxAttempts = 3
+	}
+	r, err := w.Queue.ClaimNext(ctx)
+	if err != nil {
+		return false, err
+	}
+	if r == nil {
+		return false, nil
+	}
+	persona, ok := w.Personas[r.Persona]
+	if !ok {
+		_ = w.markPermanent(ctx, r, fmt.Sprintf("no implementation registered for persona %q", r.Persona))
+		return true, nil
+	}
+	return true, w.executeAndRecord(ctx, r, persona)
+}
+
+// Run blocks until ctx is done. Polls the queue every 250ms when idle.
+func (w *Worker) Run(ctx context.Context) error {
+	idleSleep := 250 * time.Millisecond
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		ran, err := w.RunOnce(ctx)
+		if err != nil {
+			time.Sleep(idleSleep)
+			continue
+		}
+		if !ran {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(idleSleep):
+			}
+		}
+	}
+}
+
+func (w *Worker) executeAndRecord(ctx context.Context, r *Run, persona personas.Persona) error {
+	start := w.Now()
+	res, runErr := w.Runner.Run(ctx, persona)
+	end := w.Now()
+
+	// Skip path — succeeded with a reason but no issue.
+	if runErr == nil && res.Skipped {
+		return w.Queue.MarkTerminal(ctx, MarkTerminalParams{
+			ID:          r.ID,
+			Status:      StatusSkipped,
+			CompletedAt: end,
+			LatencyMS:   end.Sub(start).Milliseconds(),
+			SkipReason:  res.SkipReason,
+		})
+	}
+	// Success path.
+	if runErr == nil {
+		return w.Queue.MarkTerminal(ctx, MarkTerminalParams{
+			ID:          r.ID,
+			Status:      StatusSucceeded,
+			CompletedAt: end,
+			LatencyMS:   end.Sub(start).Milliseconds(),
+			IssueID:     res.IssueID,
+			// TurnID flows through telemetry; left empty here because
+			// personas.RunAndPersist owns the turn_event write. The link is
+			// joined by issue_id in the API layer for V1.
+		})
+	}
+
+	// Failure path.
+	cls, reason := classify(runErr)
+	isPermanent := cls == FailurePermanent || r.Attempt >= w.MaxAttempts
+
+	status := StatusFailed
+	if isPermanent {
+		status = StatusFailedPermanent
+	}
+	if err := w.Queue.MarkTerminal(ctx, MarkTerminalParams{
+		ID:            r.ID,
+		Status:        status,
+		CompletedAt:   end,
+		LatencyMS:     end.Sub(start).Milliseconds(),
+		FailureReason: reason,
+		FailureClass:  cls,
+	}); err != nil {
+		return err
+	}
+	if isPermanent {
+		return nil
+	}
+	// Enqueue the retry.
+	backoffIdx := r.Attempt - 1
+	if backoffIdx >= len(w.Backoff) {
+		backoffIdx = len(w.Backoff) - 1
+	}
+	parentID := r.ID
+	_, err := w.Queue.Enqueue(ctx, EnqueueParams{
+		Persona:     r.Persona,
+		Trigger:     TriggerRetry,
+		ScheduledAt: end.Add(w.Backoff[backoffIdx]),
+		Attempt:     r.Attempt + 1,
+		RetryOf:     &parentID,
+	})
+	return err
+}
+
+func (w *Worker) markPermanent(ctx context.Context, r *Run, reason string) error {
+	return w.Queue.MarkTerminal(ctx, MarkTerminalParams{
+		ID:            r.ID,
+		Status:        StatusFailedPermanent,
+		CompletedAt:   w.Now(),
+		LatencyMS:     0,
+		FailureReason: reason,
+		FailureClass:  FailurePermanent,
+	})
+}
