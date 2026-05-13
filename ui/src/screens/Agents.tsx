@@ -82,14 +82,21 @@ function metaFor(personaKey: string): PersonaMeta {
 }
 
 // Canonical 7-agent fleet. The daemon may only return a subset; the Roster
-// always renders all seven so operators see the full team.
+// always renders all seven so operators see the full team. Order is:
+//   1. Implemented specialists (active personas) first
+//   2. Unimplemented specialists ("Coming soon") next
+//   3. Chief of Staff ALWAYS last — it's a meta-agent that routes across the
+//      fleet, conceptually separate from the specialists. Keep it pinned to
+//      the bottom even after it's implemented.
+// DEFAULT_VIEW intentionally omits a sort field so this order survives into
+// the table.
 const ALL_PERSONA_KEYS = [
   'marketing',
   'pricing',
+  'sales-support',
   'inventory',
   'accounting',
   'reporting',
-  'sales-support',
   'chief',
 ];
 
@@ -276,7 +283,9 @@ const DEFAULT_VIEW: View = {
   perPage: 25,
   titleField: 'persona',
   fields: ['mandate', 'model', 'enabled'],
-  sort: { field: 'persona', direction: 'asc' },
+  // No default sort — `ALL_PERSONA_KEYS` orders implemented personas first
+  // and the "Coming soon" group last; an asc sort by displayName would
+  // interleave them ("Accounting" lands above "Marketing & SEO").
   // Comfortable density gives the breathing-room rhythm shown in the
   // WPDS Payouts reference: ~64–72px row height, hairline dividers
   // between rows, vertically-centered cell content. Default ('balanced')
