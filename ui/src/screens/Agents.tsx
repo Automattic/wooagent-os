@@ -28,77 +28,57 @@ interface Props {
   onAskAgent: () => void;
 }
 
-// Hardcoded V1 metadata per persona — the daemon doesn't surface mandates,
-// run-state, or last-run timestamps yet. Wire to real fields when the daemon
-// learns to report them.
+// UI-side persona descriptors. `mandate` and `systemPrompt` are design copy
+// describing each agent's role (the daemon doesn't store them yet); they're
+// kept here as part of the screen's content, not as state. The previous
+// `status` ("running"/"idle") and `lastRun` fields were dropped — those
+// implied live run-state the daemon doesn't track. See `IMPLEMENTED_PERSONAS`
+// below for which agents are actually operational vs. coming soon.
 interface PersonaMeta {
   mandate: string;
-  status: 'running' | 'idle';
-  lastRun: string;
   systemPrompt: string;
 }
 
 const PERSONA_META: Record<string, PersonaMeta> = {
   marketing: {
     mandate: 'Grows organic traffic and on-site conversion.',
-    status: 'running',
-    lastRun: '3m ago',
     systemPrompt:
       "You are the Marketing & SEO agent for mystore.com. Your primary goal is to grow organic traffic and improve conversion rates. Monitor keyword rankings, suggest meta description updates, and generate product copy that matches the store's warm, approachable brand voice. Always flag changes before writing to WooCommerce.",
   },
   pricing: {
     mandate: 'Protects margin and monitors competitor pricing.',
-    status: 'idle',
-    lastRun: '1h ago',
     systemPrompt:
       'You are the Pricing agent. Watch margins, sales velocity, and competitor signals to propose price moves. Always require human approval before changing live prices.',
   },
   inventory: {
     mandate: 'Keeps stock levels healthy; drafts POs.',
-    status: 'running',
-    lastRun: '6m ago',
     systemPrompt:
       'You are the Inventory agent. Surface low-stock and overstock issues, propose reorder quantities, and draft purchase orders against approved suppliers.',
   },
   accounting: {
     mandate: 'Reconciles payouts, tracks tax, preps books.',
-    status: 'idle',
-    lastRun: '4h ago',
     systemPrompt:
       'You are the Accounting agent. Reconcile WooPayments and Stripe payouts against the bank, flag tax-relevant changes, and draft month-end summaries.',
   },
   reporting: {
     mandate: 'Produces weekly and monthly digests.',
-    status: 'idle',
-    lastRun: '4h ago',
     systemPrompt:
       'You are the Reporting agent. Generate weekly and monthly digests covering revenue, conversion, and operational anomalies. Investigate ad-hoc questions on request.',
   },
   'sales-support': {
     mandate: 'Drafts replies to pre-sale and order inquiries.',
-    status: 'running',
-    lastRun: '12m ago',
     systemPrompt:
       'You are the Sales Support agent. Draft customer replies, handle refund triage, and escalate edge cases. Never reply directly without human approval.',
   },
   chief: {
     mandate: 'Triages, routes, and summarizes across the fleet.',
-    status: 'idle',
-    lastRun: '2h ago',
     systemPrompt:
       'You are the Chief of Staff. Triage incoming work, route it to the right specialist agent, and keep the operator briefed on what the fleet is doing.',
   },
 };
 
 function metaFor(personaKey: string): PersonaMeta {
-  return (
-    PERSONA_META[personaKey] ?? {
-      mandate: '—',
-      status: 'idle',
-      lastRun: '—',
-      systemPrompt: '',
-    }
-  );
+  return PERSONA_META[personaKey] ?? { mandate: '—', systemPrompt: '' };
 }
 
 // Canonical 7-agent fleet. The daemon may only return a subset; the Roster
@@ -112,6 +92,17 @@ const ALL_PERSONA_KEYS = [
   'sales-support',
   'chief',
 ];
+
+// Personas the daemon has actually seeded and wired to ability handlers.
+// Anything outside this set renders as "Coming soon" — the row still appears
+// in the roster, but its controls (enable toggle, model preference, edit)
+// are inert until the daemon learns to drive it. Keep in sync with the
+// `defaultPersonas` list in daemon/internal/cli/init.go.
+const IMPLEMENTED_PERSONAS = new Set<string>([
+  'marketing',
+  'pricing',
+  'sales-support',
+]);
 
 function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
   const byKey = new Map(daemonPersonas.map((p) => [p.persona, p]));
@@ -186,57 +177,61 @@ function MandateCell({ persona }: { persona: Persona }) {
 }
 
 function ModelCell({ persona }: { persona: Persona }) {
-  // Local-only state until daemon supports model PATCH. Pre-populated from the
-  // daemon snapshot; changes don't persist yet.
-  const initial = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
-  const [model, setModel] = useState<string>(initial);
-  // Wrapper width forces the cell to ~180px regardless of `table-layout: auto`
+  // Read-only until daemon supports model PATCH. Shows the daemon's current
+  // preference (or the default) without an interactive control that can't
+  // persist its changes. Wire to a real PATCH endpoint and re-enable when
+  // daemon support lands.
+  const current = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
+  // Wrapper width keeps the column at ~180px regardless of `table-layout`
   // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
   // but auto-layout treats it as a preference; sizing the content itself is
   // the only reliable lever.
   return (
     <div style={{ minWidth: 180 }}>
-      <SelectControl
-        __nextHasNoMarginBottom
-        label="Model"
-        hideLabelFromVision
-        value={model}
-        options={modelOptionsFor(model)}
-        onChange={(next) => setModel(next ?? initial)}
-      />
+      <Tooltip text="Model preference is read-only until operator controls land.">
+        {/* CUSTOM: span wrapper so Tooltip has a non-disabled hover/focus
+            anchor — disabled SelectControl drops pointer events. Same pattern
+            used by the Add agent button in this screen's actions slot. */}
+        <span style={{ display: 'inline-flex', width: '100%' }} tabIndex={0}>
+          <SelectControl
+            __nextHasNoMarginBottom
+            label="Model"
+            hideLabelFromVision
+            value={current}
+            options={modelOptionsFor(current)}
+            disabled
+            aria-disabled="true"
+            onChange={() => {}}
+          />
+        </span>
+      </Tooltip>
     </div>
   );
 }
 
 function StatusCell({ persona }: { persona: Persona }) {
-  const meta = metaFor(persona.persona);
-  if (meta.status === 'running') {
-    return <Badge intent="stable">Running</Badge>;
+  // Unimplemented personas: the daemon either hasn't seeded them or has no
+  // ability handlers wired up. Surface that plainly instead of pretending
+  // they can be enabled. Implemented personas show daemon truth via a
+  // disabled FormToggle — controls land once /v1/agents accepts PATCH.
+  if (!IMPLEMENTED_PERSONAS.has(persona.persona)) {
+    return <Badge intent="draft">Coming soon</Badge>;
   }
-  return <Badge intent="none">Idle</Badge>;
-}
-
-function LastRunCell({ persona }: { persona: Persona }) {
   return (
-    <span
-      style={{
-        fontSize: 'var(--wpds-typography-font-size-sm)',
-        color: 'var(--wpds-color-fg-content-neutral-weak)',
-      }}
-    >
-      {metaFor(persona.persona).lastRun}
-    </span>
+    <Tooltip text="Enable / disable lands with daemon operator controls.">
+      {/* CUSTOM: span wrapper to give Tooltip a non-disabled hover/focus
+          anchor (FormToggle disabled drops pointer events). Same pattern as
+          ModelCell and the Add agent button. */}
+      <span style={{ display: 'inline-flex' }} tabIndex={0}>
+        <FormToggle
+          checked={persona.enabled}
+          disabled
+          aria-disabled="true"
+          onChange={() => {}}
+        />
+      </span>
+    </Tooltip>
   );
-}
-
-function EnabledCell({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-}) {
-  return <FormToggle checked={enabled} onChange={onToggle} />;
 }
 
 // Click-stopper for cells that own their own click semantics. DataViews makes
@@ -280,7 +275,7 @@ const DEFAULT_VIEW: View = {
   page: 1,
   perPage: 25,
   titleField: 'persona',
-  fields: ['mandate', 'model', 'status', 'last_run', 'enabled'],
+  fields: ['mandate', 'model', 'enabled'],
   sort: { field: 'persona', direction: 'asc' },
   // Comfortable density gives the breathing-room rhythm shown in the
   // WPDS Payouts reference: ~64–72px row height, hairline dividers
@@ -302,8 +297,6 @@ export default function Agents({ connection, onAskAgent }: Props) {
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Persona | null>(null);
-  // Local-only enabled state — daemon has no PATCH /v1/agents yet.
-  const [enabledMap, setEnabledMap] = useState<Record<string, boolean>>({});
   const [view, setView] = useState<View>(DEFAULT_VIEW);
 
   const fetchAgents = useCallback(
@@ -313,9 +306,6 @@ export default function Agents({ connection, onAskAgent }: Props) {
         const res = await api.agents(connection);
         if (signal.cancelled) return;
         setPersonas(res.agents);
-        const map: Record<string, boolean> = {};
-        for (const a of res.agents) map[a.persona] = a.enabled;
-        setEnabledMap(map);
       } catch (e) {
         if (!signal.cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -339,8 +329,6 @@ export default function Agents({ connection, onAskAgent }: Props) {
     void fetchAgents(signal);
   };
 
-  // Field config — closures over enabledMap / setEnabledMap are intentional.
-  // Memoised so DataViews receives a stable reference between toggle flips.
   const fields = useMemo<Field<Persona>[]>(
     () => [
       {
@@ -371,59 +359,34 @@ export default function Agents({ connection, onAskAgent }: Props) {
         ),
       },
       {
-        id: 'status',
-        label: 'Status',
-        elements: [
-          { value: 'running', label: 'Running' },
-          { value: 'idle', label: 'Idle' },
-        ],
-        getValue: ({ item }) => metaFor(item.persona).status,
-        render: ({ item }) => <StatusCell persona={item} />,
-      },
-      {
-        id: 'last_run',
-        label: 'Last run',
-        enableSorting: false,
-        getValue: ({ item }) => metaFor(item.persona).lastRun,
-        render: ({ item }) => <LastRunCell persona={item} />,
-      },
-      {
         id: 'enabled',
-        label: 'Enabled',
+        label: 'Status',
         enableSorting: false,
         getValue: ({ item }) =>
-          Boolean(enabledMap[item.persona] ?? item.enabled),
-        render: ({ item }) => {
-          const enabled = enabledMap[item.persona] ?? item.enabled;
-          return (
-            <NoRowClick>
-              <EnabledCell
-                enabled={enabled}
-                onToggle={() =>
-                  setEnabledMap((m) => ({
-                    ...m,
-                    [item.persona]: !enabled,
-                  }))
-                }
-              />
-            </NoRowClick>
-          );
-        },
+          IMPLEMENTED_PERSONAS.has(item.persona) ? Boolean(item.enabled) : false,
+        render: ({ item }) => (
+          <NoRowClick>
+            <StatusCell persona={item} />
+          </NoRowClick>
+        ),
       },
     ],
-    [enabledMap],
+    [],
   );
 
   // Row click drives the edit flow via `onClickItem`. The actions are also
   // exposed under the per-row ⋮ menu — no `isPrimary` flag on either, so
   // DataViews keeps them in the secondary-actions dropdown rather than
   // rendering them inline as text buttons. `supportsBulk` is omitted
-  // everywhere so DataViews does not render a selection column.
+  // everywhere so DataViews does not render a selection column. Edit is
+  // gated to implemented personas — the unimplemented rows have no persona
+  // to configure yet.
   const actions = useMemo<Action<Persona>[]>(
     () => [
       {
         id: 'edit',
         label: 'Edit persona',
+        isEligible: (item) => IMPLEMENTED_PERSONAS.has(item.persona),
         callback: (items) => {
           const p = items[0];
           if (p) setEditing(p);
@@ -451,17 +414,21 @@ export default function Agents({ connection, onAskAgent }: Props) {
     [fullRoster, view, fields],
   );
 
-  const runningCount = fullRoster.filter(
-    (p) => metaFor(p.persona).status === 'running',
+  const activeCount = fullRoster.filter(
+    (p) => IMPLEMENTED_PERSONAS.has(p.persona) && p.enabled,
+  ).length;
+  const comingSoonCount = fullRoster.filter(
+    (p) => !IMPLEMENTED_PERSONAS.has(p.persona),
   ).length;
 
-  // Subtitle stays usable across error/loading/content states. When personas
-  // are null we still display the canonical fleet size (7); the running count
-  // only shows once the daemon snapshot loads.
+  // Subtitle is honest about what the daemon actually knows: how many
+  // implemented personas are enabled, and how many are still coming soon.
+  // When personas are null we still display the canonical fleet size (7);
+  // active / coming-soon counts only show once the daemon snapshot loads.
   const subTitle =
     personas === null
       ? 'Fleet roster · 7 personas'
-      : `Fleet roster · ${fullRoster.length} personas · ${runningCount} currently running`;
+      : `Fleet roster · ${activeCount} active · ${comingSoonCount} coming soon`;
 
   return (
     <Page
@@ -521,7 +488,9 @@ export default function Agents({ connection, onAskAgent }: Props) {
             getItemId={(p) => p.persona}
             paginationInfo={paginationInfo}
             defaultLayouts={{ table: {} }}
-            onClickItem={(p) => setEditing(p)}
+            onClickItem={(p) => {
+              if (IMPLEMENTED_PERSONAS.has(p.persona)) setEditing(p);
+            }}
             empty={<EmptyState />}
           />
 
