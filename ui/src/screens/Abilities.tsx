@@ -12,7 +12,7 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 import {
   api,
   type Ability,
-  type AbilityTrustState,
+  type AbilityEffectiveTrust,
   type Connection,
 } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -22,32 +22,52 @@ interface Props {
   onAskAgent: () => void;
 }
 
-// Trust-state vocabulary the daemon surfaces. Labels are sentence case per
-// DESIGN.md; intents reuse WPDS intents — `stable` for trusted, `medium`
-// for the schema-drift case (operator action needed but not catastrophic),
-// `informational` for newly-discovered rows.
-const TRUST_LABEL: Record<AbilityTrustState, string> = {
+// Effective-trust vocabulary the daemon returns on /v1/abilities. Labels
+// sentence case per DESIGN.md; intents reuse WPDS intents — `stable` for
+// trusted (operator-approved or built-in), `informational` for fresh
+// discoveries that need a review pass, `high` for the schema-drift case
+// (operator action needed; the cached approval no longer matches).
+const TRUST_LABEL: Record<AbilityEffectiveTrust, string> = {
+  'built-in': 'Built-in',
   trusted: 'Trusted',
-  new: 'New',
-  schema_changed: 'Changed',
+  needs_review: 'Needs review',
+  schema_changed: 'Schema changed',
 };
 
 const TRUST_INTENT: Record<
-  AbilityTrustState,
-  'stable' | 'medium' | 'informational'
+  AbilityEffectiveTrust,
+  'stable' | 'informational' | 'high'
 > = {
+  'built-in': 'stable',
   trusted: 'stable',
-  new: 'informational',
-  schema_changed: 'medium',
+  needs_review: 'informational',
+  schema_changed: 'high',
 };
 
 // DataViews 'elements' for the trust-state filter dropdown. The `value`
 // has to round-trip through the same string the daemon emits.
-const TRUST_ELEMENTS: Array<{ value: AbilityTrustState; label: string }> = [
+const TRUST_ELEMENTS: Array<{ value: AbilityEffectiveTrust; label: string }> = [
+  { value: 'built-in', label: 'Built-in' },
   { value: 'trusted', label: 'Trusted' },
-  { value: 'new', label: 'New' },
-  { value: 'schema_changed', label: 'Changed' },
+  { value: 'needs_review', label: 'Needs review' },
+  { value: 'schema_changed', label: 'Schema changed' },
 ];
+
+// Fallback when the daemon hasn't been redeployed yet and effective_trust
+// is missing from the response. Maps the raw DB column to the closest
+// effective value. The proper computation lives server-side; this is only
+// for back-compat during the deploy window.
+function effectiveTrustOf(ability: Ability): AbilityEffectiveTrust {
+  if (ability.effective_trust) return ability.effective_trust;
+  switch (ability.trust_state) {
+    case 'trusted':
+      return 'trusted';
+    case 'schema_changed':
+      return 'schema_changed';
+    default:
+      return 'needs_review';
+  }
+}
 
 function relativeTime(iso: string | undefined): string {
   if (!iso) return '—';
@@ -114,8 +134,9 @@ function VersionCell({ ability }: { ability: Ability }) {
   );
 }
 
-function TrustCell({ state }: { state: AbilityTrustState }) {
-  return <Badge intent={TRUST_INTENT[state]}>{TRUST_LABEL[state]}</Badge>;
+function TrustCell({ ability }: { ability: Ability }) {
+  const effective = effectiveTrustOf(ability);
+  return <Badge intent={TRUST_INTENT[effective]}>{TRUST_LABEL[effective]}</Badge>;
 }
 
 function LastSeenCell({ ability }: { ability: Ability }) {
@@ -144,13 +165,13 @@ function InspectorModal({
   onTrust: (id: string) => void;
   onClose: () => void;
 }) {
-  const trustable =
-    ability.trust_state === 'new' || ability.trust_state === 'schema_changed';
+  const e = effectiveTrustOf(ability);
+  const trustable = e === 'needs_review' || e === 'schema_changed';
   return (
     <Modal title={ability.title || ability.name} onRequestClose={onClose} size="medium">
       <Stack direction="column" gap="md">
         <Stack direction="row" gap="sm" align="center">
-          <TrustCell state={ability.trust_state} />
+          <TrustCell ability={ability} />
           {ability.version && (
             <Badge intent="none">{`v${ability.version}`}</Badge>
           )}
@@ -388,10 +409,10 @@ export default function Abilities({ connection, onAskAgent }: Props) {
       },
       {
         id: 'trust_state',
-        label: 'Trust',
+        label: 'Status',
         elements: TRUST_ELEMENTS,
-        getValue: ({ item }) => item.trust_state,
-        render: ({ item }) => <TrustCell state={item.trust_state} />,
+        getValue: ({ item }) => effectiveTrustOf(item),
+        render: ({ item }) => <TrustCell ability={item} />,
       },
       {
         id: 'last_seen',
@@ -412,9 +433,10 @@ export default function Abilities({ connection, onAskAgent }: Props) {
       {
         id: 'trust',
         label: 'Trust this ability',
-        isEligible: (ability) =>
-          ability.trust_state === 'new' ||
-          ability.trust_state === 'schema_changed',
+        isEligible: (ability) => {
+          const e = effectiveTrustOf(ability);
+          return e === 'needs_review' || e === 'schema_changed';
+        },
         callback: (items) => {
           const a = items[0];
           if (a) void handleTrust(a.id);
@@ -442,8 +464,12 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   const counts = useMemo(() => {
     const c = { total: data.length, trusted: 0, needsReview: 0 };
     for (const a of data) {
-      if (a.trust_state === 'trusted') c.trusted += 1;
-      else c.needsReview += 1;
+      const effective = effectiveTrustOf(a);
+      if (effective === 'built-in' || effective === 'trusted') {
+        c.trusted += 1;
+      } else {
+        c.needsReview += 1;
+      }
     }
     return c;
   }, [data]);
