@@ -275,6 +275,29 @@ a {
   margin: var(--wpds-dimension-gap-xs) var(--wpds-dimension-padding-md);
 }
 
+/* CUSTOM: footer toggle that reveals the Connection popover. (a) WPDS Button
+   has no dark-surface variant matching the sidebar; the toggle has to live
+   on the same #1e1e1e background as the rest of the sidebar chrome.
+   (b) Native <button> reset + hover/focus parity with the nav links above.
+   (c) Follow-up: collapse into a WPDS Button variant when one ships for
+   dark surfaces. */
+.wa-sidebar-footer-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: var(--wpds-dimension-padding-md);
+  font: inherit;
+}
+.wa-sidebar-footer-toggle:hover,
+.wa-sidebar-footer-toggle:focus-visible {
+  background: rgba(56, 88, 233, 0.12);
+  outline: none;
+}
+
 .wa-mobile-bar {
   display: none;
   position: sticky;
@@ -401,6 +424,13 @@ a {
 .wa-persona-avatar--xs { height: 14px; width: 14px; font-size: 7px; }
 .wa-persona-avatar--sm { height: 18px; width: 18px; font-size: 8px; }
 .wa-persona-avatar--md { height: 24px; width: 24px; font-size: 10px; }
+/* Image variant: artwork is self-contained, so drop the colored background
+   and let the PNG fill the circle. object-fit keeps the 48px source square
+   aspect-correct when rendered into the 14/18/24px circles. */
+.wa-persona-avatar--image {
+  background: none;
+  object-fit: cover;
+}
 
 /* Top bar — search + Ask agent button. Sticky beneath the global header
    on desktop; sits below the mobile bar when the drawer is closed. */

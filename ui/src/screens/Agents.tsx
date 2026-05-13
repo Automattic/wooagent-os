@@ -7,10 +7,13 @@ import {
 } from 'react';
 import { Badge, Notice, Stack, Text } from '@wordpress/ui';
 import {
+  Button,
   FormToggle,
   SelectControl,
   Spinner,
+  Tooltip,
 } from '@wordpress/components';
+import { plus } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
@@ -464,7 +467,32 @@ export default function Agents({ connection, onAskAgent }: Props) {
     <Page
       title="Agents"
       subTitle={subTitle}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
+      actions={
+        <Stack direction="row" align="center" gap="md">
+          <Tooltip text="Out of scope for phase 1">
+            {/* CUSTOM: span wrapper around the disabled button. (a) WPDS
+                Tooltip can't fire on a `<button disabled>` because the
+                browser drops pointer events on disabled buttons. (b) The
+                span gives Ariakit a non-disabled anchor for hover/focus
+                while the inner Button keeps its native disabled styling.
+                (c) Pattern recommended by the WPDS Storybook tooltip
+                examples; follow-up if WPDS ships a first-class
+                disabled-tooltip wrapper. */}
+            <span style={{ display: 'inline-flex' }} tabIndex={0}>
+              <Button
+                variant="primary"
+                icon={plus}
+                __next40pxDefaultSize
+                disabled
+                aria-disabled="true"
+              >
+                Add agent
+              </Button>
+            </span>
+          </Tooltip>
+          <PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />
+        </Stack>
+      }
     >
       {error ? (
         <Notice.Root intent="error">

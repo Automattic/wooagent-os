@@ -10,9 +10,12 @@ import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
 import Abilities from './screens/Abilities';
 import Archived from './screens/Archived';
-import Settings from './screens/Settings';
+import Stores from './screens/Stores';
+import Models from './screens/Models';
 import Placeholder from './screens/Placeholder';
 import {
+  clearConnection,
+  isEmbedded,
   loadConnection,
   type Batch,
   type Connection,
@@ -148,13 +151,6 @@ export default function App() {
     );
   }
 
-  const hostname = (() => {
-    try {
-      return new URL(connection.daemonUrl).host;
-    } catch {
-      return connection.daemonUrl;
-    }
-  })();
   const inReview = (issues ?? []).filter((i) => i.status === 'in_review').length;
   const askAgentContext = `Board · Today's marketing queue · ${(issues ?? []).length} items`;
 
@@ -164,7 +160,14 @@ export default function App() {
         <>
           <LeftNav
             marketingInReview={inReview}
-            daemonHostname={hostname}
+            connection={connection}
+            embedded={isEmbedded()}
+            onForgetConnection={() => {
+              clearConnection();
+              setConnection(null);
+              setIssues(null);
+              setBatches([]);
+            }}
             isOpen={drawer.isOpen}
             onItemClick={drawer.close}
           />
@@ -232,15 +235,10 @@ export default function App() {
             }
           />
           <Route
-            path="/settings"
+            path="/stores"
             element={
-              <Settings
+              <Stores
                 connection={connection}
-                onDisconnect={() => {
-                  setConnection(null);
-                  setIssues(null);
-                  setBatches([]);
-                }}
                 onStoreDisconnected={() => {
                   // Flip onboarding state so App's render branch picks
                   // OnboardingRoutes on the next render. OnboardingShell
@@ -250,6 +248,17 @@ export default function App() {
                   setIssues(null);
                   setBatches([]);
                 }}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
+            }
+          />
+          {/* Redirect legacy bookmarks. */}
+          <Route path="/settings" element={<Navigate to="/stores" replace />} />
+          <Route
+            path="/models"
+            element={
+              <Models
+                connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
               />
             }
