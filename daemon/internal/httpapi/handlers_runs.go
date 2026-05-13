@@ -104,9 +104,12 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var turnEvent *telemetry.TurnEvent
 	if run.TurnID != nil {
-		if te, err := telemetry.LoadTurnEvent(r.Context(), s.store.DB, *run.TurnID); err == nil {
-			turnEvent = te
+		te, err := telemetry.LoadTurnEvent(r.Context(), s.store.DB, *run.TurnID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
 		}
+		turnEvent = te
 	}
 	chain, err := loadRetryChain(r.Context(), s.store.DB, run)
 	if err != nil {

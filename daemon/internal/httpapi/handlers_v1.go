@@ -89,9 +89,11 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		if lastRunAt.Valid && lastRunAt.String != "" {
 			s := lastRunAt.String
 			p.LastRunAt = &s
-			if t, err := time.Parse(time.RFC3339, lastRunAt.String); err == nil {
-				next := t.Add(time.Duration(p.CadenceSeconds) * time.Second).UTC().Format(time.RFC3339)
-				p.NextRunAt = &next
+			if p.CadenceSeconds > 0 {
+				if t, err := time.Parse(time.RFC3339, lastRunAt.String); err == nil {
+					next := t.Add(time.Duration(p.CadenceSeconds) * time.Second).UTC().Format(time.RFC3339)
+					p.NextRunAt = &next
+				}
 			}
 		}
 		agents = append(agents, p)

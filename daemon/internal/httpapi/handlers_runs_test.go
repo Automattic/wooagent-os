@@ -144,3 +144,53 @@ func TestPostRuns_EnqueuesManual(t *testing.T) {
 		t.Errorf("expected 1 manual run, got %d", n)
 	}
 }
+
+func TestGetRun_NotFound(t *testing.T) {
+	_, ts, _ := newRunsTestRig(t)
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/v1/runs/does-not-exist")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestGetRun_HappyPath(t *testing.T) {
+	_, ts, st := newRunsTestRig(t)
+	defer ts.Close()
+	fixed := time.Now().UTC().Format(time.RFC3339)
+	if _, err := st.DB.Exec(
+		`INSERT INTO runs(id, persona, trigger, status, scheduled_at, created_at) VALUES('r1','marketing','tick','succeeded',?,?)`,
+		fixed, fixed,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	resp, err := http.Get(ts.URL + "/v1/runs/r1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var body struct {
+		Run        scheduler.Run   `json:"run"`
+		TurnEvent  any             `json:"turn_event"`
+		RetryChain []scheduler.Run `json:"retry_chain"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Run.ID != "r1" {
+		t.Errorf("run.id = %s, want r1", body.Run.ID)
+	}
+	if len(body.RetryChain) != 1 || body.RetryChain[0].ID != "r1" {
+		t.Errorf("retry_chain = %+v, want single r1 entry", body.RetryChain)
+	}
+	if body.TurnEvent != nil {
+		t.Errorf("turn_event = %v, want nil (no turn_id set on seeded row)", body.TurnEvent)
+	}
+}
