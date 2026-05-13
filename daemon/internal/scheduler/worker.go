@@ -58,7 +58,11 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		ran, err := w.RunOnce(ctx)
 		if err != nil {
-			time.Sleep(idleSleep)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(idleSleep):
+			}
 			continue
 		}
 		if !ran {
@@ -122,15 +126,19 @@ func (w *Worker) executeAndRecord(ctx context.Context, r *Run, persona personas.
 		return nil
 	}
 	// Enqueue the retry.
-	backoffIdx := r.Attempt - 1
-	if backoffIdx >= len(w.Backoff) {
-		backoffIdx = len(w.Backoff) - 1
+	var delay time.Duration
+	if len(w.Backoff) > 0 {
+		backoffIdx := r.Attempt - 1
+		if backoffIdx >= len(w.Backoff) {
+			backoffIdx = len(w.Backoff) - 1
+		}
+		delay = w.Backoff[backoffIdx]
 	}
 	parentID := r.ID
 	_, err := w.Queue.Enqueue(ctx, EnqueueParams{
 		Persona:     r.Persona,
 		Trigger:     TriggerRetry,
-		ScheduledAt: end.Add(w.Backoff[backoffIdx]),
+		ScheduledAt: end.Add(delay),
 		Attempt:     r.Attempt + 1,
 		RetryOf:     &parentID,
 	})
