@@ -48,24 +48,28 @@ func (m *Manager) Mint(ctx context.Context, name string) (string, error) {
 	return plaintext, nil
 }
 
-// Validate returns nil if the supplied plaintext matches a token in the
-// database. On success it updates last_used_at.
-func (m *Manager) Validate(ctx context.Context, plaintext string) error {
+// Validate returns the friendly name of the matching token if the
+// supplied plaintext is recognized; otherwise ErrInvalidToken. The
+// name is the operator identity stashed in audit rows for any
+// mutation the bearer performs. On success it updates last_used_at.
+func (m *Manager) Validate(ctx context.Context, plaintext string) (string, error) {
 	if plaintext == "" {
-		return ErrInvalidToken
+		return "", ErrInvalidToken
 	}
 	hash := hashToken(plaintext)
-	var exists int
-	err := m.DB.QueryRowContext(ctx, `SELECT 1 FROM auth_tokens WHERE token_hash = ?`, hash).Scan(&exists)
+	var name string
+	err := m.DB.QueryRowContext(ctx,
+		`SELECT name FROM auth_tokens WHERE token_hash = ?`, hash,
+	).Scan(&name)
 	if errors.Is(err, sql.ErrNoRows) {
-		return ErrInvalidToken
+		return "", ErrInvalidToken
 	}
 	if err != nil {
-		return fmt.Errorf("lookup token: %w", err)
+		return "", fmt.Errorf("lookup token: %w", err)
 	}
 	_, _ = m.DB.ExecContext(ctx, `UPDATE auth_tokens SET last_used_at = ? WHERE token_hash = ?`,
 		time.Now().UTC().Format(time.RFC3339), hash)
-	return nil
+	return name, nil
 }
 
 // AnyTokenExists reports whether at least one auth token is present. Used by

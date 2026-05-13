@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 )
+
+type contextKey string
+
+const operatorNameKey contextKey = "wooagent.operatorName"
 
 func (s *Server) bearerAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +28,8 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "auth_missing", "Authorization: Bearer <token> required")
 			return
 		}
-		if err := s.auth.Validate(r.Context(), token); err != nil {
+		name, err := s.auth.Validate(r.Context(), token)
+		if err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) {
 				writeError(w, http.StatusUnauthorized, "auth_invalid", "token not recognized")
 				return
@@ -31,8 +37,18 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 			writeError(w, http.StatusInternalServerError, "auth_error", "auth lookup failed")
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := context.WithValue(r.Context(), operatorNameKey, name)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// operatorName returns the bearer-token name that authorized this
+// request. Empty string if not present (e.g. routes outside the
+// bearer-auth middleware chain, or if called before the middleware
+// has run).
+func operatorName(r *http.Request) string {
+	v, _ := r.Context().Value(operatorNameKey).(string)
+	return v
 }
 
 // requestLogger logs one line per request with method, path, status, bytes,
