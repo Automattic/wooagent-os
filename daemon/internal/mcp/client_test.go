@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -229,5 +230,33 @@ func TestDiscoverAbilities_FailedEnvelope_ReturnsError(t *testing.T) {
 	}
 	if _, err := c.DiscoverAbilities(context.Background()); err == nil {
 		t.Errorf("expected error on success=false")
+	}
+}
+
+func TestCallTool_SessionLost_ReturnsSentinel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Mimic the server's "invalid session" response shape.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32000,"message":"invalid or expired session"}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{Endpoint: srv.URL})
+	// Bypass Initialize: set a stale session id directly so the next CallTool
+	// hits the "session invalid" server response.
+	c.sessionID = "stale-session"
+	_, err := c.CallTool(context.Background(), "any", nil)
+	if !errors.Is(err, ErrSessionLost) {
+		t.Fatalf("want ErrSessionLost, got %v", err)
+	}
+}
+
+func TestCallTool_ConnectionRefused_ReturnsTransportSentinel(t *testing.T) {
+	// Closed listener — Dial will fail.
+	c := NewClient(Config{Endpoint: "http://127.0.0.1:1"})
+	_, err := c.Initialize(context.Background())
+	if !errors.Is(err, ErrTransport) {
+		t.Fatalf("want ErrTransport, got %v", err)
 	}
 }

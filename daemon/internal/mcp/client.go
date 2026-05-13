@@ -9,12 +9,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 )
+
+// ErrSessionLost means the MCP server rejected the request because its
+// session id is unknown or expired. The scheduler treats this as transient
+// — a re-Initialize on the next attempt typically recovers.
+var ErrSessionLost = errors.New("mcp: session lost")
+
+// ErrTransport means the JSON-RPC envelope never made it to the server
+// (network error, TLS error, connection refused, etc.) or the response
+// wasn't valid JSON. Scheduler-side, this is transient.
+var ErrTransport = errors.New("mcp: transport error")
 
 // Protocol version the client announces on initialize. The server may
 // respond with a different version; we do not renegotiate.
@@ -273,7 +285,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return wrapTransportError(method, err)
 	}
 	defer resp.Body.Close()
 
@@ -285,17 +297,24 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return wrapTransportError(method, err)
 	}
 	if resp.StatusCode >= 400 {
+		// Attempt to parse a JSON-RPC error body even on HTTP error status —
+		// some servers (e.g. the WP MCP Adapter) return 400 with a valid
+		// JSON-RPC error envelope for session-related rejections.
+		var rpcResp rpcResponse
+		if jsonErr := json.Unmarshal(raw, &rpcResp); jsonErr == nil && rpcResp.Error != nil {
+			return wrapEnvelopeError(method, rpcResp.Error.Message)
+		}
 		return fmt.Errorf("http %d: %s", resp.StatusCode, string(raw))
 	}
 	var rpcResp rpcResponse
 	if err := json.Unmarshal(raw, &rpcResp); err != nil {
-		return fmt.Errorf("decode response: %w  body=%s", err, string(raw))
+		return wrapTransportError(method, fmt.Errorf("decode response: %w  body=%s", err, string(raw)))
 	}
 	if rpcResp.Error != nil {
-		return fmt.Errorf("jsonrpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
+		return wrapEnvelopeError(method, rpcResp.Error.Message)
 	}
 	if out != nil && len(rpcResp.Result) > 0 {
 		if err := json.Unmarshal(rpcResp.Result, out); err != nil {
@@ -303,6 +322,21 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 		}
 	}
 	return nil
+}
+
+func wrapTransportError(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w: %v", op, ErrTransport, err)
+}
+
+func wrapEnvelopeError(op, jsonRPCError string) error {
+	lower := strings.ToLower(jsonRPCError)
+	if strings.Contains(lower, "session") && (strings.Contains(lower, "expired") || strings.Contains(lower, "invalid")) {
+		return fmt.Errorf("%s: %w: %s", op, ErrSessionLost, jsonRPCError)
+	}
+	return fmt.Errorf("%s: %s", op, jsonRPCError)
 }
 
 func (c *Client) doNotification(ctx context.Context, method string, params any) error {
