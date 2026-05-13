@@ -69,6 +69,15 @@ function effectiveTrustOf(ability: Ability): AbilityEffectiveTrust {
   }
 }
 
+// True when the operator should still see a Trust action for this row.
+// Built-in and operator-trusted rows don't need it — built-in is already
+// admitted by the PEP; trusted has been explicitly approved at the
+// current schema.
+function isTrustable(ability: Ability): boolean {
+  const e = effectiveTrustOf(ability);
+  return e === 'needs_review' || e === 'schema_changed';
+}
+
 function relativeTime(iso: string | undefined): string {
   if (!iso) return '—';
   const t = Date.parse(iso);
@@ -165,8 +174,7 @@ function InspectorModal({
   onTrust: (id: string) => void;
   onClose: () => void;
 }) {
-  const e = effectiveTrustOf(ability);
-  const trustable = e === 'needs_review' || e === 'schema_changed';
+  const trustable = isTrustable(ability);
   return (
     <Modal title={ability.title || ability.name} onRequestClose={onClose} size="medium">
       <Stack direction="column" gap="md">
@@ -433,10 +441,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
       {
         id: 'trust',
         label: 'Trust this ability',
-        isEligible: (ability) => {
-          const e = effectiveTrustOf(ability);
-          return e === 'needs_review' || e === 'schema_changed';
-        },
+        isEligible: (ability) => isTrustable(ability),
         callback: (items) => {
           const a = items[0];
           if (a) void handleTrust(a.id);
