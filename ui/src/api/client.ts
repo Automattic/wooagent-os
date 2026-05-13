@@ -23,6 +23,14 @@ declare global {
   }
 }
 
+// True when the daemon templated a per-run session token into index.html
+// (it serves the UI itself at the daemon origin). In that mode, the
+// connection is fully determined by the daemon process — localStorage
+// can't override it and "forgetting" it via the UI is meaningless.
+export function isEmbedded(): boolean {
+  return typeof window !== 'undefined' && !!window.__WOOAGENT_TOKEN__;
+}
+
 export function loadConnection(): Connection | null {
   if (typeof window !== 'undefined' && window.__WOOAGENT_TOKEN__) {
     return {
