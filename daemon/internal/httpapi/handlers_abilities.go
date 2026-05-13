@@ -65,6 +65,9 @@ func computeEffectiveTrust(trustState string, manifestSigned bool) string {
 // Optional query params (AND'd together):
 //   store_id     — filter to one store
 //   trust_state  — new | trusted | schema_changed
+//   (The UI's Status filter uses effective_trust values — built-in,
+//   trusted, needs_review, schema_changed — but filtering happens
+//   client-side via DataViews; this query param is for non-UI consumers.)
 func (s *Server) handleListAbilities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
