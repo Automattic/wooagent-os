@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -55,5 +56,22 @@ func TestScheduler_EnqueueManual_DisabledPersona_Rejects(t *testing.T) {
 	_, err := s.EnqueueManual(context.Background(), "marketing")
 	if err == nil {
 		t.Fatalf("expected error for disabled persona, got nil")
+	}
+}
+
+func TestScheduler_EnqueueManual_DisabledPersona_ReturnsSentinel(t *testing.T) {
+	db := openTestDB(t)
+	_, _ = db.ExecContext(context.Background(),
+		`UPDATE agents SET enabled=0 WHERE persona='marketing'`)
+	st := &store.Store{DB: db}
+	s := &Scheduler{Store: st, Now: time.Now} // Note: no Out — must not panic
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = s.Start(ctx)
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+
+	_, err := s.EnqueueManual(context.Background(), "marketing")
+	if !errors.Is(err, ErrPersonaUnavailable) {
+		t.Fatalf("want ErrPersonaUnavailable, got %v", err)
 	}
 }

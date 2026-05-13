@@ -12,6 +12,11 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
+// ErrPersonaUnavailable is returned by EnqueueManual when the persona is
+// either disabled in the agents table or absent entirely. HTTP handlers
+// map this to 409.
+var ErrPersonaUnavailable = errors.New("scheduler: persona disabled or unknown")
+
 // Scheduler bundles the Loop and Worker. One per daemon process.
 type Scheduler struct {
 	Store       *store.Store
@@ -42,6 +47,9 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 	if s.MaxAttempts == 0 {
 		s.MaxAttempts = 3
+	}
+	if s.Out == nil {
+		s.Out = io.Discard
 	}
 	s.queue = &Queue{DB: s.Store.DB, Now: s.Now}
 
@@ -92,7 +100,7 @@ func (s *Scheduler) EnqueueManual(ctx context.Context, personaSlug string) (Run,
 		return Run{}, err
 	}
 	if !enabled {
-		return Run{}, fmt.Errorf("persona %q is disabled or unknown", personaSlug)
+		return Run{}, fmt.Errorf("%w: %q", ErrPersonaUnavailable, personaSlug)
 	}
 	return s.queue.Enqueue(ctx, EnqueueParams{
 		Persona: personaSlug, Trigger: TriggerManual, ScheduledAt: s.Now(),
