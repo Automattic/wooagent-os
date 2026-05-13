@@ -131,6 +131,8 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/batches/{id}/reject-all", s.handleRejectBatch)
 		r.Get("/v1/abilities", s.handleListAbilities)
 		r.Post("/v1/abilities/{id}/trust", s.handleTrustAbility)
+		r.Post("/v1/abilities/{id}/revoke", s.handleRevokeAbility)
+		r.Post("/v1/abilities/{id}/restore", s.handleRestoreAbility)
 		r.Get("/v1/stores", s.handleListStores)
 		r.Post("/v1/stores", s.handleCreateStore)
 		r.Get("/v1/stores/{id}", s.handleGetStore)

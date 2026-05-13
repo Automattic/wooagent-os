@@ -35,6 +35,8 @@ func newAbilitiesTestRig(t *testing.T) (*Server, *httptest.Server) {
 	r := chi.NewRouter()
 	r.Get("/v1/abilities", s.handleListAbilities)
 	r.Post("/v1/abilities/{id}/trust", s.handleTrustAbility)
+	r.Post("/v1/abilities/{id}/revoke", s.handleRevokeAbility)
+	r.Post("/v1/abilities/{id}/restore", s.handleRestoreAbility)
 
 	ts := httptest.NewServer(r)
 	t.Cleanup(ts.Close)
@@ -251,25 +253,238 @@ func TestComputeEffectiveTrust(t *testing.T) {
 		name           string
 		trustState     string
 		manifestSigned bool
+		revoked        bool
 		want           string
 	}{
-		{"manifest pre-signed, fresh", "new", true, "built-in"},
-		{"manifest pre-signed, schema drift wins", "schema_changed", true, "schema_changed"},
-		{"manifest pre-signed, also operator-trusted", "trusted", true, "built-in"},
-		{"not in manifest, operator trusted", "trusted", false, "trusted"},
-		{"not in manifest, schema changed", "schema_changed", false, "schema_changed"},
-		{"not in manifest, fresh discovery", "new", false, "needs_review"},
-		{"not in manifest, unknown state defaults to needs_review", "garbage", false, "needs_review"},
+		{"manifest pre-signed, fresh", "new", true, false, "built-in"},
+		{"manifest pre-signed, schema drift wins", "schema_changed", true, false, "schema_changed"},
+		{"manifest pre-signed, also operator-trusted", "trusted", true, false, "built-in"},
+		{"not in manifest, operator trusted", "trusted", false, false, "trusted"},
+		{"not in manifest, schema changed", "schema_changed", false, false, "schema_changed"},
+		{"not in manifest, fresh discovery", "new", false, false, "needs_review"},
+		{"not in manifest, unknown state defaults to needs_review", "garbage", false, false, "needs_review"},
+		{"revoked beats built-in", "new", true, true, "revoked"},
+		{"revoked beats trusted", "trusted", false, true, "revoked"},
+		{"revoked beats schema_changed", "schema_changed", true, true, "revoked"},
 	}
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := computeEffectiveTrust(tc.trustState, tc.manifestSigned)
+			got := computeEffectiveTrust(tc.trustState, tc.manifestSigned, tc.revoked)
 			if got != tc.want {
-				t.Fatalf("computeEffectiveTrust(%q, %v) = %q; want %q",
-					tc.trustState, tc.manifestSigned, got, tc.want)
+				t.Fatalf("computeEffectiveTrust(%q, %v, %v) = %q; want %q",
+					tc.trustState, tc.manifestSigned, tc.revoked, got, tc.want)
 			}
 		})
+	}
+}
+
+// POST revoke marks the ability as revoked; effective_trust becomes
+// "revoked" and an audit row is written.
+func TestRevokeAbility_HappyPath(t *testing.T) {
+	s, ts := newAbilitiesTestRig(t)
+	// Seed with state "new" — not in the manifest, so pre-revoke effective_trust
+	// would be "needs_review". After revoke it must be "revoked".
+	id := seedAbility(t, s, "store_a", "ab/revoke-happy", "new")
+	abilityName := "ab/revoke-happy"
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/revoke", nil)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d, want 200", res.StatusCode)
+	}
+	got := decode[Ability](t, res)
+	if got.EffectiveTrust != "revoked" {
+		t.Errorf("effective_trust=%q, want revoked", got.EffectiveTrust)
+	}
+	if got.RevokedAt == "" {
+		t.Errorf("revoked_at not stamped: %+v", got)
+	}
+	// operatorName returns "" in this rig (no auth middleware); revoked_by matches.
+	if got.RevokedBy != "" {
+		t.Errorf("revoked_by=%q, want empty (no auth in test rig)", got.RevokedBy)
+	}
+
+	// Audit row must exist.
+	var operator, intent, outcome string
+	if err := s.store.DB.QueryRow(
+		`SELECT operator, intent, outcome FROM audit_invocations WHERE ability = ? ORDER BY id DESC LIMIT 1`,
+		abilityName,
+	).Scan(&operator, &intent, &outcome); err != nil {
+		t.Fatalf("audit row missing: %v", err)
+	}
+	if intent != "revoke" {
+		t.Errorf("audit intent=%q, want revoke", intent)
+	}
+	if outcome != "operator_action" {
+		t.Errorf("audit outcome=%q, want operator_action", outcome)
+	}
+}
+
+// Revoking an already-revoked ability is idempotent: both calls return 200
+// with the same revoked_at, and exactly one audit row is written.
+func TestRevokeAbility_Idempotent(t *testing.T) {
+	s, ts := newAbilitiesTestRig(t)
+	id := seedAbility(t, s, "store_a", "ab/revoke-idem", "new")
+	abilityName := "ab/revoke-idem"
+
+	post := func() *http.Response {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/revoke", nil)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	res1 := post()
+	if res1.StatusCode != http.StatusOK {
+		t.Fatalf("first revoke status=%d, want 200", res1.StatusCode)
+	}
+	got1 := decode[Ability](t, res1)
+
+	res2 := post()
+	if res2.StatusCode != http.StatusOK {
+		t.Fatalf("second revoke status=%d, want 200", res2.StatusCode)
+	}
+	got2 := decode[Ability](t, res2)
+
+	if got1.RevokedAt != got2.RevokedAt {
+		t.Errorf("revoked_at changed on second call: %q vs %q", got1.RevokedAt, got2.RevokedAt)
+	}
+
+	// Exactly one audit row should exist for this ability with intent=revoke.
+	var count int
+	if err := s.store.DB.QueryRow(
+		`SELECT COUNT(*) FROM audit_invocations WHERE ability = ? AND intent = 'revoke'`,
+		abilityName,
+	).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("audit row count=%d, want exactly 1", count)
+	}
+}
+
+// POST restore clears revoked_at and returns the ability to its pre-revoke
+// effective_trust. An audit row with intent=restore is written.
+func TestRestoreAbility_HappyPath(t *testing.T) {
+	s, ts := newAbilitiesTestRig(t)
+	// Seed as trusted so post-restore effective_trust = "trusted".
+	id := seedAbility(t, s, "store_a", "ab/restore-happy", "trusted")
+	abilityName := "ab/restore-happy"
+
+	// First revoke it.
+	revokeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/revoke", nil)
+	revokeRes, err := http.DefaultClient.Do(revokeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revokeRes.StatusCode != http.StatusOK {
+		t.Fatalf("revoke status=%d, want 200", revokeRes.StatusCode)
+	}
+
+	// Now restore.
+	restoreReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/restore", nil)
+	restoreRes, err := http.DefaultClient.Do(restoreReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restoreRes.StatusCode != http.StatusOK {
+		t.Fatalf("restore status=%d, want 200", restoreRes.StatusCode)
+	}
+	got := decode[Ability](t, restoreRes)
+
+	// effective_trust returns to "trusted" (trust_state=trusted, not in manifest).
+	if got.EffectiveTrust != "trusted" {
+		t.Errorf("effective_trust=%q, want trusted", got.EffectiveTrust)
+	}
+	if got.RevokedAt != "" {
+		t.Errorf("revoked_at not cleared: %q", got.RevokedAt)
+	}
+
+	// Audit row for restore.
+	var intent, outcome string
+	if err := s.store.DB.QueryRow(
+		`SELECT intent, outcome FROM audit_invocations WHERE ability = ? AND intent = 'restore' ORDER BY id DESC LIMIT 1`,
+		abilityName,
+	).Scan(&intent, &outcome); err != nil {
+		t.Fatalf("restore audit row missing: %v", err)
+	}
+	if intent != "restore" {
+		t.Errorf("audit intent=%q, want restore", intent)
+	}
+	if outcome != "operator_action" {
+		t.Errorf("audit outcome=%q, want operator_action", outcome)
+	}
+}
+
+// POST trust on a revoked ability clears the revocation (trust-implies-restore)
+// AND flips trust_state to trusted. Two audit rows are expected: revoke + trust.
+func TestTrustAbility_RevokedRowAlsoRestores(t *testing.T) {
+	s, ts := newAbilitiesTestRig(t)
+	// "new" state, not in manifest. Before revoke: effective_trust="needs_review".
+	// After revoke: "revoked". After trust: "trusted" (not manifest-signed).
+	id := seedAbility(t, s, "store_a", "ab/trust-restores", "new")
+	abilityName := "ab/trust-restores"
+
+	// Step 1: revoke.
+	revokeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/revoke", nil)
+	revokeRes, err := http.DefaultClient.Do(revokeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revokeRes.StatusCode != http.StatusOK {
+		t.Fatalf("revoke status=%d, want 200", revokeRes.StatusCode)
+	}
+	revokedAbility := decode[Ability](t, revokeRes)
+	if revokedAbility.EffectiveTrust != "revoked" {
+		t.Fatalf("after revoke, effective_trust=%q, want revoked", revokedAbility.EffectiveTrust)
+	}
+
+	// Step 2: trust (implies restore).
+	trustReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/v1/abilities/"+id+"/trust", nil)
+	trustRes, err := http.DefaultClient.Do(trustReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if trustRes.StatusCode != http.StatusOK {
+		t.Fatalf("trust status=%d, want 200", trustRes.StatusCode)
+	}
+	got := decode[Ability](t, trustRes)
+
+	if got.EffectiveTrust != "trusted" {
+		t.Errorf("effective_trust=%q, want trusted", got.EffectiveTrust)
+	}
+	if got.RevokedAt != "" {
+		t.Errorf("revoked_at not cleared by trust: %q", got.RevokedAt)
+	}
+	if got.TrustState != "trusted" {
+		t.Errorf("trust_state=%q, want trusted", got.TrustState)
+	}
+
+	// Audit table must have exactly two rows: one revoke, one trust.
+	var revokeCount, trustCount int
+	if err := s.store.DB.QueryRow(
+		`SELECT COUNT(*) FROM audit_invocations WHERE ability = ? AND intent = 'revoke'`,
+		abilityName,
+	).Scan(&revokeCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.DB.QueryRow(
+		`SELECT COUNT(*) FROM audit_invocations WHERE ability = ? AND intent = 'trust'`,
+		abilityName,
+	).Scan(&trustCount); err != nil {
+		t.Fatal(err)
+	}
+	if revokeCount != 1 {
+		t.Errorf("revoke audit count=%d, want 1", revokeCount)
+	}
+	if trustCount != 1 {
+		t.Errorf("trust audit count=%d, want 1", trustCount)
 	}
 }
