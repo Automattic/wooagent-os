@@ -24,11 +24,7 @@ type PEP struct {
 	manifest *manifest.Lookup
 	mcp      MCPClient
 	audit    *auditWriter
-
-	// operatorApproved holds ability names the operator approved at runtime
-	// even though they're not in the pre-signed manifest. Empty in V1; the
-	// admin surface for adding to this lands with Phase 2.
-	operatorApproved map[string]struct{}
+	db       *sql.DB
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
@@ -36,10 +32,10 @@ type PEP struct {
 // runs (Invoke will refuse to dispatch in that case).
 func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB) *PEP {
 	return &PEP{
-		manifest:         m,
-		mcp:              mcpClient,
-		audit:            newAuditWriter(db),
-		operatorApproved: map[string]struct{}{},
+		manifest: m,
+		mcp:      mcpClient,
+		audit:    newAuditWriter(db),
+		db:       db,
 	}
 }
 
@@ -80,7 +76,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 
 	// Run the six checks in PRD §8.4.2 order. First denial wins; subsequent
 	// checks are skipped.
-	if reason := p.checkTrustState(req); reason != "" {
+	if reason := p.checkTrustState(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, reason)
 	}
 	if reason := p.checkPersonaScope(req); reason != "" {
@@ -142,13 +138,45 @@ func (p *PEP) deny(ctx context.Context, auditID int64, reason ReasonCode) (Decis
 
 // ---------- the six checks ----------
 
-// checkTrustState — Check 1. The ability must be either pre-signed in the
-// manifest or operator-approved at runtime. Anything else is denied.
-func (p *PEP) checkTrustState(req Request) ReasonCode {
+// checkTrustState — Check 1. Decides whether the ability is admissible
+// from the daemon's trust perspective: revoked rows are always denied,
+// manifest-pre-signed rows are always allowed, operator-trusted rows
+// at the current schema are allowed, everything else is denied.
+//
+// Per-call DB read by design — the truth lives in the abilities table
+// and the operator's UI mutations must take effect immediately. SQLite
+// local reads are sub-millisecond; no in-memory cache.
+func (p *PEP) checkTrustState(ctx context.Context, req Request) ReasonCode {
+	var trustState string
+	var revokedAt sql.NullString
+	err := p.db.QueryRowContext(ctx,
+		`SELECT trust_state, revoked_at FROM abilities WHERE name = ?`,
+		req.Ability,
+	).Scan(&trustState, &revokedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		// No row at all means we've never discovered this ability.
+		// Manifest-only entries that aren't yet in the DB (e.g. before
+		// the first discovery sweep) still flow through the manifest
+		// branch below.
+		if p.manifest.Get(req.Ability) != nil {
+			return ""
+		}
+		return ReasonAbilityUnapproved
+	}
+	if err != nil {
+		// Fall back to the conservative "deny on lookup failure" stance.
+		// The error will surface via the audit row's denial_reason. The
+		// alternative (allow on error) is unacceptable for a launch
+		// product.
+		return ReasonAbilityUnapproved
+	}
+	if revokedAt.Valid && revokedAt.String != "" {
+		return ReasonAbilityRevoked
+	}
 	if p.manifest.Get(req.Ability) != nil {
 		return ""
 	}
-	if _, ok := p.operatorApproved[req.Ability]; ok {
+	if trustState == "trusted" {
 		return ""
 	}
 	return ReasonAbilityUnapproved
