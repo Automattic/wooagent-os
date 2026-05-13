@@ -78,6 +78,11 @@ const (
 	// hasn't been operator-approved at runtime. Check 1.
 	ReasonAbilityUnapproved ReasonCode = "ability_unapproved"
 
+	// ReasonAbilityRevoked means the operator explicitly revoked this
+	// ability via the Skills UI. Revocation wins over manifest pre-
+	// signing and over trust_state='trusted'. Check 1.
+	ReasonAbilityRevoked ReasonCode = "ability_revoked"
+
 	// ReasonPersonaForbidden means the manifest entry exists but this
 	// persona isn't on its Personas list. Check 2.
 	ReasonPersonaForbidden ReasonCode = "persona_forbidden"

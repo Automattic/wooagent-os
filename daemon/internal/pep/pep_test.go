@@ -48,6 +48,9 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if _, err := db.Exec(auditDDL); err != nil {
 		t.Fatalf("apply audit ddl: %v", err)
 	}
+	if _, err := db.Exec(abilitiesDDL); err != nil {
+		t.Fatalf("apply abilities ddl: %v", err)
+	}
 
 	m := &manifest.Manifest{
 		Version: 1,
@@ -88,6 +91,16 @@ CREATE TABLE audit_invocations (
     denial_reason   TEXT,
     created_at      TEXT NOT NULL,
     completed_at    TEXT
+);`
+
+// abilitiesDDL is the minimal DDL for the abilities table — same shape as the
+// 004_abilities.sql migration (Tasks 1–2), inlined here so PEP tests don't
+// depend on the full migration runner.
+const abilitiesDDL = `
+CREATE TABLE abilities (
+    name        TEXT PRIMARY KEY,
+    trust_state TEXT NOT NULL DEFAULT 'new',
+    revoked_at  TEXT
 );`
 
 // auditRow is a thin read helper so tests can assert on the row that was
@@ -184,10 +197,17 @@ func TestInvoke_DeniedPersonaForbidden(t *testing.T) {
 	}
 }
 
-func TestInvoke_OperatorApprovedBypassesTrustCheck(t *testing.T) {
+func TestInvoke_OperatorTrustedBypassesTrustCheck(t *testing.T) {
 	mcpc := &fakeMCP{result: mcp.ToolCallResult{Content: []mcp.ContentPart{{Type: "text", Text: `{"success":true}`}}}}
-	p, _ := newTestPEP(t, mcpc)
-	p.operatorApproved["custom-plugin/weird-ability"] = struct{}{}
+	p, db := newTestPEP(t, mcpc)
+	// Insert a row with trust_state='trusted' to simulate the operator
+	// approving this ability via the Skills UI. No manifest entry.
+	if _, err := db.ExecContext(context.Background(),
+		`INSERT INTO abilities(name, trust_state) VALUES(?, ?)`,
+		"custom-plugin/weird-ability", "trusted",
+	); err != nil {
+		t.Fatalf("insert ability row: %v", err)
+	}
 	dec, _, err := p.Invoke(context.Background(), Request{
 		Persona: manifest.PersonaMarketing,
 		Ability: "custom-plugin/weird-ability",
@@ -197,7 +217,7 @@ func TestInvoke_OperatorApprovedBypassesTrustCheck(t *testing.T) {
 		t.Fatalf("invoke: %v", err)
 	}
 	if !dec.Allowed {
-		t.Fatalf("operator-approved ability should pass trust check, got %s", dec.Reason)
+		t.Fatalf("operator-trusted ability should pass trust check, got %s", dec.Reason)
 	}
 }
 
