@@ -353,6 +353,13 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   const [confirmRevoke, setConfirmRevoke] = useState<Ability | null>(null);
   const [revokeBusy, setRevokeBusy] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!restoreError) return;
+    const id = setTimeout(() => setRestoreError(null), 5000);
+    return () => clearTimeout(id);
+  }, [restoreError]);
 
   const fetchAbilities = useCallback(
     async (signal: { cancelled: boolean }) => {
@@ -429,10 +436,8 @@ export default function Abilities({ connection, onAskAgent }: Props) {
         await api.abilities.restore(connection, ability.id);
         const signal = { cancelled: false };
         await fetchAbilities(signal);
-      } catch {
-        // Restore failures are quiet — no modal to surface them. The
-        // list reload (if it succeeded) will show the unchanged state
-        // and the operator can retry.
+      } catch (e) {
+        setRestoreError(e instanceof Error ? e.message : String(e));
       }
     },
     [connection, fetchAbilities],
@@ -594,6 +599,13 @@ export default function Abilities({ connection, onAskAgent }: Props) {
         </Stack>
       ) : (
         <>
+          {restoreError && (
+            <Notice.Root intent="error">
+              <Notice.Description>
+                Couldn't restore that ability. ({restoreError})
+              </Notice.Description>
+            </Notice.Root>
+          )}
           <DataViews<Ability>
             view={view}
             onChangeView={setView}
