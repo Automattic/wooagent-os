@@ -6,6 +6,7 @@ import { Page } from '@wordpress/admin-ui';
 import {
   api,
   clearConnection,
+  isEmbedded,
   type Connection,
   type ModelProvider,
 } from '../api/client';
@@ -66,6 +67,8 @@ export default function Settings({ connection, onDisconnect, onAskAgent }: Props
     clearConnection();
     onDisconnect();
   };
+
+  const embedded = isEmbedded();
 
   return (
     <Page
@@ -182,15 +185,22 @@ export default function Settings({ connection, onDisconnect, onAskAgent }: Props
                   {connection.token.slice(0, 12)}…
                 </Text>
               </Stack>
-              <Stack direction="row">
-                <Button
-                  variant="secondary"
-                  onClick={disconnect}
-                  __next40pxDefaultSize
-                >
-                  Forget this connection
-                </Button>
-              </Stack>
+              {embedded ? (
+                <Text variant="body-sm" style={MUTED}>
+                  This UI is served by the local WooAgent daemon. Stop{' '}
+                  <code>wooagent run</code> in your terminal to disconnect.
+                </Text>
+              ) : (
+                <Stack direction="row">
+                  <Button
+                    variant="secondary"
+                    onClick={disconnect}
+                    __next40pxDefaultSize
+                  >
+                    Forget this connection
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           </Card.Content>
         </Card.Root>
