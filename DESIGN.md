@@ -54,7 +54,7 @@ When choosing a component, layout, or interaction for a customer-facing change, 
 
 1. **`@wordpress/admin-ui`** — page-level shell. `Page` is the only component currently used; every screen wraps content in `<Page title subTitle actions hasPadding>`.
 2. **`@wordpress/ui`** — primary surfaces, layout, typography, status. `Card.Root` / `Stack` / `Text` / `Badge` / `Notice.Root` (compound). The default first stop for new UI.
-3. **`@wordpress/components`** — gap-fillers (`Button`, `Modal`, `Spinner`, `TextControl` / `SearchControl` / `SelectControl`, `FormToggle`, `ExternalLink`). Always verify the component's **Status** in Storybook is `stable` — query the WPDS MCP server (`mcp__wordpress-design-system__get_component_details`) if uncertain. Pass `__next40pxDefaultSize` to every `Button`.
+3. **`@wordpress/components`** — gap-fillers (`Button`, `Modal`, `Spinner`, `TextControl` / `SearchControl` / `SelectControl`, `FormToggle`). Always verify the component's **Status** in Storybook is `stable` — query the WPDS MCP server (`mcp__wordpress-design-system__get_component_details`) if uncertain. Pass `__next40pxDefaultSize` to every `Button`. **For outbound text links, use `Button variant="link" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon in children** — not `ExternalLink` (superseded), and not the `external` box-with-arrow icon (wrong shape).
 4. **`@wordpress/dataviews`** — when the shape is tabular. The agent roster and abilities screens are the references.
 5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
 6. **Bespoke with a `// CUSTOM:` comment** — last resort. The comment must explain (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers reject custom UI that isn't called out.
@@ -128,7 +128,9 @@ Primary CTAs are **WPDS indigo** — the same color across every screen, every p
 
 WPDS provides the type system. Use only `--wpds-typography-font-family-{body, heading}` and the `--wpds-typography-font-size-*` / `--wpds-typography-line-height-*` / `--wpds-typography-font-weight-*` scales. No `Inter`. No `system-ui`. No bespoke type ramps.
 
-**No monospace fonts anywhere.** Don't use `--wpds-typography-font-family-mono`. Don't reach for `Menlo`, `SF Mono`, `Consolas`, or any other code-style face. Identifiers like model names (`anthropic/claude-sonnet-4-6`), hostnames (`localhost:7777`), and slugs (`marketing`, `pricing`) render in the body font. Mono creates a "developer console" feel that conflicts with the calm-coworker personality — and in practice, every place we tried mono (the model picker, the daemon hostname, the sidebar badge) became the *most visually jarring* element on its surface. If something is genuinely code, wrap it in `<code>` only when it's part of a documentation context; in the operator UI, plain body text is correct.
+**No monospace fonts anywhere — with one documented exception.** Don't use `--wpds-typography-font-family-mono`. Don't reach for `Menlo`, `SF Mono`, `Consolas`, or any other code-style face. Identifiers like model names (`anthropic/claude-sonnet-4-6`), hostnames (`localhost:7777`), and slugs (`marketing`, `pricing`) render in the body font. Mono creates a "developer console" feel that conflicts with the calm-coworker personality — and in practice, every place we tried mono (the model picker, the daemon hostname, the sidebar badge) became the *most visually jarring* element on its surface. If something is genuinely code, wrap it in `<code>` only when it's part of a documentation context; in the operator UI, plain body text is correct.
+
+**The pairing-code exception.** The onboarding pairing-code display (`.wa-onboarding-pairing-code` in `Step2Store.tsx`) renders in `--wpds-typography-font-family-mono`. Pairing codes are verbatim short tokens (e.g. `W00A-3HSS-7YHC`) where character disambiguation (`0` vs `O`, `1` vs `l` vs `I`) matters more than visual harmony with body copy — the operator is reading the code aloud or retyping it. This is the only mono usage in the app; do not expand it.
 
 Two WooAgent-specific notes:
 
@@ -232,16 +234,15 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 - **`Card.Root`** / **`Card.Header`** / **`Card.Content`** — bordered surface for grouped content. Wraps form sections (Settings) and proposal panels (IssueDetail).
 - **`Notice.Root`** + **`Notice.Description`** + **`Notice.Actions`** + **`Notice.ActionButton`** + **`Notice.CloseIcon`** — compound notice component (intents: `neutral`, `info`, `warning`, `success`, `error`). The legacy `Notice` from `@wordpress/components` is **not** used; all notices are the compound form.
 - **`Stack`** — default layout primitive (flex with token-based gaps). Reach for this before plain CSS flex.
-- **`Text`** — typographic primitive. Variants: `heading-2xl` … `heading-xs`, `body-md`, `body-sm`. Always pair with a real heading element via `render={<h1 />}` when it's a page heading.
+- **`Text`** — typographic primitive. Variants: `heading-2xl` (32px), `heading-xl` (20px), `heading-lg` (15px), `heading-md` (13px), `heading-sm` (11px); body: `body-xl`, `body-lg`, `body-md` (13px), `body-sm` (12px). **Watch out for `heading-sm`** — it's the **uppercase 11px eyebrow** style with `text-transform: uppercase` applied, *not* a small heading. The smallest non-uppercase heading is `heading-md`; use that for in-card titles and other small headings. There is no `heading-xs`. Always pair with a real heading element via `render={<h1 />}` when it's a page heading.
 
 ### `@wordpress/components` — gap-fillers (forms, controls, utilities)
 
-- **`Button`** — primary/secondary/tertiary actions and icon-only buttons (`Button icon={…} label="…"`). Use in place of any `<button>`. **Always pass `__next40pxDefaultSize`** — this opts into the canonical 40px height the rest of the WPDS form controls use; without it Button renders at the legacy ~32px size and looks short next to a default `SearchControl` or `InputControl`. **Pass icons via the `icon` prop directly** (e.g., `icon={comment}`) — don't wrap them in `<Icon icon={comment} size={…} />`. Button's `icon` prop takes the icon definition and handles sizing itself; manually wrapping bypasses Button's icon-size handling.
+- **`Button`** — primary/secondary/tertiary actions, icon-only buttons (`Button icon={…} label="…"`), **and text links** (`Button variant="link" href="…" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon rendered inline in children for outbound links). Use in place of any `<button>` or `<a href>` for both interactive controls and inline text links. **Always pass `__next40pxDefaultSize` for non-link variants** — this opts into the canonical 40px height the rest of the WPDS form controls use; without it Button renders at the legacy ~32px size and looks short next to a default `SearchControl` or `InputControl`. **Pass icons via the `icon` prop directly** (e.g., `icon={comment}`) — don't wrap them in `<Icon icon={comment} size={…} />`. Button's `icon` prop takes the icon definition and handles sizing itself; manually wrapping bypasses Button's icon-size handling. **External-link icon caveat:** `arrowUpRight` ships in `@wordpress/icons` v12+; our pinned top-level version is v10.32.0, so until that's upgraded the icon is inlined as a `// CUSTOM:` SVG (see `Step2Store.tsx`). Do NOT use the `external` icon (box-with-arrow style) — it doesn't match the Figma's clean arrow. **No underline on text links** — WPDS Button `is-link` ships with `text-decoration: underline`; the project overrides it to `none` globally in `app.css`. Brand color + the arrow icon are enough to read as a link without underline noise.
 - **`Spinner`** — async-loading indicator.
 - **`TextControl`** / **`SearchControl`** / **`SelectControl`** — text input, search input, and select dropdown. Use in place of any `<input>` / `<select>`. **Use the default size** (40px) so they align with `Button` + `__next40pxDefaultSize` on the same row. Don't pass `size="compact"` unless you genuinely want a smaller control — and if you do, the *whole* row needs to be compact, not just one element.
 - **`FormToggle`** — on/off boolean toggle (used inline in the agent roster's "Enabled" column).
 - **`Modal`** — modal dialog (used by `EditPersonaModal`).
-- **`ExternalLink`** — outbound URL with built-in icon and `rel="noopener"`. Use in place of any `<a href>` for external destinations.
 - **Internal-router `Link`** — `react-router-dom` `<Link>` is the canonical WooAgent in-app link. (No `@wordpress/components` `Link` is currently in use; `react-router-dom` ownership of routing makes it a better fit.)
 
 ### `@wordpress/dataviews` — tabular UIs
@@ -261,6 +262,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 ### Out of scope
 
 - `@wordpress/components` `Notice` (legacy single-component form) — use the `@wordpress/ui` compound `Notice.Root` instead.
+- `@wordpress/components` `ExternalLink` — superseded; use `Button variant="link" icon={external} iconPosition="right" target="_blank" rel="noreferrer noopener"` for outbound text links so they pick up brand color and WPDS link styling automatically. (Two legacy usages remain in `IssueDetail.tsx` and `Step4Model.tsx` and will be migrated.)
 - `TopBar` — removed; replaced by `Page` + `PageGlobalActions`.
 - Raw `<button>` / `<input>` / `<select>` / `<a href>` / mono-style spans — every one needs a `// CUSTOM:` comment immediately above explaining why no WPDS component fits.
 
@@ -270,9 +272,11 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 Persona color appears in `PersonaAvatar`, the kind pill on cards (`KindBadge` + supporting `app.css` rules), and the brand "W" tile in `LeftNav`. **That's it.** A future need for a fourth persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
-### No monospace fonts
+### No monospace fonts (one exception)
 
 Never use `--wpds-typography-font-family-mono` or any code-style font in the operator UI. This includes model names, hostnames, persona slugs, IDs, and any other identifier-shaped strings. Body font for everything. See Typography for the rationale; the short version is "mono made every surface we tried it on look like a developer console."
+
+**The single allowed exception** is the onboarding pairing-code display (`.wa-onboarding-pairing-code` in `Step2Store.tsx`) — a verbatim short token where character disambiguation outweighs visual harmony. Don't expand this exception to other identifiers.
 
 ### Don't add streaming flourishes
 

@@ -20,10 +20,10 @@ import Step4Model from './Step4Model';
 import Step5Done from './Step5Done';
 import {
   ONBOARDING_STEPS,
-  getVisibleSteps,
   isAutoAuth,
   type OnboardingStepKey,
 } from './state';
+import wordmarkUrl from '../assets/wooagent-wordmark.png';
 
 interface Props {
   connection: Connection | null;
@@ -100,37 +100,42 @@ export default function OnboardingShell({
   })();
 
   const currentKey = keyFromPath(location.pathname);
-  const visibleSteps = getVisibleSteps();
-  // Step counter in the header runs over visible steps so embedded-UI
-  // users (3 steps total) don't see "Step 2 of 4" — they see "Step 1 of 3".
-  const visibleIdx = visibleSteps.findIndex((s) => s.key === currentKey);
-  const visibleStepNumber = visibleIdx >= 0 ? visibleIdx + 1 : 1;
+  const currentStep = ONBOARDING_STEPS.find((s) => s.key === currentKey);
 
   // While we're probing, show nothing rather than flicker through the wrong
   // step's UI — the redirect below routes the operator to the right place.
   if (!probed) return null;
 
   return (
-    <div className="wa-onboarding-shell">
+    <div
+      className={`wa-onboarding-shell${
+        currentKey === 'done' ? ' wa-onboarding-shell--done' : ''
+      }`}
+    >
       <header className="wa-onboarding-header">
         <Stack direction="column" gap="sm" align="center">
-          <Text variant="heading-sm">WooAgent OS</Text>
+          <img
+            src={wordmarkUrl}
+            alt="WooAgent"
+            className="wa-onboarding-wordmark"
+          />
           <Text
-            variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            variant="body-md"
+            style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
           >
-            Step {visibleStepNumber} of {visibleSteps.length} · First-run
-            setup
+            {currentStep?.subheading ?? ''}
           </Text>
         </Stack>
       </header>
 
-      <div className="wa-onboarding-stepper-wrap">
-        <Stepper
-          currentKey={currentKey}
-          highestCompleted={highestCompleted}
-        />
-      </div>
+      {currentKey !== 'done' && (
+        <div className="wa-onboarding-stepper-wrap">
+          <Stepper
+            currentKey={currentKey}
+            highestCompleted={highestCompleted}
+          />
+        </div>
+      )}
 
       <main className="wa-onboarding-surface">
         <Routes>
@@ -191,11 +196,7 @@ export default function OnboardingShell({
           <Route
             path="done"
             element={
-              <Step5Done
-                store={store}
-                provider={provider}
-                onOpenKanban={onComplete}
-              />
+              <Step5Done onOpenKanban={onComplete} />
             }
           />
           <Route path="*" element={<Navigate to={resumePath} replace />} />

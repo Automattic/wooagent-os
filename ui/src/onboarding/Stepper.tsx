@@ -31,10 +31,15 @@ export default function Stepper({ currentKey, highestCompleted }: Props) {
     <nav aria-label="Onboarding progress" className="wa-stepper">
       {visible.map((step, i) => {
         const canonicalIdx = stepIndex(step.key);
-        const isDone =
-          canonicalIdx < currentCanonicalIdx ||
-          canonicalIdx <= highestCompleted - 1;
         const isCurrent = canonicalIdx === currentCanonicalIdx;
+        // A step is "done" only if the user has moved past it. The current
+        // step always shows its number — even when the daemon already has
+        // the underlying data (paired store, configured provider) — because
+        // the user hasn't visibly completed THIS screen yet.
+        const isDone =
+          !isCurrent &&
+          (canonicalIdx < currentCanonicalIdx ||
+            canonicalIdx <= highestCompleted - 1);
         const isReachable =
           canonicalIdx <= highestCompleted ||
           canonicalIdx <= currentCanonicalIdx;

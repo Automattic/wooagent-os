@@ -81,7 +81,7 @@ function wooagent_companion_render_pair_screen(): void {
 			</p></div>
 		<?php elseif ( $notice === 'not_found' ) : ?>
 			<div class="notice notice-error is-dismissible"><p>
-				<?php esc_html_e( 'No pending pairing for that code. It may have already been used or expired — return to the WooAgent OS daemon and click Try again.', 'wooagent-companion' ); ?>
+				<?php esc_html_e( 'No pending pairing for that code. It may have already been used or expired — return to WooAgent OS and get a new code.', 'wooagent-companion' ); ?>
 			</p></div>
 		<?php elseif ( $notice === 'removed' ) : ?>
 			<div class="notice notice-success is-dismissible"><p>

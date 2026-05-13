@@ -113,6 +113,13 @@ func (c *Client) Poll(ctx context.Context, storeURL, code string) (PollResult, e
 	if err != nil {
 		return PollResult{}, err
 	}
+	// Defensive: WPCom/Pressable's Batcache caches GET responses for
+	// 5 minutes by default, which would leave the daemon stuck on a
+	// stale "pending" response after wp-admin approves. The plugin's
+	// poll callback also calls nocache_headers() server-side; this
+	// request header is the belt-and-suspenders complement.
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return PollResult{}, fmt.Errorf("pair/poll: %w", err)

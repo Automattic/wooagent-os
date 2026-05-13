@@ -10,11 +10,34 @@
 // dev users on :5173 don't get the auto-token, so they see the full
 // 4-step flow including the URL+token paste in step 1.
 
+// `subheading` is per-step copy shown below the wordmark in OnboardingShell.
+// `store` matches the i3.2 Figma; the others are placeholders awaiting each
+// screen's own alignment pass against Figma.
 export const ONBOARDING_STEPS = [
-  { key: 'daemon', path: '/onboard/daemon', label: 'Connect daemon' },
-  { key: 'store', path: '/onboard/store', label: 'Connect store' },
-  { key: 'model', path: '/onboard/model', label: 'Model' },
-  { key: 'done', path: '/onboard/done', label: 'Ready' },
+  {
+    key: 'daemon',
+    path: '/onboard/daemon',
+    label: 'Run locally',
+    subheading: 'Connect this browser to WooAgent on your computer.',
+  },
+  {
+    key: 'store',
+    path: '/onboard/store',
+    label: 'Connect store',
+    subheading: 'Install the companion plugin and add your store url to get started.',
+  },
+  {
+    key: 'model',
+    path: '/onboard/model',
+    label: 'Model',
+    subheading: 'Choose the model that your agents will use.',
+  },
+  {
+    key: 'done',
+    path: '/onboard/done',
+    label: 'Ready',
+    subheading: "You're all set! Go see what your agents are up to.",
+  },
 ] as const;
 
 export type OnboardingStepKey = typeof ONBOARDING_STEPS[number]['key'];
