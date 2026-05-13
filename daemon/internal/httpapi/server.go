@@ -15,6 +15,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/scheduler"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/uiassets"
@@ -52,6 +53,7 @@ type Server struct {
 	modelTester    ModelTester
 	pairing        PairingClient
 	abilities      *abilities.Runner
+	scheduler      *scheduler.Scheduler
 	uiSessionToken string
 }
 
@@ -88,6 +90,11 @@ func (s *Server) SetAbilitiesRunner(r *abilities.Runner) { s.abilities = r }
 // Abilities returns the runner so the daemon main can drive the startup
 // sweep + periodic ticker without re-creating it.
 func (s *Server) Abilities() *abilities.Runner { return s.abilities }
+
+// SetScheduler is called by the daemon main after the scheduler is started
+// so the manual-trigger handler can enqueue runs. Optional; nil scheduler
+// means /v1/runs POST returns 503.
+func (s *Server) SetScheduler(sch *scheduler.Scheduler) { s.scheduler = sch }
 
 func (s *Server) Handler() http.Handler { return s.router }
 
