@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { Badge, Stack, Text } from '@wordpress/ui';
+import { Button, Dropdown } from '@wordpress/components';
 import {
   Icon,
   inbox,
@@ -11,7 +12,9 @@ import {
   store,
   shield,
   key,
+  cog,
 } from '@wordpress/icons';
+import type { Connection } from '../api/client';
 
 interface NavItem {
   to: string;
@@ -25,11 +28,17 @@ interface NavItem {
 
 interface Props {
   marketingInReview: number;
-  /** WooCommerce store hostname rendered in the connected-store footer. For
-      now this is the daemon hostname — the daemon is the only store-context
-      we surface. Will become a real store identifier once the daemon
-      exposes one. */
-  daemonHostname: string;
+  /** Active daemon connection — drives the footer popover's URL + token
+      preview. The hostname shown in the footer chip is derived from
+      connection.daemonUrl. */
+  connection: Connection;
+  /** True when the UI is served by the local daemon (no browser-stored
+      bearer). The footer popover hides the "Forget this connection"
+      button in that mode since there's no client state to clear. */
+  embedded: boolean;
+  /** Clears the stored bearer + connection state. Invoked from the footer
+      popover's "Forget this connection" button. */
+  onForgetConnection: () => void;
   /** When true, the sidebar is open in mobile drawer mode. Has no effect on
       desktop (the desktop layout is sticky-positioned via CSS). */
   isOpen?: boolean;
@@ -38,12 +47,26 @@ interface Props {
   onItemClick?: () => void;
 }
 
+const FOOTER_MUTED = {
+  color: 'var(--wpds-color-fg-content-neutral-weak)',
+} as const;
+
 export default function LeftNav({
   marketingInReview,
-  daemonHostname,
+  connection,
+  embedded,
+  onForgetConnection,
   isOpen = false,
   onItemClick,
 }: Props) {
+  const daemonHostname = (() => {
+    try {
+      return new URL(connection.daemonUrl).host;
+    } catch {
+      return connection.daemonUrl;
+    }
+  })();
+  const tokenPreview = `${connection.token.slice(0, 12)}…`;
   const loc = useLocation();
   // Board is the "active" route while on the kanban or any issue detail.
   const onBoard = loc.pathname === '/' || loc.pathname.startsWith('/issues/');
@@ -62,9 +85,10 @@ export default function LeftNav({
     { to: '/agents', label: 'Agents', icon: people },
     { to: '/abilities', label: 'Skills', icon: category },
     { to: '/runtimes', label: 'Routines', icon: box },
+    { to: '/models', label: 'Models', icon: cog },
   ];
   const settings_items: NavItem[] = [
-    { to: '/settings', label: 'Stores', icon: store },
+    { to: '/stores', label: 'Stores', icon: store },
     { to: '/guardrails', label: 'Guardrails', icon: shield },
     { to: '/secrets', label: 'Secrets', icon: key },
   ];
@@ -119,51 +143,113 @@ export default function LeftNav({
 
       <div
         style={{
-          padding: 'var(--wpds-dimension-padding-md)',
           borderTop:
             '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
-        <div
-          className="wa-eyebrow"
-          style={{ marginBottom: 4 }}
-        >
-          Connected store
-        </div>
-        <div
-          style={{
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-            color: 'rgba(255, 255, 255, 0.85)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-          title={daemonHostname}
-        >
-          {daemonHostname}
-        </div>
-        <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
-          {/* Lighter sage green than --wpds-color-fg-content-success — that
-              token is #002900 (designed for text on light surfaces) and is
-              effectively invisible against the dark sidebar bg. */}
-          <span
-            style={{
-              height: 6,
-              width: 6,
-              borderRadius: '50%',
-              background: 'var(--wpds-color-stroke-surface-success)',
-              display: 'inline-block',
-            }}
-          />
-          <span
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-              color: 'rgba(255, 255, 255, 0.6)',
-            }}
-          >
-            Pressable staging
-          </span>
-        </Stack>
+        <Dropdown
+          popoverProps={{ placement: 'top-start' }}
+          renderToggle={({ isOpen: ddOpen, onToggle }) => (
+            // CUSTOM: footer toggle is a full-width button styled to match
+            // the dark sidebar surface. (a) WPDS Button doesn't expose a
+            // dark-surface variant that fits inline footer chrome at this
+            // weight. (b) Native <button> with `wa-sidebar-footer-toggle`
+            // styles for hover/focus parity. (c) Follow-up: replace with
+            // a WPDS Button variant if/when one ships for dark surfaces.
+            <button
+              type="button"
+              aria-expanded={ddOpen}
+              aria-haspopup="dialog"
+              aria-label="Show connection details"
+              onClick={onToggle}
+              className="wa-sidebar-footer-toggle"
+            >
+              <div
+                className="wa-eyebrow"
+                style={{ marginBottom: 4 }}
+              >
+                Connected store
+              </div>
+              <div
+                style={{
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                  color: 'rgba(255, 255, 255, 0.85)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={daemonHostname}
+              >
+                {daemonHostname}
+              </div>
+              <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
+                {/* Lighter sage green than --wpds-color-fg-content-success — that
+                    token is #002900 (designed for text on light surfaces) and is
+                    effectively invisible against the dark sidebar bg. */}
+                <span
+                  style={{
+                    height: 6,
+                    width: 6,
+                    borderRadius: '50%',
+                    background: 'var(--wpds-color-stroke-surface-success)',
+                    display: 'inline-block',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 'var(--wpds-typography-font-size-xs)',
+                    color: 'rgba(255, 255, 255, 0.6)',
+                  }}
+                >
+                  Pressable staging
+                </span>
+              </Stack>
+            </button>
+          )}
+          renderContent={({ onClose }) => (
+            <div
+              style={{
+                minWidth: 280,
+                padding: 'var(--wpds-dimension-padding-md)',
+              }}
+            >
+              <Stack direction="column" gap="md">
+                <Text variant="heading-sm">Connection</Text>
+                <Stack direction="column" gap="xs">
+                  <Text variant="body-sm" style={FOOTER_MUTED}>WOOAGENT URL</Text>
+                  <Text variant="body-md" className="wa-mono">
+                    {connection.daemonUrl}
+                  </Text>
+                </Stack>
+                <Stack direction="column" gap="xs">
+                  <Text variant="body-sm" style={FOOTER_MUTED}>TOKEN</Text>
+                  <Text variant="body-md" className="wa-mono">
+                    {tokenPreview}
+                  </Text>
+                </Stack>
+                {embedded ? (
+                  <Text variant="body-sm" style={FOOTER_MUTED}>
+                    This UI is served by the local WooAgent daemon. Stop{' '}
+                    <code>wooagent run</code> in your terminal to disconnect.
+                  </Text>
+                ) : (
+                  <Stack direction="row">
+                    <Button
+                      variant="secondary"
+                      __next40pxDefaultSize
+                      onClick={() => {
+                        onClose();
+                        onForgetConnection();
+                      }}
+                    >
+                      Forget this connection
+                    </Button>
+                  </Stack>
+                )}
+              </Stack>
+            </div>
+          )}
+        />
       </div>
     </aside>
   );
