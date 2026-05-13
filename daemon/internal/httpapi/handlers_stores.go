@@ -192,7 +192,12 @@ func (s *Server) handleCreateStore(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	expires := now.Add(pairingTTL).Format(time.RFC3339)
 	nowStr := now.Format(time.RFC3339)
-	mcpEndpoint := canonURL + "/wp-json/mcp/v1"
+	// WP MCP Adapter exposes its default server at this canonical path
+	// (Streamable HTTP, session-bound). The earlier `/wp-json/mcp/v1`
+	// placeholder was an incorrect guess that 404'd on every initialize
+	// call. See progress.md Pre-Phase 1 entry + cmd/spike-mcp main.go for
+	// the canonical URL.
+	mcpEndpoint := canonURL + "/wp-json/mcp/mcp-adapter-default-server"
 
 	ctx := r.Context()
 

@@ -65,9 +65,16 @@ type SkillCall struct {
 type VerdictKind string
 
 const (
-	VerdictApprove           VerdictKind = "approve"
-	VerdictApproveWithEdits  VerdictKind = "approve_with_edits"
-	VerdictReject            VerdictKind = "reject"
+	VerdictApprove          VerdictKind = "approve"
+	VerdictApproveWithEdits VerdictKind = "approve_with_edits"
+	VerdictReject           VerdictKind = "reject"
+	// VerdictDismiss is the v0.2+ operator action — semantically "no, but
+	// archive rather than reject outright" — captured separately so the
+	// GEPA pipeline can distinguish "rejected because wrong" from
+	// "dismissed because wrong timing / out of stock / etc." The reason
+	// tag carries the dismiss dialog's chip value; ReasonText carries the
+	// optional free-text comment. DSGWOO-1235 / 1236.
+	VerdictDismiss          VerdictKind = "dismiss"
 )
 
 type Verdict struct {

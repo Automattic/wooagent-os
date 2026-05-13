@@ -31,6 +31,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 const (
@@ -188,6 +189,13 @@ type abilityEnvelope struct {
 }
 
 func callAbility(ctx context.Context, c *mcp.Client, ability string, params map[string]any, out any) error {
+	start := time.Now()
+	err := callAbilityInner(ctx, c, ability, params, out)
+	telemetry.RecordSkillCallFromError(ctx, ability, time.Since(start), err)
+	return err
+}
+
+func callAbilityInner(ctx context.Context, c *mcp.Client, ability string, params map[string]any, out any) error {
 	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
 		"ability_name": ability,
 		"parameters":   params,
@@ -330,7 +338,11 @@ type anthropicContentBlock struct {
 
 type anthropicResp struct {
 	Content []anthropicContentBlock `json:"content"`
-	Error   struct {
+	Usage   struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage,omitempty"`
+	Error struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
@@ -386,6 +398,15 @@ Write a customer-facing note matching the tone in the system prompt. Output the 
 	}
 	if parsed.Error.Type != "" {
 		return messageOut{}, string(raw), fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+	}
+
+	if t := telemetry.TrackerFromContext(ctx); t != nil {
+		t.RecordModelCall(telemetry.ModelCall{
+			Provider:     "anthropic",
+			Model:        model,
+			InputTokens:  parsed.Usage.InputTokens,
+			OutputTokens: parsed.Usage.OutputTokens,
+		})
 	}
 
 	var sb strings.Builder

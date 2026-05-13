@@ -29,6 +29,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 const (
@@ -122,7 +123,17 @@ type abilityEnvelope struct {
 	Error   string          `json:"error,omitempty"`
 }
 
+// callAbility wraps mcp.CallTool with TurnEvent skill-call recording. The
+// inner func does the actual work; the wrapper measures latency + reports
+// status to the tracker on ctx (no-op if no tracker is attached).
 func callAbility(ctx context.Context, c *mcp.Client, ability string, params map[string]any, out any) error {
+	start := time.Now()
+	err := callAbilityInner(ctx, c, ability, params, out)
+	telemetry.RecordSkillCallFromError(ctx, ability, time.Since(start), err)
+	return err
+}
+
+func callAbilityInner(ctx context.Context, c *mcp.Client, ability string, params map[string]any, out any) error {
 	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
 		"ability_name": ability,
 		"parameters":   params,
@@ -261,7 +272,11 @@ type anthropicContentBlock struct {
 
 type anthropicResp struct {
 	Content []anthropicContentBlock `json:"content"`
-	Error   struct {
+	Usage   struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage,omitempty"`
+	Error struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
@@ -304,6 +319,15 @@ func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product)
 		return "", fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
 	}
 
+	if t := telemetry.TrackerFromContext(ctx); t != nil {
+		t.RecordModelCall(telemetry.ModelCall{
+			Provider:     "anthropic",
+			Model:        model,
+			InputTokens:  parsed.Usage.InputTokens,
+			OutputTokens: parsed.Usage.OutputTokens,
+		})
+	}
+
 	var sb strings.Builder
 	for _, b := range parsed.Content {
 		if b.Type == "text" {
@@ -331,6 +355,10 @@ type chatResp struct {
 	Choices []struct {
 		Message chatMsg `json:"message"`
 	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage,omitempty"`
 }
 
 func draftRewriteOpenAI(
@@ -374,6 +402,14 @@ func draftRewriteOpenAI(
 	}
 	if len(parsed.Choices) == 0 {
 		return "", fmt.Errorf("llm returned no choices")
+	}
+	if t := telemetry.TrackerFromContext(ctx); t != nil {
+		t.RecordModelCall(telemetry.ModelCall{
+			Provider:     "openai",
+			Model:        model,
+			InputTokens:  parsed.Usage.PromptTokens,
+			OutputTokens: parsed.Usage.CompletionTokens,
+		})
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 }

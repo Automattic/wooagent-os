@@ -69,3 +69,45 @@ func nullIfEmpty(s string) any {
 	}
 	return s
 }
+
+// RecordVerdict updates the most-recent turn_events row for issueID with
+// the operator's verdict. Idempotent on retry but order-dependent —
+// callers should record approve / reject / dismiss exactly once per issue.
+//
+// We update the latest row that has no verdict yet so a subsequent action
+// on the same issue (e.g., reject after edit, or restore-from-archive)
+// would attach to the *next* turn rather than overwriting the prior one.
+// Best-effort: callers log on error but don't fail the state change.
+// DSGWOO-1236.
+func RecordVerdict(
+	ctx context.Context,
+	db *sql.DB,
+	issueID string,
+	v Verdict,
+) error {
+	if issueID == "" {
+		return fmt.Errorf("RecordVerdict: empty issue_id")
+	}
+	if v.DecidedAt.IsZero() {
+		v.DecidedAt = time.Now().UTC()
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("marshal verdict: %w", err)
+	}
+	_, err = db.ExecContext(ctx, `
+		UPDATE turn_events
+		SET verdict_json = ?
+		WHERE turn_id = (
+			SELECT turn_id FROM turn_events
+			WHERE issue_id = ?
+			  AND (verdict_json IS NULL OR verdict_json = '')
+			ORDER BY started_at DESC
+			LIMIT 1
+		)
+	`, string(b), issueID)
+	if err != nil {
+		return fmt.Errorf("update verdict: %w", err)
+	}
+	return nil
+}
