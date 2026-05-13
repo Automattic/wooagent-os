@@ -475,6 +475,12 @@ export interface ApproveResult {
 // a Badge intent and uses it to gate the per-row "Trust" action.
 export type AbilityTrustState = 'new' | 'trusted' | 'schema_changed';
 
+export type AbilityEffectiveTrust =
+  | 'built-in'
+  | 'trusted'
+  | 'needs_review'
+  | 'schema_changed';
+
 export interface Ability {
   id: string;
   store_id: string;
@@ -488,6 +494,7 @@ export interface Ability {
   schema?: Record<string, unknown>;
   schema_hash?: string;
   trust_state: AbilityTrustState;
+  effective_trust?: AbilityEffectiveTrust;
   trusted_at?: string;
   last_seen_at?: string;
 }
