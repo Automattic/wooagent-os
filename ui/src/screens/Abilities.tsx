@@ -279,7 +279,7 @@ function InspectorModal({
               isBusy={busy}
               disabled={busy}
             >
-              {ability.trust_state === 'schema_changed'
+              {effectiveTrustOf(ability) === 'schema_changed'
                 ? 'Re-trust at current schema'
                 : 'Trust this ability'}
             </Button>
