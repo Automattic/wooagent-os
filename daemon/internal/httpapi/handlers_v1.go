@@ -21,10 +21,14 @@ import (
 
 // Persona is the v0.1 agent-persona wire shape. Mirrors docs/api-contract-v1.md.
 type Persona struct {
-	Persona         string `json:"persona"`
-	Name            string `json:"name"`
-	ModelPreference string `json:"model_preference,omitempty"`
-	Enabled         bool   `json:"enabled"`
+	Persona         string  `json:"persona"`
+	Name            string  `json:"name"`
+	ModelPreference string  `json:"model_preference,omitempty"`
+	Enabled         bool    `json:"enabled"`
+	CadenceSeconds  int     `json:"cadence_seconds"`
+	MaxAttempts     int     `json:"max_attempts"`
+	LastRunAt       *string `json:"last_run_at"`
+	NextRunAt       *string `json:"next_run_at"`
 }
 
 // Issue is the v0.1 issue wire shape.
@@ -62,7 +66,9 @@ type Proposal struct {
 
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.store.DB.QueryContext(r.Context(),
-		`SELECT persona, name, COALESCE(model_preference, ''), enabled FROM agents ORDER BY persona`)
+		`SELECT persona, name, COALESCE(model_preference, ''), enabled,
+		        cadence_seconds, max_attempts, last_run_at
+		 FROM agents ORDER BY persona`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
@@ -73,11 +79,21 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p Persona
 		var enabled int
-		if err := rows.Scan(&p.Persona, &p.Name, &p.ModelPreference, &enabled); err != nil {
+		var lastRunAt sql.NullString
+		if err := rows.Scan(&p.Persona, &p.Name, &p.ModelPreference, &enabled,
+			&p.CadenceSeconds, &p.MaxAttempts, &lastRunAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
 		p.Enabled = enabled != 0
+		if lastRunAt.Valid && lastRunAt.String != "" {
+			s := lastRunAt.String
+			p.LastRunAt = &s
+			if t, err := time.Parse(time.RFC3339, lastRunAt.String); err == nil {
+				next := t.Add(time.Duration(p.CadenceSeconds) * time.Second).UTC().Format(time.RFC3339)
+				p.NextRunAt = &next
+			}
+		}
 		agents = append(agents, p)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})

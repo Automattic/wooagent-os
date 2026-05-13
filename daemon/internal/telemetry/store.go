@@ -8,6 +8,83 @@ import (
 	"time"
 )
 
+// LoadTurnEvent reads a single turn_events row by turn_id. Returns
+// sql.ErrNoRows when not found.
+func LoadTurnEvent(ctx context.Context, db *sql.DB, turnID string) (*TurnEvent, error) {
+	var (
+		e               TurnEvent
+		issueID         sql.NullString
+		persona         sql.NullString
+		promptVersion   sql.NullString
+		skillVersionsJS sql.NullString
+		completedAt     sql.NullString
+		contextJS       sql.NullString
+		modelCallsJS    sql.NullString
+		skillCallsJS    sql.NullString
+		proposalText    sql.NullString
+		proposalSHA     sql.NullString
+		verdictJS       sql.NullString
+		startedAt       string
+	)
+	err := db.QueryRowContext(ctx, `
+		SELECT turn_id, event_schema_version, issue_id, persona, prompt_version,
+		       skill_versions_json, started_at, completed_at, latency_ms,
+		       context_json, model_calls_json, skill_calls_json,
+		       proposal_text, proposal_sha, verdict_json
+		FROM turn_events WHERE turn_id = ?
+	`, turnID).Scan(
+		&e.TurnID, &e.EventSchemaVersion, &issueID, &persona, &promptVersion,
+		&skillVersionsJS, &startedAt, &completedAt, &e.LatencyMS,
+		&contextJS, &modelCallsJS, &skillCallsJS,
+		&proposalText, &proposalSHA, &verdictJS,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if issueID.Valid {
+		e.IssueID = issueID.String
+	}
+	if persona.Valid {
+		e.Persona = persona.String
+	}
+	if promptVersion.Valid {
+		e.PromptVersion = promptVersion.String
+	}
+	if skillVersionsJS.Valid && skillVersionsJS.String != "" {
+		_ = json.Unmarshal([]byte(skillVersionsJS.String), &e.SkillVersions)
+	}
+	if t, err := time.Parse(time.RFC3339, startedAt); err == nil {
+		e.StartedAt = t
+	}
+	if completedAt.Valid {
+		if t, err := time.Parse(time.RFC3339, completedAt.String); err == nil {
+			e.CompletedAt = &t
+		}
+	}
+	if contextJS.Valid && contextJS.String != "" {
+		_ = json.Unmarshal([]byte(contextJS.String), &e.Context)
+	}
+	if modelCallsJS.Valid && modelCallsJS.String != "" {
+		_ = json.Unmarshal([]byte(modelCallsJS.String), &e.ModelCalls)
+	}
+	if skillCallsJS.Valid && skillCallsJS.String != "" {
+		_ = json.Unmarshal([]byte(skillCallsJS.String), &e.SkillCalls)
+	}
+	if proposalText.Valid {
+		e.ProposalText = proposalText.String
+	}
+	if proposalSHA.Valid {
+		e.ProposalSHA = proposalSHA.String
+	}
+	if verdictJS.Valid && verdictJS.String != "" {
+		var v Verdict
+		if err := json.Unmarshal([]byte(verdictJS.String), &v); err == nil {
+			e.Verdict = &v
+		}
+	}
+	return &e, nil
+}
+
 // Recorder persists completed TurnEvents. The interface is intentionally
 // small — agent runtimes and tests both implement or consume it.
 type Recorder interface {
