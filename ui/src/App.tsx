@@ -9,6 +9,7 @@ import IssueDetail from './screens/IssueDetail';
 import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
 import Abilities from './screens/Abilities';
+import Archived from './screens/Archived';
 import Settings from './screens/Settings';
 import Placeholder from './screens/Placeholder';
 import {
@@ -250,7 +251,7 @@ export default function App() {
               <Placeholder
                 onAskAgent={() => setAskAgentOpen(true)}
                 area="Activity"
-                description="Audit log of every agent action with the underlying tool calls, ability versions, and operator approvals. Coming online with the daemon's run history endpoint."
+                description="Audit log of every agent action with the underlying tool calls, skill versions, and operator approvals. Coming online with WooAgent's run history endpoint."
                 status="soon"
               />
             }
@@ -259,6 +260,15 @@ export default function App() {
             path="/abilities"
             element={
               <Abilities
+                connection={connection}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
+            }
+          />
+          <Route
+            path="/archived"
+            element={
+              <Archived
                 connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
               />
@@ -289,8 +299,8 @@ export default function App() {
             element={
               <Placeholder
                 onAskAgent={() => setAskAgentOpen(true)}
-                area="Runtimes"
-                description="Daemons, MCP servers, and the LLM endpoints they connect to. Health, latency, model in use."
+                area="Routines"
+                description="Set up custom automated routines that your agents can run for you."
                 status="soon"
               />
             }

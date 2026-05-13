@@ -70,7 +70,7 @@ export default function Settings({ connection, onDisconnect, onAskAgent }: Props
   return (
     <Page
       title="Settings"
-      subTitle="Model providers and daemon connection."
+      subTitle="Model providers and WooAgent connection."
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       hasPadding
     >

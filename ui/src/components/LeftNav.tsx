@@ -4,6 +4,7 @@ import {
   Icon,
   inbox,
   columns,
+  archive,
   people,
   category,
   box,
@@ -55,11 +56,12 @@ export default function LeftNav({
       icon: columns,
       badge: marketingInReview > 0 ? marketingInReview : undefined,
     },
+    { to: '/archived', label: 'Archived', icon: archive },
   ];
   const fleet_items: NavItem[] = [
     { to: '/agents', label: 'Agents', icon: people },
-    { to: '/abilities', label: 'Abilities', icon: category },
-    { to: '/runtimes', label: 'Runtimes', icon: box },
+    { to: '/abilities', label: 'Skills', icon: category },
+    { to: '/runtimes', label: 'Routines', icon: box },
   ];
   const settings_items: NavItem[] = [
     { to: '/settings', label: 'Stores', icon: store },
@@ -79,11 +81,16 @@ export default function LeftNav({
         }}
       >
         <Stack direction="row" gap="sm" align="center">
+          {/* Brand tile uses WPDS interactive-brand-strong (indigo) per the
+              i3.2 Figma. Was previously the marketing-persona pink as part
+              of the persona-color exception, but moved to brand indigo so
+              the persona-color exception stays scoped to identity surfaces
+              (PersonaAvatar + KindBadge) only. */}
           <div
             className="wa-persona-avatar wa-persona-avatar--md"
             style={{
-              background: 'var(--wa-persona-mk-bg)',
-              color: 'var(--wa-persona-mk-ink)',
+              background: 'var(--wpds-color-bg-interactive-brand-strong)',
+              color: 'var(--wpds-color-fg-interactive-brand-strong)',
               borderRadius: 'var(--wpds-border-radius-md)',
             }}
             aria-hidden="true"
@@ -105,7 +112,7 @@ export default function LeftNav({
             '0 var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-md)',
         }}
       >
-        <NavGroup label="Inbox" items={inbox_items} active={onBoard ? '/' : ''} onItemClick={onItemClick} />
+        <NavGroup label="Inbox" items={inbox_items} active={onBoard ? '/' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Fleet" items={fleet_items} active={loc.pathname.startsWith('/agents') ? '/agents' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Settings" items={settings_items} active={loc.pathname} onItemClick={onItemClick} />
       </nav>

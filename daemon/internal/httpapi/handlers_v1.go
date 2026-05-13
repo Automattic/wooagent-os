@@ -40,6 +40,12 @@ type Issue struct {
 	BatchID   string    `json:"batch_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Dismiss + archive metadata. Populated only when the operator dismissed
+	// the issue via POST /v1/issues/:id/dismiss. The UI surfaces these on
+	// the Archive screen. DSGWOO-1235.
+	DismissReason  string     `json:"dismiss_reason,omitempty"`
+	DismissComment string     `json:"dismiss_comment,omitempty"`
+	DismissedAt    *time.Time `json:"dismissed_at,omitempty"`
 }
 
 // Proposal is the agent-drafted change that an operator reviews on an issue.
@@ -82,7 +88,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	persona := r.URL.Query().Get("persona")
 	batchID := r.URL.Query().Get("batch_id")
 
-	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at FROM issues`
+	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at FROM issues`
 	args := []any{}
 	where := []string{}
 	if status != "" {
@@ -113,12 +119,18 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var i Issue
 		var createdAt, updatedAt string
-		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt); err != nil {
+		var dismissedAt sql.NullString
+		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &i.DismissReason, &i.DismissComment, &dismissedAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
 		i.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		i.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+		if dismissedAt.Valid && dismissedAt.String != "" {
+			if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
+				i.DismissedAt = &t
+			}
+		}
 		issues = append(issues, i)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"issues": issues})
@@ -216,16 +228,21 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var i Issue
 	var createdAt, updatedAt string
-	var proposalType, proposalContent, proposalTarget sql.NullString
+	var proposalType, proposalContent, proposalTarget, dismissedAt sql.NullString
 	err := s.store.DB.QueryRowContext(r.Context(),
-		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target FROM issues WHERE id = ?`, id,
-	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget)
+		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at FROM issues WHERE id = ?`, id,
+	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget, &i.DismissReason, &i.DismissComment, &dismissedAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
 		return
 	}
 	i.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	i.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	if dismissedAt.Valid && dismissedAt.String != "" {
+		if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
+			i.DismissedAt = &t
+		}
+	}
 
 	var proposal *Proposal
 	if proposalType.Valid && proposalType.String != "" {
@@ -607,6 +624,80 @@ func (s *Server) handleRejectIssue(w http.ResponseWriter, r *http.Request) {
 		"id":         id,
 		"status":     "rejected",
 		"updated_at": now,
+	})
+}
+
+// dismissIssueReq is the body for POST /v1/issues/:id/dismiss. Reason is
+// required (one of the DismissReason values defined in ui/src/api/client.ts);
+// comment is optional free-text the operator added in the dialog textarea.
+type dismissIssueReq struct {
+	Reason  string `json:"reason"`
+	Comment string `json:"comment,omitempty"`
+}
+
+// handleDismissIssue transitions an in_review issue to 'dismissed', captures
+// the operator-supplied reason + optional comment, and stamps dismissed_at
+// so the 30-day TTL countdown can run. UI surfaces these on the Archive
+// screen. DSGWOO-1235.
+func (s *Server) handleDismissIssue(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+
+	var req dismissIssueReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_body", err.Error())
+		return
+	}
+	if req.Reason == "" {
+		writeError(w, http.StatusBadRequest, "missing_reason",
+			"dismiss requires a reason field")
+		return
+	}
+
+	var status string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT status FROM issues WHERE id = ?`, id,
+	).Scan(&status)
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if status != "in_review" {
+		writeError(w, http.StatusConflict, "wrong_status",
+			"dismiss requires status=in_review, found "+status)
+		return
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	var commentArg any
+	if req.Comment != "" {
+		commentArg = req.Comment
+	}
+	if _, err := s.store.DB.ExecContext(ctx,
+		`UPDATE issues
+		 SET status = 'dismissed',
+		     dismiss_reason = ?,
+		     dismiss_comment = ?,
+		     dismissed_at = ?,
+		     updated_at = ?
+		 WHERE id = ?`,
+		req.Reason, commentArg, now, now, id,
+	); err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":              id,
+		"status":          "dismissed",
+		"dismiss_reason":  req.Reason,
+		"dismiss_comment": req.Comment,
+		"dismissed_at":    now,
+		"updated_at":      now,
 	})
 }
 

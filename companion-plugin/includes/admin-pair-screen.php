@@ -70,14 +70,14 @@ function wooagent_companion_render_pair_screen(): void {
 				<?php
 				printf(
 					/* translators: %s: device name */
-					esc_html__( 'Approved %s. The WooAgent OS daemon will pick this up on its next poll.', 'wooagent-companion' ),
+					esc_html__( 'Approved %s. WooAgent will pick this up on its next poll.', 'wooagent-companion' ),
 					'<strong>' . esc_html( $device !== '' ? $device : 'this device' ) . '</strong>'
 				);
 				?>
 			</p></div>
 		<?php elseif ( $notice === 'rejected' ) : ?>
 			<div class="notice notice-warning is-dismissible"><p>
-				<?php esc_html_e( 'Pairing rejected. The WooAgent OS daemon will surface a clear error.', 'wooagent-companion' ); ?>
+				<?php esc_html_e( 'Pairing rejected. WooAgent will surface a clear error.', 'wooagent-companion' ); ?>
 			</p></div>
 		<?php elseif ( $notice === 'not_found' ) : ?>
 			<div class="notice notice-error is-dismissible"><p>
@@ -88,7 +88,7 @@ function wooagent_companion_render_pair_screen(): void {
 				<?php
 				printf(
 					/* translators: %s: device name */
-					esc_html__( 'Removed %s. That daemon can no longer call the store; the operator can re-pair from the WooAgent OS UI.', 'wooagent-companion' ),
+					esc_html__( 'Removed %s. WooAgent can no longer call the store; the operator can re-pair from the WooAgent OS UI.', 'wooagent-companion' ),
 					'<strong>' . esc_html( $device !== '' ? $device : 'this device' ) . '</strong>'
 				);
 				?>
@@ -123,7 +123,7 @@ function wooagent_companion_render_pair_screen(): void {
 									<button
 										type="submit"
 										class="button button-link-delete"
-										onclick="return confirm(<?php echo wp_json_encode( __( 'Remove this device? Its daemon will lose access until re-paired.', 'wooagent-companion' ) ); ?>);"
+										onclick="return confirm(<?php echo wp_json_encode( __( 'Remove this device? WooAgent will lose access until re-paired.', 'wooagent-companion' ) ); ?>);"
 									><?php esc_html_e( 'Remove', 'wooagent-companion' ); ?></button>
 								</form>
 							</td>
@@ -141,7 +141,7 @@ function wooagent_companion_render_pair_screen(): void {
 				. esc_html__( 'Pair a different device', 'wooagent-companion' )
 				. '</summary>';
 		} else {
-			echo '<p>' . esc_html__( 'Enter the pairing code shown by your WooAgent OS daemon and click Approve. The connection lasts until you remove this device.', 'wooagent-companion' ) . '</p>';
+			echo '<p>' . esc_html__( 'Enter the pairing code shown by WooAgent and click Approve. The connection lasts until you remove this device.', 'wooagent-companion' ) . '</p>';
 		}
 		?>
 
