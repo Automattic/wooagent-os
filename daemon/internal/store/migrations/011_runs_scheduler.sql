@@ -29,7 +29,7 @@ CREATE TABLE runs (
 
 CREATE INDEX idx_runs_persona_status ON runs(persona, status);
 CREATE INDEX idx_runs_scheduled      ON runs(status, scheduled_at);
-CREATE INDEX idx_runs_issue          ON runs(issue_id);
+CREATE INDEX idx_runs_issue_id ON runs(issue_id);
 
 ALTER TABLE agents ADD COLUMN cadence_seconds INTEGER NOT NULL DEFAULT 21600;
 ALTER TABLE agents ADD COLUMN max_attempts    INTEGER NOT NULL DEFAULT 3;
