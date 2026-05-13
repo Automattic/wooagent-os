@@ -4,7 +4,6 @@ import {
   Button,
   ExternalLink,
   SelectControl,
-  Spinner,
   TextControl,
 } from '@wordpress/components';
 import { Icon, check } from '@wordpress/icons';
@@ -192,9 +191,13 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
         <Stack direction="column" gap="xl">
           <Stack direction="column" gap="sm">
             <Text variant="heading-md">Configure a model</Text>
-            <Text variant="body-sm" style={MUTED}>
-              Pick the LLM provider your agents will use. The credential is
-              stored in your OS keychain — only WooAgent OS ever reads it.
+            <Text
+              variant="body-sm"
+              style={{ ...MUTED, textWrap: 'pretty' }}
+            >
+              Pick an LLM provider your agents will use — additional models
+              can be added later. The credential is stored in your OS
+              keychain so only WooAgent OS ever reads it.
             </Text>
           </Stack>
 
@@ -347,31 +350,20 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
                 />
               )}
 
-              <Stack direction="row" gap="md" align="center">
-                <Button
-                  variant="secondary"
-                  __next40pxDefaultSize
-                  disabled={!canTest || testing}
-                  onClick={test}
-                >
-                  {testing ? 'Testing…' : 'Test connection'}
-                </Button>
-                {testing && <Spinner />}
-                {testResult?.ok && (
-                  <Notice.Root intent="success">
-                    <Notice.Description>
-                      {testResult.message ?? 'Connection works.'}
-                    </Notice.Description>
-                  </Notice.Root>
-                )}
-                {testResult && !testResult.ok && (
-                  <Notice.Root intent="error">
-                    <Notice.Description>
-                      {testResult.message ?? 'Test failed.'}
-                    </Notice.Description>
-                  </Notice.Root>
-                )}
-              </Stack>
+              {testResult?.ok && (
+                <Notice.Root intent="success">
+                  <Notice.Description>
+                    {testResult.message ?? 'Connection works.'}
+                  </Notice.Description>
+                </Notice.Root>
+              )}
+              {testResult && !testResult.ok && (
+                <Notice.Root intent="error">
+                  <Notice.Description>
+                    {testResult.message ?? 'Test failed.'}
+                  </Notice.Description>
+                </Notice.Root>
+              )}
 
               {error && (
                 <Notice.Root intent="error">
@@ -389,14 +381,24 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
             >
               Back
             </Button>
-            <Button
-              variant="primary"
-              __next40pxDefaultSize
-              disabled={!canSave || saving}
-              onClick={save}
-            >
-              {saving ? 'Saving…' : 'Save and continue'}
-            </Button>
+            <Stack direction="row" gap="sm" align="center">
+              <Button
+                variant="secondary"
+                __next40pxDefaultSize
+                disabled={!canTest || testing}
+                onClick={test}
+              >
+                {testing ? 'Testing…' : 'Test connection'}
+              </Button>
+              <Button
+                variant="primary"
+                __next40pxDefaultSize
+                disabled={!canSave || saving}
+                onClick={save}
+              >
+                {saving ? 'Saving…' : 'Save and continue'}
+              </Button>
+            </Stack>
           </Stack>
         </Stack>
       </Card.Content>

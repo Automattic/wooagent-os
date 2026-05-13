@@ -117,6 +117,15 @@ function wooagent_companion_pair_request( WP_REST_Request $request ) {
  * leak the token if a poll log got intercepted.
  */
 function wooagent_companion_pair_poll( WP_REST_Request $request ) {
+	// Critical: this endpoint is GET and changes state (operator approves
+	// in wp-admin → next poll must see status='approved'). Without
+	// nocache_headers() WPCom/Pressable's Batcache caches the first
+	// "pending" response for 5 minutes, leaving the daemon stuck on
+	// stale pending status until the cache expires. Bug doc: the daemon
+	// would otherwise report "Waiting for approval" even after wp-admin
+	// has successfully approved.
+	nocache_headers();
+
 	$code = (string) $request->get_param( 'code' );
 	if ( ! wooagent_companion_pair_valid_code( $code ) ) {
 		return new WP_Error( 'invalid_code', __( 'invalid code', 'wooagent-companion' ), array( 'status' => 400 ) );

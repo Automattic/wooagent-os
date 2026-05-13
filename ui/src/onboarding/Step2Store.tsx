@@ -2,11 +2,29 @@ import { useEffect, useRef, useState } from 'react';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
-  ExternalLink,
   Spinner,
   TextControl,
 } from '@wordpress/components';
-import { Icon, check } from '@wordpress/icons';
+import { Icon, copy as copyIcon } from '@wordpress/icons';
+
+// CUSTOM: inline arrow-up-right SVG. (a) `@wordpress/icons` only ships
+// arrow-up-right in v12+; our pinned top-level version is v10.32.0 where
+// this icon doesn't exist. (b) Self-contained 24×24 SVG with the same path
+// data as the v12 icon. (c) Swap to `import { arrowUpRight } from
+// '@wordpress/icons'` once the package is upgraded — tracked separately.
+const arrowUpRight = (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path
+      d="M10 6H18V14H16.5V8.5L7 18L6 17L15.5 7.5H10V6Z"
+      fill="currentColor"
+    />
+  </svg>
+);
 import { api, type Connection, type Store } from '../api/client';
 
 interface Props {
@@ -32,6 +50,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pluginPanelOpen, setPluginPanelOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [copied, setCopied] = useState(false);
   const pollTimer = useRef<number | null>(null);
   const tickTimer = useRef<number | null>(null);
 
@@ -142,25 +161,24 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
     return (
       <Card.Root>
         <Card.Content>
-          <Stack direction="column" gap="lg" align="flex-start">
-            <Stack direction="row" align="center" gap="md">
-              <span className="wa-done-check" aria-hidden="true">
-                <Icon icon={check} size={18} />
-              </span>
-              <Stack direction="column" gap="xs">
-                <Text variant="heading-md">Paired with {deviceLabel}</Text>
-                <Text variant="body-sm" style={MUTED}>
-                  The Companion Plugin will keep the connection open for this
-                  device.
-                </Text>
-              </Stack>
+          <Stack direction="column" gap="xl">
+            <Stack direction="column" gap="sm">
+              <Text variant="heading-md">Approve pairing</Text>
+              <Text variant="body-sm" style={MUTED}>
+                Open the WooAgent Companion Plugin in wp-admin, type the code
+                below into the WooAgent OS pairing screen, and click Approve.
+              </Text>
             </Stack>
-            <Stack
-              direction="row"
-              justify="space-between"
-              align="center"
-              style={{ width: '100%' }}
-            >
+
+            <Notice.Root intent="success">
+              <Notice.Title>Paired with {deviceLabel}</Notice.Title>
+              <Notice.Description>
+                The Companion Plugin will keep the connection open for this
+                device.
+              </Notice.Description>
+            </Notice.Root>
+
+            <Stack direction="row" justify="flex-end" align="center" gap="sm">
               <Button
                 variant="tertiary"
                 __next40pxDefaultSize
@@ -196,12 +214,18 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
         <Card.Content>
           <Stack direction="column" gap="xl">
             <Stack direction="column" gap="sm">
-              <Text variant="heading-md">Approve pairing in wp-admin</Text>
+              <Text variant="heading-md">Approve pairing</Text>
               <Text variant="body-sm" style={MUTED}>
-                Open this URL in your browser, type the code below into the
-                WooAgent OS pairing screen, and click Approve.
+                Open the WooAgent Companion Plugin in wp-admin, type the code
+                below into the WooAgent OS pairing screen, and click Approve.
               </Text>
             </Stack>
+
+            {error && (
+              <Notice.Root intent="error">
+                <Notice.Description>{error}</Notice.Description>
+              </Notice.Root>
+            )}
 
             <Stack direction="column" gap="sm">
               <Text variant="body-sm" style={MUTED}>
@@ -211,60 +235,43 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               <button
                 type="button"
                 className="wa-onboarding-pairing-code"
-                onClick={() =>
-                  phase.store.pairing_code &&
+                onClick={() => {
+                  if (!phase.store.pairing_code) return;
                   navigator.clipboard
                     .writeText(phase.store.pairing_code)
-                    .catch(() => {})
-                }
+                    .catch(() => {});
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                }}
                 aria-label="Copy pairing code"
               >
                 {phase.store.pairing_code ?? '— — — —'}
+                <span
+                  className="wa-onboarding-pairing-code__hover-icon"
+                  aria-hidden="true"
+                >
+                  <Icon icon={copyIcon} size={20} />
+                </span>
               </button>
               <Text variant="body-sm" style={MUTED}>
-                Click to copy. Expires in{' '}
-                <span className="wa-mono">{countdown}</span>.
+                {copied ? 'Copied!' : `Click to copy. Expires in ${countdown}.`}
               </Text>
             </Stack>
 
-            {phase.store.pair_url && (
-              <Stack direction="row" gap="md" align="center">
-                <Button
-                  variant="primary"
-                  __next40pxDefaultSize
-                  href={phase.store.pair_url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  Open wp-admin → Pair device
-                </Button>
-              </Stack>
-            )}
-
-            {error && (
-              <Notice.Root intent="error">
-                <Notice.Description>{error}</Notice.Description>
-              </Notice.Root>
-            )}
-
-            <Stack
-              direction="row"
-              align="center"
-              gap="sm"
-              style={{
-                padding:
-                  'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
-                background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                borderRadius: 'var(--wpds-border-radius-md)',
-              }}
-            >
-              <Spinner />
-              <Text variant="body-sm" style={MUTED}>
+            <Notice.Root intent="info" icon={null}>
+              <Notice.Description
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--wpds-dimension-gap-sm)',
+                }}
+              >
+                <Spinner style={{ margin: 0 }} />
                 Waiting for approval in wp-admin…
-              </Text>
-            </Stack>
+              </Notice.Description>
+            </Notice.Root>
 
-            <Stack direction="row" justify="space-between" align="center">
+            <Stack direction="row" justify="flex-end" align="center" gap="sm">
               <Button
                 variant="tertiary"
                 __next40pxDefaultSize
@@ -272,6 +279,38 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               >
                 Back
               </Button>
+              <Button
+                variant="secondary"
+                __next40pxDefaultSize
+                onClick={async () => {
+                  setError(null);
+                  setCopied(false);
+                  try {
+                    const fresh = await api.stores.create(
+                      connection,
+                      phase.store.url,
+                    );
+                    setPhase({ kind: 'pairing', store: fresh, regens: 0 });
+                  } catch (e) {
+                    setError(
+                      e instanceof Error ? e.message : String(e),
+                    );
+                  }
+                }}
+              >
+                Get new code
+              </Button>
+              {phase.store.pair_url && (
+                <Button
+                  variant="primary"
+                  __next40pxDefaultSize
+                  href={phase.store.pair_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Open in wp-admin
+                </Button>
+              )}
             </Stack>
           </Stack>
         </Card.Content>
@@ -293,7 +332,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
                 clicking the deep link.
               </Text>
             </Stack>
-            <Stack direction="row" justify="space-between" align="center">
+            <Stack direction="row" justify="flex-end" align="center" gap="sm">
               <Button
                 variant="tertiary"
                 __next40pxDefaultSize
@@ -304,9 +343,23 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               <Button
                 variant="primary"
                 __next40pxDefaultSize
-                onClick={() => setPhase({ kind: 'idle' })}
+                onClick={async () => {
+                  setError(null);
+                  setCopied(false);
+                  try {
+                    const fresh = await api.stores.create(
+                      connection,
+                      storeUrl.trim(),
+                    );
+                    setPhase({ kind: 'pairing', store: fresh, regens: 0 });
+                  } catch (e) {
+                    setError(
+                      e instanceof Error ? e.message : String(e),
+                    );
+                  }
+                }}
               >
-                Try again
+                Get new code
               </Button>
             </Stack>
           </Stack>
@@ -320,8 +373,11 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
       <Card.Content>
         <Stack direction="column" gap="xl">
           <Stack direction="column" gap="sm">
-            <Text variant="heading-md">Add your store</Text>
-            <Text variant="body-sm" style={MUTED}>
+            <Text variant="heading-md">Connect your store</Text>
+            <Text
+              variant="body-sm"
+              style={{ ...MUTED, textWrap: 'pretty' }}
+            >
               WooAgent OS connects to your WooCommerce store through the
               WooAgent Companion Plugin. If you haven't installed it yet, do
               that first — it takes about a minute.
@@ -335,8 +391,8 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               padding: 'var(--wpds-dimension-padding-md)',
               background: 'var(--wpds-color-bg-surface-neutral-weak)',
               border:
-                'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
-              borderRadius: 'var(--wpds-border-radius-md)',
+                'var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral)',
+              borderRadius: 'var(--wpds-border-radius-lg)',
             }}
           >
             {/* CUSTOM: manual disclosure / accordion toggle. (a) WPDS has CollapsibleCard from @wordpress/ui — should fit. (b) <button> with .wa-onboarding-disclosure chrome and aria-expanded. (c) Follow-up: migrate to CollapsibleCard. */}
@@ -347,7 +403,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
               className="wa-onboarding-disclosure"
             >
               <Text
-                variant="body-sm"
+                variant="body-md"
                 style={{
                   fontWeight: 'var(--wpds-typography-font-weight-medium)',
                 }}
@@ -357,15 +413,27 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
             </button>
             {pluginPanelOpen && (
               <Stack direction="column" gap="sm">
-                <Text variant="body-sm">
-                  Download the plugin ZIP, upload it via{' '}
-                  <code>Plugins → Add New → Upload</code> in wp-admin, and
-                  activate. The MCP endpoint goes live the moment it
-                  activates.
+                <Text variant="body-md">
+                  Download the plugin ZIP, upload it via Plugins &gt; Add
+                  new &gt; Upload in wp-admin, and activate.
                 </Text>
-                <ExternalLink href="https://wordpress.org/plugins/wooagent-companion/">
+                <Button
+                  variant="link"
+                  href="https://wordpress.org/plugins/wooagent-companion/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
                   Get the WooAgent Companion Plugin
-                </ExternalLink>
+                  <Icon
+                    icon={arrowUpRight}
+                    size={16}
+                    style={{
+                      verticalAlign: 'text-bottom',
+                      marginInlineStart:
+                        'var(--wpds-dimension-padding-xs)',
+                    }}
+                  />
+                </Button>
               </Stack>
             )}
           </Stack>
@@ -381,12 +449,12 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
             value={storeUrl}
             onChange={(v: string | undefined) => setStoreUrl(v ?? '')}
             placeholder="https://mystore.com"
-            help="The front-page URL of your WooCommerce site — not the MCP endpoint."
+            help="The front-page URL of your WooCommerce site."
             __next40pxDefaultSize
             __nextHasNoMarginBottom
           />
 
-          <Stack direction="row" justify="space-between" align="center">
+          <Stack direction="row" justify="flex-end" align="center" gap="sm">
             <Button
               variant="tertiary"
               __next40pxDefaultSize

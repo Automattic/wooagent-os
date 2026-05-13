@@ -258,6 +258,25 @@ a {
 .wa-sidebar .wa-navlink svg {
   fill: currentColor;
 }
+
+/* WPDS @wordpress/components ExternalLink doesn't set a color of its own,
+   so links inherit dark body text and don't read as interactive. Apply
+   brand color globally so every ExternalLink in the app looks like a link.
+   (Stopgap — two remaining ExternalLink usages should migrate to
+   `Button variant="link"` per DESIGN.md.) */
+.components-external-link {
+  color: var(--wpds-color-fg-interactive-brand);
+}
+.components-external-link:hover {
+  color: var(--wpds-color-fg-interactive-brand-active);
+}
+
+/* WPDS @wordpress/components Button variant="link" defaults to
+   `text-decoration: underline`. WooAgent text links read as links via
+   brand color + the arrow-up-right icon; no underline needed. */
+.components-button.is-link {
+  text-decoration: none;
+}
 .wa-sidebar-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
@@ -1018,10 +1037,15 @@ a {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding:
-    var(--wpds-dimension-padding-xl)
-    var(--wpds-dimension-padding-md);
-  gap: var(--wpds-dimension-gap-lg);
+  /* CUSTOM: oversized vertical padding for the onboarding shell — 128px top
+     to match the i3.2 Figma's landing-page treatment, 120px bottom to give
+     every onboarding screen scroll headroom and breathing room. WPDS
+     padding tokens top out at padding-3xl (~32px) — no token reaches
+     either value, so this is the documented exception. */
+  padding-block-start: 128px;
+  padding-inline: var(--wpds-dimension-padding-md);
+  padding-block-end: 120px;
+  gap: var(--wpds-dimension-gap-xl);
 }
 
 /* min-width on the form/header keeps the cards from squeezing on narrow
@@ -1041,6 +1065,21 @@ a {
 }
 .wa-onboarding-header { text-align: center; }
 .wa-onboarding-header > * { align-items: center; }
+/* CUSTOM: 250px top padding on the Done step matches the i3.2 Figma's
+   landing-page treatment, where wordmark + subheading + button sit well
+   below the page top. WPDS padding tokens stop at padding-3xl (~32px), so
+   no token reaches 250px — this is the documented Done-step exception
+   alongside the shell's 128px default. */
+.wa-onboarding-shell--done {
+  padding-block-start: 250px;
+}
+
+.wa-onboarding-wordmark {
+  /* Asset is 497×86 (2x of 248.5×43 — its Figma display size). */
+  width: 248px;
+  height: auto;
+  display: block;
+}
 
 @media (max-width: 540px) {
   .wa-onboarding-header,
@@ -1104,7 +1143,7 @@ a {
   background: transparent;
   color: var(--wpds-color-fg-content-neutral-weak);
   border:
-    var(--wpds-border-width-sm)
+    var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral);
   flex: none;
 }
@@ -1151,34 +1190,60 @@ a {
   color: var(--wpds-color-fg-interactive-brand);
 }
 
-/* Big, copy-on-click pairing code block. Mono, oversize, with a subtle
-   button affordance so the click target reads as interactive. */
-/* CUSTOM: oversize pairing-code display at 28px. (a) WPDS body type
-   tops out at xl=20px / 2xl=32px — neither matches the deliberate
-   in-between size designed for one-line legibility of a short pairing
-   code. (b) Inline 28px. (c) Follow-up: revisit if WPDS adds a heading
-   ramp suited to single-glyph oversize affordances. */
+/* Big, copy-on-click pairing-code block. Documented mono-font exception (see
+   DESIGN.md "No monospace fonts" carve-out) — pairing codes are literal
+   verbatim tokens where character disambiguation (0/O, 1/l/I) matters more
+   than visual harmony with body copy. */
+/* CUSTOM: oversize pairing-code display at 36px in an 84px-tall box matching
+   the i3.2 Figma. (a) WPDS body type tops out at xl=20px / 2xl=32px — no
+   token reaches 36, and there is no WPDS oversize-token affordance. (b)
+   Inline 36px font, 84px min-height, light neutral fill, mono family. (c)
+   Follow-up: revisit if WPDS adds a CodeDisplay / copyable-token primitive. */
 .wa-onboarding-pairing-code {
-  font-size: 28px;
-  letter-spacing: 0.18em;
-  font-weight: var(--wpds-typography-font-weight-medium);
+  position: relative;
+  font-family: var(--wpds-typography-font-family-mono);
+  font-size: 36px;
+  letter-spacing: 0.06em;
+  font-weight: var(--wpds-typography-font-weight-regular);
   text-align: center;
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding:
     var(--wpds-dimension-padding-md)
     var(--wpds-dimension-padding-lg);
   background: var(--wpds-color-bg-surface-neutral-weak);
   border:
-    var(--wpds-border-width-sm)
-    dashed var(--wpds-color-stroke-surface-neutral);
-  border-radius: var(--wpds-border-radius-md);
+    var(--wpds-border-width-xs)
+    solid var(--wpds-color-stroke-surface-neutral);
+  border-radius: var(--wpds-border-radius-lg);
   color: var(--wpds-color-fg-content-neutral);
-  cursor: copy;
+  cursor: pointer;
   user-select: all;
   transition: background-color 0.1s, border-color 0.1s;
 }
 .wa-onboarding-pairing-code:hover {
   background: var(--wpds-color-bg-surface-neutral);
   border-color: var(--wpds-color-stroke-interactive-brand);
+}
+/* Copy icon revealed on hover — sits in the top-right corner of the code
+   box. Browser-default cursor:copy (a green plus) is replaced by a plain
+   pointer and this affordance, so the interaction reads as deliberate. */
+.wa-onboarding-pairing-code__hover-icon {
+  position: absolute;
+  top: var(--wpds-dimension-padding-md);
+  right: var(--wpds-dimension-padding-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.1s;
+  color: var(--wpds-color-fg-content-neutral-weak);
+  pointer-events: none;
+}
+.wa-onboarding-pairing-code:hover .wa-onboarding-pairing-code__hover-icon {
+  opacity: 1;
 }
 
 /* Provider cards on the Model step. A row of three on desktop, stacked on mobile. */
@@ -1251,48 +1316,6 @@ a {
 .wa-onboarding-provider__tag--info {
   background: var(--wpds-color-bg-surface-info-weak);
   color: var(--wpds-color-fg-interactive-brand);
-}
-
-/* Step 5 success checklist. Each row: check icon, label, value (right). */
-.wa-onboarding-checklist {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.wa-onboarding-checklist > li {
-  display: flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-sm);
-  padding:
-    var(--wpds-dimension-padding-sm) 0;
-  border-bottom:
-    var(--wpds-border-width-sm)
-    solid var(--wpds-color-stroke-surface-neutral-weak);
-  font-size: var(--wpds-typography-font-size-sm);
-}
-.wa-onboarding-checklist > li:last-child { border-bottom: none; }
-.wa-onboarding-checklist__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  width: 20px;
-  border-radius: 50%;
-  background: var(--wpds-color-bg-surface-success-weak);
-  color: var(--wpds-color-fg-content-success);
-  flex: none;
-}
-.wa-onboarding-checklist__label {
-  flex: 0 0 auto;
-  color: var(--wpds-color-fg-content-neutral-weak);
-  min-width: 96px;
-}
-.wa-onboarding-checklist__value {
-  flex: 1;
-  text-align: right;
-  font-weight: var(--wpds-typography-font-weight-medium);
 }
 
 /* On mobile, hide the labels and show only the markers + connectors —

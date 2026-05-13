@@ -111,7 +111,7 @@ export default function Step1Daemon({ onConnected }: Props) {
         <Card.Content>
           <Stack direction="column" gap="lg">
             <Stack direction="column" gap="sm">
-              <Text variant="heading-md">Connect to WooAgent OS</Text>
+              <Text variant="heading-md">Run WooAgent locally</Text>
               <Text variant="body-sm" style={MUTED}>
                 We found an existing connection in this browser. Continue
                 with it, or connect to a different one.
@@ -175,7 +175,7 @@ export default function Step1Daemon({ onConnected }: Props) {
         <Card.Content>
           <Stack direction="column" gap="lg">
             <Stack direction="column" gap="sm">
-              <Text variant="heading-md">Connect to WooAgent OS</Text>
+              <Text variant="heading-md">Run WooAgent locally</Text>
               <Text variant="body-sm" style={MUTED}>
                 Found WooAgent OS at <code>{mode.daemonUrl}</code>. Paste the
                 auth token printed by <code>wooagent run</code> in your
@@ -227,7 +227,7 @@ export default function Step1Daemon({ onConnected }: Props) {
       <Card.Content>
         <Stack direction="column" gap="lg">
           <Stack direction="column" gap="sm">
-            <Text variant="heading-md">Connect to WooAgent OS</Text>
+            <Text variant="heading-md">Run WooAgent locally</Text>
             <Text variant="body-sm" style={MUTED}>
               WooAgent OS runs locally on your machine. Paste the URL and
               auth token from your terminal — both are printed when you run{' '}
