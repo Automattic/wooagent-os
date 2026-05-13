@@ -273,8 +273,8 @@ function EmptyState({ filtered }: { filtered: boolean }) {
     >
       <Text variant="body-md">
         {filtered
-          ? 'No abilities match this filter.'
-          : 'No abilities yet.'}
+          ? 'No skills match this filter.'
+          : 'No skills yet.'}
       </Text>
       <Text
         variant="body-sm"
@@ -282,7 +282,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       >
         {filtered
           ? 'Try clearing the filter to see the full set.'
-          : "They'll appear here once your daemon finishes discovering them from your paired store."}
+          : "They'll appear here once WooAgent finishes discovering them from your paired store."}
       </Text>
     </Stack>
   );
@@ -459,14 +459,14 @@ export default function Abilities({ connection, onAskAgent }: Props) {
 
   return (
     <Page
-      title="Abilities"
+      title="Skills"
       subTitle={subTitle}
       actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
     >
       {error ? (
         <Notice.Root intent="error">
           <Notice.Description>
-            Hmm, couldn't load your abilities right now. ({error})
+            Hmm, couldn't load your skills right now. ({error})
           </Notice.Description>
           <Notice.Actions>
             <Notice.ActionButton onClick={handleRetry}>
@@ -476,7 +476,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
         </Notice.Root>
       ) : abilities === null ? (
         <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Reading abilities from your store…</Text>
+          <Spinner /> <Text variant="body-sm">Reading skills from your store…</Text>
         </Stack>
       ) : (
         <>

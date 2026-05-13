@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner, Button, ExternalLink } from '@wordpress/components';
-import { Icon, rotateRight, check } from '@wordpress/icons';
+import { Spinner, Button } from '@wordpress/components';
+import { Icon, arrowUpRight, rotateRight, check } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -11,6 +11,7 @@ import {
   priceProposalFromProposal,
   variantsFromProposal,
   type Connection,
+  type DismissReason,
   type IssueDetail as IssueDetailPayload,
   type MessageProposal,
   type PriceProposal,
@@ -24,6 +25,7 @@ import {
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import Kpi from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
+import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -90,6 +92,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     text: string;
   } | null>(null);
   const [approvedVariant, setApprovedVariant] = useState<string | null>(null);
+  const [dismissOpen, setDismissOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -136,17 +139,34 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     }
   };
 
-  const onReject = async () => {
+  // The Reject button now opens the Dismiss dialog instead of dismissing
+  // directly — the dialog captures a reason + optional comment, then calls
+  // api.dismiss on confirm. See DismissDialog + handleDismissConfirm below.
+  const onReject = () => {
+    if (!id) return;
+    setActionMsg(null);
+    setDismissOpen(true);
+  };
+
+  const handleDismissConfirm = async ({
+    reason,
+    comment,
+  }: {
+    reason: DismissReason;
+    comment?: string;
+  }) => {
     if (!id) return;
     setBusy('reject');
-    setActionMsg(null);
     try {
-      const res = await api.reject(connection, id);
+      const res = await api.dismiss(connection, id, { reason, comment });
+      setDismissOpen(false);
       setActionMsg({
         kind: 'success',
-        text: `Rejected — issue moved to ${res.status}.`,
+        text: `Dismissed — moved to Archive.`,
       });
-      setData((d) => (d ? { ...d, issue: { ...d.issue, status: res.status } } : d));
+      setData((d) =>
+        d ? { ...d, issue: { ...d.issue, status: res.status } } : d,
+      );
       onChanged?.();
       setTimeout(() => nav('/'), 1200);
     } catch (e) {
@@ -647,6 +667,14 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           onCancel={() => nav('/')}
         />
       )}
+      <DismissDialog
+        open={dismissOpen}
+        onOpenChange={setDismissOpen}
+        persona={data?.issue.persona}
+        variantCount={variants?.length ?? 1}
+        onConfirm={handleDismissConfirm}
+        busy={busy === 'reject'}
+      />
     </div>
   );
 }
@@ -948,7 +976,7 @@ function PriceIssueView(props: PriceViewProps) {
                   <Notice.Root intent="warning">
                     <Notice.Description>
                       Proposal has no cited sources. The skill requires at least 3
-                      — this should not happen and indicates a daemon-side bug.
+                      — this should not happen and indicates a WooAgent-side bug.
                     </Notice.Description>
                   </Notice.Root>
                 ) : (
@@ -1160,7 +1188,22 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
           </Text>
         </Stack>
         <span style={{ fontSize: 'var(--wpds-typography-font-size-xs)' }}>
-          <ExternalLink href={source.url}>{host}</ExternalLink>
+          <Button
+            variant="link"
+            href={source.url}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {host}
+            <Icon
+              icon={arrowUpRight}
+              size={16}
+              style={{
+                verticalAlign: 'text-bottom',
+                marginInlineStart: 'var(--wpds-dimension-padding-xs)',
+              }}
+            />
+          </Button>
         </span>
         {source.note && (
           <Text

@@ -223,10 +223,11 @@ a {
   top: 0;
   flex: none;
   width: 280px;
-  /* CUSTOM: WooAgent brand purple for the left nav. WPDS has no dark-brand
+  /* CUSTOM: near-black surface for the left nav. WPDS has no dark-brand
      surface token that matches; documented in DESIGN.md as a sidebar-only
-     exception alongside the persona colors. */
-  background: #2C045D;
+     exception alongside the persona colors. Hex matches the i3.2 Figma
+     (#1e1e1e — WPDS's own gray-900 / interactive-neutral-strong value). */
+  background: #1e1e1e;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -237,11 +238,14 @@ a {
 .wa-sidebar .wa-navlink {
   color: rgba(255, 255, 255, 0.78);
 }
+/* Hover/active read as translucent indigo on the near-black surface,
+   matching the i3.2 Figma's nav-link treatment (rgba(56,88,233,0.12) is
+   12%-opacity --wpds-color-fg-interactive-brand on the sidebar bg). */
 .wa-sidebar .wa-navlink:hover {
-  background: #1F0342;
+  background: rgba(56, 88, 233, 0.12);
 }
 .wa-sidebar .wa-navlink--active {
-  background: #1F0342;
+  background: rgba(56, 88, 233, 0.12);
   color: #ffffff;
 }
 .wa-sidebar .wa-navlink--paused {
@@ -257,18 +261,6 @@ a {
    muted gray text color. */
 .wa-sidebar .wa-navlink svg {
   fill: currentColor;
-}
-
-/* WPDS @wordpress/components ExternalLink doesn't set a color of its own,
-   so links inherit dark body text and don't read as interactive. Apply
-   brand color globally so every ExternalLink in the app looks like a link.
-   (Stopgap — two remaining ExternalLink usages should migrate to
-   `Button variant="link"` per DESIGN.md.) */
-.components-external-link {
-  color: var(--wpds-color-fg-interactive-brand);
-}
-.components-external-link:hover {
-  color: var(--wpds-color-fg-interactive-brand-active);
 }
 
 /* WPDS @wordpress/components Button variant="link" defaults to
@@ -1399,4 +1391,87 @@ a {
   .wa-action-bar-actions > * {
     flex: 1 1 auto;
   }
+}
+
+/* ---------- Dismiss dialog ---------- */
+.wa-dismiss-dialog__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wpds-dimension-gap-sm);
+}
+.wa-dismiss-dialog__info {
+  display: flex;
+  gap: var(--wpds-dimension-gap-md);
+  padding: var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  border:
+    var(--wpds-border-width-xs)
+    solid var(--wpds-color-stroke-surface-neutral-weak);
+  border-radius: var(--wpds-border-radius-lg);
+}
+.wa-dismiss-dialog__info-icon {
+  font-size: var(--wpds-typography-font-size-lg);
+  line-height: 1;
+  flex: none;
+}
+
+/* ---------- Archive screen (CUSTOM: table-style list) ----------
+   Pre-DataViews scaffold. Header row + bordered row cards in a 5-column
+   grid matching the Figma columns: Proposal · Type · Agent · Dismissed ·
+   Reason. To be replaced when the Archive moves onto DataViews to align
+   with Agents and Abilities. */
+.wa-archive-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-sm);
+}
+.wa-archive-table__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 88px 140px 140px minmax(140px, 1fr);
+  gap: var(--wpds-dimension-gap-md);
+  padding:
+    0
+    var(--wpds-dimension-padding-md);
+  font-size: var(--wpds-typography-font-size-xs);
+  font-weight: var(--wpds-typography-font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-archive-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 88px 140px 140px minmax(140px, 1fr);
+  align-items: center;
+  gap: var(--wpds-dimension-gap-md);
+  padding: var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral-strong);
+  border:
+    var(--wpds-border-width-xs)
+    solid var(--wpds-color-stroke-surface-neutral-weak);
+  border-radius: var(--wpds-border-radius-md);
+  cursor: var(--wpds-cursor-control);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.1s, background-color 0.1s;
+}
+.wa-archive-row:hover {
+  border-color: var(--wpds-color-stroke-surface-neutral);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+}
+.wa-archive-row:focus-visible {
+  outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus-brand);
+  outline-offset: 2px;
+}
+.wa-archive-row__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-xs);
+  min-width: 0;
+}
+.wa-archive-row__agent {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  min-width: 0;
 }

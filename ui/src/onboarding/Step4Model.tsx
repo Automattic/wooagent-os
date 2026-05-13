@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
-  ExternalLink,
   SelectControl,
   TextControl,
 } from '@wordpress/components';
-import { Icon, check } from '@wordpress/icons';
+import { Icon, arrowUpRight, check } from '@wordpress/icons';
 import {
   api,
   type Connection,
@@ -278,9 +277,23 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
                           ) : (
                             <>{hint.note} </>
                           )}
-                          <ExternalLink href="https://ollama.com/download">
+                          <Button
+                            variant="link"
+                            href="https://ollama.com/download"
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
                             ollama.com
-                          </ExternalLink>
+                            <Icon
+                              icon={arrowUpRight}
+                              size={16}
+                              style={{
+                                verticalAlign: 'text-bottom',
+                                marginInlineStart:
+                                  'var(--wpds-dimension-padding-xs)',
+                              }}
+                            />
+                          </Button>
                           .
                         </Text>
                       );
@@ -312,9 +325,23 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
                   {picked.apiKeyHelpUrl && (
                     <Text variant="body-sm" style={MUTED}>
                       Don't have one?{' '}
-                      <ExternalLink href={picked.apiKeyHelpUrl}>
+                      <Button
+                        variant="link"
+                        href={picked.apiKeyHelpUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
                         Get an API key from {picked.title}
-                      </ExternalLink>
+                        <Icon
+                          icon={arrowUpRight}
+                          size={16}
+                          style={{
+                            verticalAlign: 'text-bottom',
+                            marginInlineStart:
+                              'var(--wpds-dimension-padding-xs)',
+                          }}
+                        />
+                      </Button>
                       .
                     </Text>
                   )}

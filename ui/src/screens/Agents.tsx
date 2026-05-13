@@ -263,7 +263,7 @@ function EmptyState() {
         variant="body-sm"
         style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
       >
-        They'll show up here as soon as your daemon reports them.
+        They'll show up here as soon as WooAgent reports them.
       </Text>
     </Stack>
   );

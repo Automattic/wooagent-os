@@ -236,7 +236,7 @@ function ReviewBar(props: ReviewProps) {
   } else {
     primaryLine = `Variant ${variantLabel} selected`;
     helperLine = props.productBound
-      ? 'Approval will write to WooCommerce via the daemon'
+      ? 'Approval will write to WooCommerce via WooAgent'
       : 'no live product bound · approval will write via the dev proxy';
     approveLabel = 'Approve & apply to store';
     approveBusy = 'Applying to store…';
@@ -302,11 +302,7 @@ function ReviewBar(props: ReviewProps) {
             onClick={props.onReject}
             disabled={props.disabled || props.busy !== null}
           >
-            {props.busy === 'reject'
-              ? 'Rejecting…'
-              : isPrice || isMessage
-                ? 'Reject'
-                : 'Reject all'}
+            {isPrice || isMessage ? 'Dismiss' : 'Dismiss all'}
           </Button>
           <Button variant="tertiary" __next40pxDefaultSize onClick={props.onCancel}>
             Cancel

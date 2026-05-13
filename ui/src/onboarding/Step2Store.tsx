@@ -5,26 +5,11 @@ import {
   Spinner,
   TextControl,
 } from '@wordpress/components';
-import { Icon, copy as copyIcon } from '@wordpress/icons';
-
-// CUSTOM: inline arrow-up-right SVG. (a) `@wordpress/icons` only ships
-// arrow-up-right in v12+; our pinned top-level version is v10.32.0 where
-// this icon doesn't exist. (b) Self-contained 24×24 SVG with the same path
-// data as the v12 icon. (c) Swap to `import { arrowUpRight } from
-// '@wordpress/icons'` once the package is upgraded — tracked separately.
-const arrowUpRight = (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path
-      d="M10 6H18V14H16.5V8.5L7 18L6 17L15.5 7.5H10V6Z"
-      fill="currentColor"
-    />
-  </svg>
-);
+import {
+  Icon,
+  arrowUpRight,
+  copy as copyIcon,
+} from '@wordpress/icons';
 import { api, type Connection, type Store } from '../api/client';
 
 interface Props {

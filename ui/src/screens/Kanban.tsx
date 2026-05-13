@@ -36,6 +36,7 @@ function columnForIssue(status: Issue['status']): ColumnKey | null {
     case 'done':
       return 'done';
     case 'rejected':
+    case 'dismissed':
       return null;
   }
 }

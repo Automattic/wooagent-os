@@ -108,17 +108,18 @@ Don't block on review, but tell the user the change is worth a designer's eye be
 
 The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variables `--wa-persona-{xx}-bg` / `--wa-persona-{xx}-ink`. Keys: `mk` (Marketing), `pr` (Pricing), `in` (Inventory), `ac` (Accounting), `rp` (Reporting), `ss` (Sales Support), `cs` (Chief of Staff).
 
-**Used in three places only:**
+**Used in two places only:**
 
 1. The `PersonaAvatar` component — sidebar header, queue card corners, page eyebrows. The persona's identity tile.
 2. The kind pill on cards (CONTENT / CAMPAIGN / EMAIL) — colored by the owning persona. The canonical wrapper is `KindBadge` in `StatusBadge.tsx`; the supporting CSS lives in `app.css`.
-3. The brand-header "W" tile in `LeftNav` — uses the marketing persona color (`--wa-persona-mk-*`) since marketing is the V1 product surface. The only place persona color appears outside agent-identity contexts.
 
-**Don't expand this exception further.** A fourth persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
+The brand-header "W" tile in `LeftNav` previously sat in this exception list (using the marketing persona color), but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. The persona-color exception is now scoped to identity surfaces only.
 
-### Sidebar brand color (WooAgent-owned)
+**Don't expand this exception further.** A third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
 
-The left nav uses two brand-purple hex values that have no WPDS equivalent: `#2C045D` for the sidebar surface and `#1F0342` for nav-link hover and active states. These two hex values live **only** in `.wa-sidebar` rules in `app.css` — nowhere else in the app. If a WPDS dark-brand surface token ships later, swap to it.
+### Sidebar surface color (WooAgent-owned)
+
+The left nav uses two values that have no direct WPDS equivalent: `#1e1e1e` for the sidebar surface (matches the i3.2 Figma and is the same value WPDS uses internally for `--wpds-color-bg-interactive-neutral-strong` / its primary-button background — borrowed here for the inverse surface), and `rgba(56, 88, 233, 0.12)` for nav-link hover and active states (12%-opacity indigo on the near-black bg, also from the Figma). Both values live **only** in `.wa-sidebar` rules in `app.css` — nowhere else in the app. If WPDS adds a true dark-brand surface token + an inverse-interactive token later, swap to them.
 
 ### Primary action
 
@@ -146,7 +147,7 @@ Two WooAgent-specific notes:
 
 Every WooAgent screen lives in the same frame:
 
-- **`LeftNav` (brand-purple surface)** — vertical sidebar, persistent across screens. WooAgent wordmark + nav. Uses the brand-purple hex pair documented under "Sidebar brand color"; everything inside (persona avatar, badges, eyebrows) still uses WPDS / persona tokens.
+- **`LeftNav` (dark surface)** — vertical sidebar, persistent across screens. WooAgent wordmark + nav. Uses the near-black + translucent-indigo hex pair documented under "Sidebar brand color"; everything inside (persona avatar, badges, eyebrows) still uses WPDS / persona tokens.
 - **`Page` (light, thin)** — page-aware header from `@wordpress/admin-ui`. Title + subtitle on the left, `actions` slot on the right. Every screen wraps its content in `<Page>` and passes the shared `<PageGlobalActions>` (global search + Ask agent) into its `actions` slot, so the heading + search + Ask agent always sit on a single horizontal band. **Always pass `hasPadding`** so the content area inherits the same horizontal token (`--wpds-dimension-padding-2xl`) as the header — without it, body content sits flush left and the leftmost element no longer aligns with the title.
 - **Content area (light surface)** — rendered as `<Page>` children. Generous padding, max width that respects WPDS dimension tokens. Whitespace > density.
 - **`ActionBar` (pinned to viewport bottom, when applicable)** — for review / approve / batch actions. Indigo primary CTA right, secondary actions left. Lives inside the **detail-shell layout** (`.wa-detail-shell` flex column + `<Page className="wa-detail-shell-page">`) — the shell is `height: 100vh`, the Page grows via `flex: 1; min-height: 0;`, and the ActionBar is the last sibling so it sits at the bottom of the column = bottom of the viewport regardless of content length. Horizontal padding on the bar uses the same `--wpds-dimension-padding-2xl` token as the Page content, so the bar's badge and buttons line up with the title. The 13.1 review-and-approve view is the reference.
@@ -238,7 +239,7 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### `@wordpress/components` — gap-fillers (forms, controls, utilities)
 
-- **`Button`** — primary/secondary/tertiary actions, icon-only buttons (`Button icon={…} label="…"`), **and text links** (`Button variant="link" href="…" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon rendered inline in children for outbound links). Use in place of any `<button>` or `<a href>` for both interactive controls and inline text links. **Always pass `__next40pxDefaultSize` for non-link variants** — this opts into the canonical 40px height the rest of the WPDS form controls use; without it Button renders at the legacy ~32px size and looks short next to a default `SearchControl` or `InputControl`. **Pass icons via the `icon` prop directly** (e.g., `icon={comment}`) — don't wrap them in `<Icon icon={comment} size={…} />`. Button's `icon` prop takes the icon definition and handles sizing itself; manually wrapping bypasses Button's icon-size handling. **External-link icon caveat:** `arrowUpRight` ships in `@wordpress/icons` v12+; our pinned top-level version is v10.32.0, so until that's upgraded the icon is inlined as a `// CUSTOM:` SVG (see `Step2Store.tsx`). Do NOT use the `external` icon (box-with-arrow style) — it doesn't match the Figma's clean arrow. **No underline on text links** — WPDS Button `is-link` ships with `text-decoration: underline`; the project overrides it to `none` globally in `app.css`. Brand color + the arrow icon are enough to read as a link without underline noise.
+- **`Button`** — primary/secondary/tertiary actions, icon-only buttons (`Button icon={…} label="…"`), **and text links** (`Button variant="link" href="…" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon from `@wordpress/icons` rendered inline in children for outbound links). Use in place of any `<button>` or `<a href>` for both interactive controls and inline text links. **Always pass `__next40pxDefaultSize` for non-link variants** — this opts into the canonical 40px height the rest of the WPDS form controls use; without it Button renders at the legacy ~32px size and looks short next to a default `SearchControl` or `InputControl`. **Pass icons via the `icon` prop directly** (e.g., `icon={comment}`) — don't wrap them in `<Icon icon={comment} size={…} />`. Button's `icon` prop takes the icon definition and handles sizing itself; manually wrapping bypasses Button's icon-size handling. **Outbound-link icon:** use `arrowUpRight` from `@wordpress/icons` (the clean arrow shape that matches the Figma). Do NOT use the `external` icon — that's the box-with-arrow style which doesn't match. **No underline on text links** — WPDS Button `is-link` ships with `text-decoration: underline`; the project overrides it to `none` globally in `app.css`. Brand color + the arrow icon are enough to read as a link without underline noise.
 - **`Spinner`** — async-loading indicator.
 - **`TextControl`** / **`SearchControl`** / **`SelectControl`** — text input, search input, and select dropdown. Use in place of any `<input>` / `<select>`. **Use the default size** (40px) so they align with `Button` + `__next40pxDefaultSize` on the same row. Don't pass `size="compact"` unless you genuinely want a smaller control — and if you do, the *whole* row needs to be compact, not just one element.
 - **`FormToggle`** — on/off boolean toggle (used inline in the agent roster's "Enabled" column).
@@ -262,7 +263,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 ### Out of scope
 
 - `@wordpress/components` `Notice` (legacy single-component form) — use the `@wordpress/ui` compound `Notice.Root` instead.
-- `@wordpress/components` `ExternalLink` — superseded; use `Button variant="link" icon={external} iconPosition="right" target="_blank" rel="noreferrer noopener"` for outbound text links so they pick up brand color and WPDS link styling automatically. (Two legacy usages remain in `IssueDetail.tsx` and `Step4Model.tsx` and will be migrated.)
+- `@wordpress/components` `ExternalLink` — superseded; use `Button variant="link" target="_blank" rel="noreferrer noopener"` with an inline `arrowUpRight` icon for outbound text links so they pick up brand color and WPDS link styling automatically.
 - `TopBar` — removed; replaced by `Page` + `PageGlobalActions`.
 - Raw `<button>` / `<input>` / `<select>` / `<a href>` / mono-style spans — every one needs a `// CUSTOM:` comment immediately above explaining why no WPDS component fits.
 
@@ -270,7 +271,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 ### Don't expand the persona-color exception
 
-Persona color appears in `PersonaAvatar`, the kind pill on cards (`KindBadge` + supporting `app.css` rules), and the brand "W" tile in `LeftNav`. **That's it.** A future need for a fourth persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
+Persona color appears in `PersonaAvatar` and the kind pill on cards (`KindBadge` + supporting `app.css` rules). **That's it.** The `LeftNav` brand "W" tile used to sit here but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
 ### No monospace fonts (one exception)
 
@@ -296,7 +297,7 @@ Every shell, control, surface, and form element MUST be a WPDS component (`@word
 
 Before drawing anything custom: check WPDS via the MCP server (`mcp__wordpress-design-system__get_components`), then check `@wordpress/ui` and `@wordpress/components` Storybook. If nothing fits, raise it in #design-systems before forking.
 
-**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The same `CUSTOM:` marker pattern is the escape hatch for any rule with a genuine WPDS gap — including raw HTML interactive elements (no WPDS wrapper fits) and bespoke font-sizes (no WPDS token matches). The persona avatars, the kind pill, and the LeftNav brand "W" are the three pre-approved persona-color customs (see Colors); anything else is new territory and needs a flag.
+**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The same `CUSTOM:` marker pattern is the escape hatch for any rule with a genuine WPDS gap — including raw HTML interactive elements (no WPDS wrapper fits) and bespoke font-sizes (no WPDS token matches). The persona avatars and the kind pill are the two pre-approved persona-color customs (see Colors); anything else is new territory and needs a flag.
 
 ### Sticky action bar for batch actions
 

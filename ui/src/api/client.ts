@@ -107,12 +107,40 @@ export interface Persona {
   enabled: boolean;
 }
 
+/** Canonical dismiss reasons exposed in the Dismiss dialog. Free-text
+ *  `comment` carries any nuance the operator wants to add. */
+export type DismissReason =
+  | 'tone_off'
+  | 'wrong_product_focus'
+  | 'not_needed_now'
+  | 'write_myself'
+  | 'wrong_timing'
+  | 'out_of_stock'
+  | 'price_too_aggressive'
+  | 'needs_brand_review'
+  | 'will_handle_myself'
+  | 'other';
+
 export interface Issue {
   id: string;
   title: string;
   description?: string;
   persona?: string;
-  status: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'rejected';
+  status:
+    | 'backlog'
+    | 'todo'
+    | 'in_progress'
+    | 'in_review'
+    | 'done'
+    | 'rejected'
+    | 'dismissed';
+  /** Captured at dismiss time, surfaced on the Archive screen for prompt-tuning. */
+  dismiss_reason?: DismissReason;
+  /** Optional free-text the operator added in the Dismiss dialog. */
+  dismiss_comment?: string;
+  /** ISO-8601 — when the operator dismissed. Drives the "Dismissed" column +
+   *  the 30-day TTL countdown on the Archive screen. */
+  dismissed_at?: string;
   priority: 'urgent' | 'high' | 'medium' | 'low' | 'none';
   /** Set when this issue is part of a batch. Cards in the kanban that
    *  carry a batch_id route to /batches/:id instead of /issues/:id. */
@@ -470,6 +498,15 @@ export const api = {
     }),
   reject: (c: Connection, id: string) =>
     request<ApproveResult>(c, `/v1/issues/${id}/reject`, { method: 'POST' }),
+  dismiss: (
+    c: Connection,
+    id: string,
+    body: { reason: DismissReason; comment?: string },
+  ) =>
+    request<ApproveResult>(c, `/v1/issues/${id}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   batches: {
     list: (c: Connection) => request<{ batches: Batch[] }>(c, '/v1/batches'),
     get: (c: Connection, id: string) => request<BatchDetail>(c, `/v1/batches/${id}`),

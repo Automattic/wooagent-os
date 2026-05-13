@@ -7,7 +7,8 @@ const STATUS_LABEL: Record<Issue['status'], string> = {
   in_progress: 'Drafting',
   in_review: 'In Review',
   done: 'Done',
-  rejected: 'Rejected',
+  rejected: 'Dismissed',
+  dismissed: 'Dismissed',
 };
 
 const STATUS_INTENT: Record<
@@ -19,7 +20,8 @@ const STATUS_INTENT: Record<
   in_progress: 'informational',
   in_review: 'medium',
   done: 'stable',
-  rejected: 'high',
+  rejected: 'none',
+  dismissed: 'none',
 };
 
 export function StatusBadge({ status }: { status: Issue['status'] }) {

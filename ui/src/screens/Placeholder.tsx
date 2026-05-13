@@ -18,7 +18,7 @@ export default function Placeholder({
   description,
   status = 'soon',
   ctaTo = '/',
-  ctaLabel = '← Back to Board',
+  ctaLabel = 'Back to Board',
   onAskAgent,
 }: Props) {
   const nav = useNavigate();
