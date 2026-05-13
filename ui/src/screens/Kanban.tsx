@@ -261,9 +261,6 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
       <div className="wa-kanban-row" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
         {COLUMNS.map((col) => {
           const colItems = items.filter((it) => it.column === col.key);
-          const accentClass = `wa-kanban-col__accent wa-kanban-col__accent--${
-            col.key === 'in_review' ? 'review' : col.key
-          }`;
           return (
             <div key={col.key} className="wa-kanban-col">
               <div className="wa-kanban-col__header">
@@ -280,7 +277,7 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
                 </Stack>
                 <span className="wa-kanban-col__count">{colItems.length}</span>
               </div>
-              <div className={accentClass} />
+              <div className="wa-kanban-col__accent" />
               <div className="wa-kanban-col__cards">
                 {colItems.length === 0 && (
                   <Text

@@ -336,7 +336,7 @@ a {
 }
 
 /* Kanban columns row. Columns lost their card chrome — each column is now
-   a header (label + hint + count) with a colored accent line beneath, then
+   a header (label + hint + count) with a neutral accent line beneath, then
    stacked cards. */
 .wa-kanban-row {
   display: flex;
@@ -368,15 +368,6 @@ a {
   border-radius: var(--wpds-border-radius-sm);
   background: var(--wpds-color-stroke-surface-neutral);
   margin-bottom: var(--wpds-dimension-gap-md);
-}
-.wa-kanban-col__accent--drafting {
-  background: var(--wpds-color-stroke-surface-caution-strong);
-}
-.wa-kanban-col__accent--review {
-  background: var(--wpds-color-stroke-surface-info-strong);
-}
-.wa-kanban-col__accent--done {
-  background: var(--wpds-color-stroke-surface-success-strong);
 }
 .wa-kanban-col__cards {
   display: flex;
