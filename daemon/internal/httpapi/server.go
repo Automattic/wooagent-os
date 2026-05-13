@@ -148,6 +148,9 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/model-providers", s.handleCreateModelProvider)
 		r.Post("/v1/model-providers/test", s.handleTestModelProvider)
 		r.Delete("/v1/model-providers/{id}", s.handleDeleteModelProvider)
+		r.Get("/v1/runs", s.handleListRuns)
+		r.Get("/v1/runs/{id}", s.handleGetRun)
+		r.Post("/v1/runs", s.handleCreateRun)
 	})
 
 	// Catch-all handler: API paths get the JSON 404 envelope (existing
