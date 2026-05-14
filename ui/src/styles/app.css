@@ -31,6 +31,25 @@
   --wa-persona-ss-ink: #0f766e;
   --wa-persona-cs-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
   --wa-persona-cs-ink: #ffffff;
+
+  /* @wordpress/ui Dialog/AlertDialog z-index defaults to `initial` (= auto).
+   * App-level chrome uses z-index up to 61 — without this, modals stack
+   * behind the page content. Set above the app's highest layer. */
+  --wp-ui-dialog-z-index: 1000;
+}
+
+/* Host wrapper for the post-action confirmation Snackbar that screens
+ * (Kanban et al.) render after navigating in from a confirmation flow.
+ * @wordpress/components Snackbar doesn't position itself when used standalone
+ * outside SnackbarList, so we anchor the host to the bottom-center of the
+ * viewport above the app's highest z-index layer (61). */
+.wa-snackbar-host {
+  position: fixed;
+  bottom: var(--wpds-dimension-padding-2xl, 24px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  pointer-events: auto;
 }
 
 * { box-sizing: border-box; }

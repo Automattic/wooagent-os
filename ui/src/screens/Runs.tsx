@@ -88,7 +88,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
   if (error) {
     return (
       <Page
-        title="Activity"
+        title="Runs"
         subTitle="Fleet-wide run history"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
@@ -105,7 +105,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
   if (runs === null) {
     return (
       <Page
-        title="Activity"
+        title="Runs"
         subTitle="Fleet-wide run history"
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
@@ -119,7 +119,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
 
   return (
     <Page
-      title="Activity"
+      title="Runs"
       subTitle={`Fleet-wide run history · ${runs.length} recent`}
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       hasPadding

@@ -16,6 +16,11 @@ import PageGlobalActions from '../components/PageGlobalActions';
 interface Props {
   connection: Connection;
   onAskAgent: () => void;
+  /** Fired when a polled run transitions from non-terminal to terminal
+   *  with status='succeeded'. App.tsx wires this to refreshIssues so the
+   *  board picks up any new issue the run created without waiting for
+   *  the 10s background poll. */
+  onRunTerminal?: () => void;
 }
 
 function formatTime(iso: string | null): string {
@@ -149,7 +154,17 @@ function TurnEventTrace({ event }: { event: unknown }) {
   );
 }
 
-export default function RunDetail({ connection, onAskAgent }: Props) {
+// Terminal statuses for a run — once the run reaches any of these, polling
+// stops. Mirror of scheduler/types.go's terminal set. Kept inline rather
+// than importing because the shared client types use strings, not enums.
+const TERMINAL_STATUSES = new Set<Run['status']>([
+  'succeeded',
+  'skipped',
+  'failed',
+  'failed_permanent',
+]);
+
+export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Props) {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<RunDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -157,19 +172,50 @@ export default function RunDetail({ connection, onAskAgent }: Props) {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    api.runs
-      .get(connection, id)
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch((e) => {
-        if (!cancelled)
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    // Tracks the previous status so we only fire onRunTerminal once, on
+    // the transition into a terminal state. Subsequent polls (which
+    // shouldn't happen because we stop the interval) would otherwise
+    // re-fire it.
+    let firedTerminal = false;
+
+    const fetchOnce = async () => {
+      try {
+        const res = await api.runs.get(connection, id);
+        if (cancelled) return;
+        setData(res);
+        const status = res.run.status;
+        if (TERMINAL_STATUSES.has(status)) {
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+          if (!firedTerminal && status === 'succeeded' && onRunTerminal) {
+            firedTerminal = true;
+            onRunTerminal();
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
-      });
+        }
+      }
+    };
+
+    void fetchOnce();
+    // Poll every 2s while the run is non-terminal. fetchOnce clears the
+    // interval the moment it sees a terminal status, so the steady-state
+    // cost on a long-since-completed run is one initial fetch.
+    intervalId = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void fetchOnce();
+    }, 2_000);
+
     return () => {
       cancelled = true;
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [connection, id]);
+  }, [connection, id, onRunTerminal]);
 
   if (error) {
     return (
@@ -181,7 +227,7 @@ export default function RunDetail({ connection, onAskAgent }: Props) {
         <Notice.Root intent="error">
           <Notice.Description>
             Failed to load run: {error}{' '}
-            <Link to="/runs">Back to Activity</Link>
+            <Link to="/runs">Back to Runs</Link>
           </Notice.Description>
         </Notice.Root>
       </Page>
@@ -225,7 +271,7 @@ export default function RunDetail({ connection, onAskAgent }: Props) {
             fontSize: 'var(--wpds-typography-font-size-sm)',
           }}
         >
-          ← Activity
+          ← Runs
         </Link>
         <span
           className="wa-mono"
