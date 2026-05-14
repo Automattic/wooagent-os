@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +32,74 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
+
+// variant is the shape the UI's variantsFromProposal expects to find under
+// proposal.target.variants. Keep field names in sync with
+// ui/src/api/client.ts:261 — id, body required; label/charCount/recommended
+// optional; seo/voice default to 0 in the UI until real scoring lands.
+type variant struct {
+	ID          string `json:"id"`
+	Label       string `json:"label,omitempty"`
+	Body        string `json:"body"`
+	CharCount   int    `json:"charCount,omitempty"`
+	Recommended bool   `json:"recommended,omitempty"`
+	Angle       string `json:"angle,omitempty"`
+}
+
+// llmVariant is what the LLM returns inside its JSON response. Translated
+// to the persisted `variant` shape after parsing.
+type llmVariant struct {
+	Label string `json:"label"`
+	Angle string `json:"angle"`
+	Body  string `json:"body"`
+}
+
+type llmVariantsResp struct {
+	Variants []llmVariant `json:"variants"`
+}
+
+// jsonObjectRe extracts the first {...} block from a possibly-noisy LLM
+// response. Permissive on whitespace and surrounding chatter so a stray
+// "Here is the JSON:" prefix doesn't fail the parse.
+var jsonObjectRe = regexp.MustCompile(`(?s)\{.*\}`)
+
+// parseVariants pulls a structured 3-variant response out of LLM text. The
+// caller falls back to single-variant on a non-nil error. Strict on count
+// (must be 3) to keep the contract with the operator clear; permissive on
+// the surrounding chatter via jsonObjectRe.
+func parseVariants(raw string) ([]variant, error) {
+	block := jsonObjectRe.FindString(raw)
+	if block == "" {
+		return nil, fmt.Errorf("no JSON object found in LLM output")
+	}
+	var parsed llmVariantsResp
+	if err := json.Unmarshal([]byte(block), &parsed); err != nil {
+		return nil, fmt.Errorf("decode variants JSON: %w", err)
+	}
+	if len(parsed.Variants) != 3 {
+		return nil, fmt.Errorf("expected 3 variants, got %d", len(parsed.Variants))
+	}
+	out := make([]variant, 0, 3)
+	for i, v := range parsed.Variants {
+		body := strings.TrimSpace(v.Body)
+		if body == "" {
+			return nil, fmt.Errorf("variant %d has empty body", i)
+		}
+		label := strings.TrimSpace(v.Label)
+		if label == "" {
+			label = string(rune('A' + i))
+		}
+		out = append(out, variant{
+			ID:          fmt.Sprintf("var_%s", strings.ToLower(label)),
+			Label:       label,
+			Body:        body,
+			CharCount:   len(body),
+			Recommended: i == 0,
+			Angle:       strings.TrimSpace(v.Angle),
+		})
+	}
+	return out, nil
+}
 
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
@@ -55,8 +124,17 @@ const systemPrompt = `You are a copywriter for a small-batch home-goods store.
 Voice: warm, sincere, concrete. Avoid the words "luxe", "premium", "elevate",
 "curated". Prefer "small-batch", "handcrafted", "made to last". Lead with the
 material or the use, not adjectives. Two to four short sentences, 140-220
-characters total. Output ONLY the new description — no preamble, no quotes,
-no labels.`
+characters total per variant.
+
+Draft THREE distinct rewrite variants — each takes a different angle (e.g.
+material-first, use-first, story-first). Return JSON ONLY, no preamble:
+
+{"variants":[{"label":"A","angle":"material","body":"..."},{"label":"B","angle":"use","body":"..."},{"label":"C","angle":"story","body":"..."}]}
+
+Constraints:
+- Exactly three variants.
+- Distinct bodies (don't paraphrase the same sentence three times).
+- Each body 140-220 characters of plain prose, no markdown, no labels in the body.`
 
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
@@ -86,7 +164,7 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
 
-	rewrite, skipReason, err := draftWithFallback(ctx, deps.Env, p)
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p)
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -97,6 +175,31 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		}, nil
 	}
 
+	// Try to parse the structured 3-variant response. On parse failure,
+	// fall back to single-variant with the raw text as content so the
+	// operator still gets something actionable instead of a skipped run.
+	variants, parseErr := parseVariants(rawOutput)
+	target := map[string]any{
+		"product_id":   p.ID,
+		"product_name": p.Name,
+		"product_sku":  p.SKU,
+		"previous":     p.Description,
+	}
+	var content string
+	if parseErr == nil {
+		target["variants"] = variants
+		// proposal.content is the recommended variant's body. The UI's
+		// multi-variant view reads target.variants; surfaces that handle
+		// single-content (run log, archived row, dismiss dialog body) get
+		// a coherent string instead of raw JSON.
+		content = variants[0].Body
+	} else {
+		// Single-variant fallback — surface the parse failure in the
+		// daemon log so it's visible during the testing-call pass.
+		fmt.Printf("marketing: variants parse failed (%v); falling back to single-variant\n", parseErr)
+		content = strings.TrimSpace(rawOutput)
+	}
+
 	return personas.Drafted{
 		Title: fmt.Sprintf("Product description rewrite · %s", p.Name),
 		Description: fmt.Sprintf(
@@ -105,13 +208,8 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		),
 		Priority:        "medium",
 		ProposalType:    "product_description_rewrite",
-		ProposalContent: rewrite,
-		Target: map[string]any{
-			"product_id":   p.ID,
-			"product_name": p.Name,
-			"product_sku":  p.SKU,
-			"previous":     p.Description,
-		},
+		ProposalContent: content,
+		Target:          target,
 	}, nil
 }
 
@@ -290,7 +388,7 @@ func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product)
 
 	body, _ := json.Marshal(anthropicReq{
 		Model:     model,
-		MaxTokens: 512,
+		MaxTokens: 2048, // headroom for 3 variants × ~220 chars + JSON overhead
 		System:    systemPrompt,
 		Messages:  []anthropicMsg{{Role: "user", Content: user}},
 	})
@@ -377,7 +475,7 @@ func draftRewriteOpenAI(
 			{Role: "user", Content: user},
 		},
 		Temperature: 0.7,
-		MaxTokens:   220,
+		MaxTokens:   2048, // headroom for 3 variants × ~220 chars + JSON overhead
 	})
 
 	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)

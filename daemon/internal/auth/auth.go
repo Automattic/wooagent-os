@@ -8,6 +8,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -83,28 +85,77 @@ func (m *Manager) AnyTokenExists(ctx context.Context) (bool, error) {
 }
 
 // UISessionTokenName is the well-known auth_tokens.name reserved for the
-// embedded UI's auto-auth path. The daemon mints one of these on every
-// startup so the React UI loaded from the daemon's own host can call
-// /v1/* without the operator pasting a bearer token.
+// embedded UI's auto-auth path. The daemon mints one of these on first
+// use (init or first `wooagent run`) and persists the plaintext to
+// `tokenFilePath` (mode 0600) so subsequent restarts reuse the same
+// token. Without persistence, every restart silently invalidated any
+// open browser session — internal testers had no way to recover.
 const UISessionTokenName = "ui-session"
 
-// MintUISession deletes any prior ui-session row and mints a fresh one,
-// returning the plaintext to the caller. The plaintext is held in
-// process memory for the daemon run and templated into index.html via
-// the uiassets handler so the embedded UI auto-connects.
+// EnsureUISession returns the embedded UI's bearer token, minting and
+// persisting a fresh one only when needed. Order of operations:
 //
-// We rotate per-run rather than persisting plaintext (the auth_tokens
-// table only stores hashes) because the UI session token is ephemeral
-// to "this daemon process" — operator-issued long-lived tokens (the
-// kind minted by `wooagent init` / `wooagent auth token create`)
-// survive restarts; this one doesn't need to.
-func (m *Manager) MintUISession(ctx context.Context) (string, error) {
+//  1. Read tokenFilePath. If present and the plaintext hashes to an
+//     auth_tokens row named `ui-session`, return the plaintext — no
+//     DB change. This is the steady-state path: same token across
+//     restarts, same embedded `window.__WOOAGENT_TOKEN__`, same auth
+//     for browsers that loaded the UI before the restart.
+//  2. Otherwise (file missing, unreadable, empty, or hash doesn't
+//     match a row): delete any prior `ui-session` rows, mint a fresh
+//     plaintext, write it to tokenFilePath with mode 0600, return it.
+//
+// The plaintext on disk lives alongside `wooagent.db` and is protected
+// by the same OS-level home-dir permissions; storing it plaintext is
+// roughly equivalent in security to the daemon templating it into
+// index.html every restart. Operator-issued long-lived tokens (from
+// `wooagent init` / `wooagent auth token create`) are unaffected.
+//
+// To force rotation: delete the file (and optionally the DB row) before
+// starting the daemon, or use a future `wooagent auth rotate` command.
+func (m *Manager) EnsureUISession(ctx context.Context, tokenFilePath string) (string, error) {
+	if plaintext, ok := readUISessionFile(tokenFilePath); ok {
+		hash := hashToken(plaintext)
+		var name string
+		err := m.DB.QueryRowContext(ctx,
+			`SELECT name FROM auth_tokens WHERE token_hash = ?`, hash,
+		).Scan(&name)
+		if err == nil && name == UISessionTokenName {
+			return plaintext, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("verify ui-session: %w", err)
+		}
+		// File is orphan (no matching row) or matches a row with a
+		// different name. Treat as missing and rotate.
+	}
+
 	if _, err := m.DB.ExecContext(ctx,
 		`DELETE FROM auth_tokens WHERE name = ?`, UISessionTokenName,
 	); err != nil {
 		return "", fmt.Errorf("clear prior ui-session: %w", err)
 	}
-	return m.Mint(ctx, UISessionTokenName)
+	plaintext, err := m.Mint(ctx, UISessionTokenName)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(tokenFilePath, []byte(plaintext+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("persist ui-session: %w", err)
+	}
+	return plaintext, nil
+}
+
+// readUISessionFile returns the stored plaintext and ok=true when the
+// file is present, readable, and non-empty after trimming.
+func readUISessionFile(path string) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	plaintext := strings.TrimSpace(string(data))
+	if plaintext == "" {
+		return "", false
+	}
+	return plaintext, true
 }
 
 func hashToken(plaintext string) string {

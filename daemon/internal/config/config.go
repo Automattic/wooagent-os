@@ -23,10 +23,11 @@ func Default() Config {
 
 // Paths describes the on-disk layout of the daemon's state directory.
 type Paths struct {
-	Root       string // ~/.wooagent
-	ConfigFile string // ~/.wooagent/config.yaml
-	DBFile     string // ~/.wooagent/wooagent.db
-	LogsDir    string // ~/.wooagent/logs
+	Root           string // ~/.wooagent
+	ConfigFile     string // ~/.wooagent/config.yaml
+	DBFile         string // ~/.wooagent/wooagent.db
+	LogsDir        string // ~/.wooagent/logs
+	UISessionFile  string // ~/.wooagent/ui-session.token — bearer token for the embedded UI; persists across daemon restarts (mode 0600)
 }
 
 // DefaultPaths returns the default layout (~/.wooagent). Callers can override
@@ -41,10 +42,11 @@ func DefaultPaths() (Paths, error) {
 
 func PathsAt(root string) Paths {
 	return Paths{
-		Root:       root,
-		ConfigFile: filepath.Join(root, "config.yaml"),
-		DBFile:     filepath.Join(root, "wooagent.db"),
-		LogsDir:    filepath.Join(root, "logs"),
+		Root:          root,
+		ConfigFile:    filepath.Join(root, "config.yaml"),
+		DBFile:        filepath.Join(root, "wooagent.db"),
+		LogsDir:       filepath.Join(root, "logs"),
+		UISessionFile: filepath.Join(root, "ui-session.token"),
 	}
 }
 
