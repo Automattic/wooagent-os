@@ -160,17 +160,14 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     if (!id) return;
     setBusy('reject');
     try {
-      const res = await api.dismiss(connection, id, { reason, comment });
+      await api.dismiss(connection, id, { reason, comment });
       setDismissOpen(false);
-      setActionMsg({
-        kind: 'success',
-        text: `Dismissed — moved to Archive.`,
-      });
-      setData((d) =>
-        d ? { ...d, issue: { ...d.issue, status: res.status } } : d,
-      );
       onChanged?.();
-      setTimeout(() => nav('/'), 1200);
+      nav('/', {
+        state: {
+          toast: { kind: 'success', text: 'Dismissed — moved to Archive.' },
+        },
+      });
     } catch (e) {
       setActionMsg({
         kind: 'error',
@@ -222,52 +219,73 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   const reviewable = issue.status === 'in_review';
   const isDone = issue.status === 'done';
 
+  // DismissDialog for the Price/Message early-return branches below. The
+  // prose-path render at the bottom has its own DismissDialog because it
+  // needs the variants-aware variantCount. Without this, clicking Dismiss
+  // on Price/Message views was a no-op.
+  const dismissDialog = (
+    <DismissDialog
+      open={dismissOpen}
+      onOpenChange={setDismissOpen}
+      persona={data?.issue.persona}
+      variantCount={1}
+      onConfirm={handleDismissConfirm}
+      busy={busy === 'reject'}
+    />
+  );
+
   const priceProposal = priceProposalFromProposal(proposal);
   if (priceProposal !== null) {
     return (
-      <PriceIssueView
-        issue={issue}
-        proposal={priceProposal}
-        rationale={proposal?.content ?? ''}
-        kind={kind}
-        personaKey={personaKey}
-        personaLabel={personaLabel}
-        actionMsg={actionMsg}
-        busy={busy}
-        reviewable={reviewable}
-        isDone={isDone}
-        connection={connection}
-        onApprove={onApprove}
-        onReject={onReject}
-        onCancel={() => nav('/')}
-        onUndo={() => nav('/')}
-        onView={() => nav('/')}
-        onAskAgent={onAskAgent}
-      />
+      <>
+        <PriceIssueView
+          issue={issue}
+          proposal={priceProposal}
+          rationale={proposal?.content ?? ''}
+          kind={kind}
+          personaKey={personaKey}
+          personaLabel={personaLabel}
+          actionMsg={actionMsg}
+          busy={busy}
+          reviewable={reviewable}
+          isDone={isDone}
+          connection={connection}
+          onApprove={onApprove}
+          onReject={onReject}
+          onCancel={() => nav('/')}
+          onUndo={() => nav('/')}
+          onView={() => nav('/')}
+          onAskAgent={onAskAgent}
+        />
+        {dismissDialog}
+      </>
     );
   }
 
   const messageProposal = messageProposalFromProposal(proposal);
   if (messageProposal !== null) {
     return (
-      <MessageIssueView
-        issue={issue}
-        proposal={messageProposal}
-        kind={kind}
-        personaKey={personaKey}
-        personaLabel={personaLabel}
-        actionMsg={actionMsg}
-        busy={busy}
-        reviewable={reviewable}
-        isDone={isDone}
-        connection={connection}
-        onApprove={onApprove}
-        onReject={onReject}
-        onCancel={() => nav('/')}
-        onUndo={() => nav('/')}
-        onView={() => nav('/')}
-        onAskAgent={onAskAgent}
-      />
+      <>
+        <MessageIssueView
+          issue={issue}
+          proposal={messageProposal}
+          kind={kind}
+          personaKey={personaKey}
+          personaLabel={personaLabel}
+          actionMsg={actionMsg}
+          busy={busy}
+          reviewable={reviewable}
+          isDone={isDone}
+          connection={connection}
+          onApprove={onApprove}
+          onReject={onReject}
+          onCancel={() => nav('/')}
+          onUndo={() => nav('/')}
+          onView={() => nav('/')}
+          onAskAgent={onAskAgent}
+        />
+        {dismissDialog}
+      </>
     );
   }
 

@@ -141,6 +141,22 @@ export default function App() {
     };
   }, [connection]);
 
+  // Poll for issue updates while the tab is visible so new issues from
+  // manual triggers (Agents → "Run now") or scheduler ticks during a
+  // long browser session show up without a manual reload. Same pattern
+  // as Runs.tsx's auto-refresh. 10s strikes a balance between freshness
+  // and request volume; backlog-observations-design.md proposes a faster
+  // interval (~2s) while any issue is in_progress — defer that until the
+  // backlog/observation work lands.
+  useEffect(() => {
+    if (!connection) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshIssues(connection);
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [connection, refreshIssues]);
+
   if (!probed) return null;
 
   if (!connection || !onboardingComplete) {
@@ -280,6 +296,7 @@ export default function App() {
               <RunDetail
                 connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
+                onRunTerminal={() => refreshIssues(connection)}
               />
             }
           />
@@ -322,6 +339,7 @@ export default function App() {
               <Agents
                 connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
+                onChanged={() => refreshIssues(connection)}
               />
             }
           />

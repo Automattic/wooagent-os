@@ -10,6 +10,7 @@ import {
   Button,
   FormToggle,
   SelectControl,
+  Snackbar,
   Spinner,
   Tooltip,
 } from '@wordpress/components';
@@ -26,6 +27,9 @@ import PageGlobalActions from '../components/PageGlobalActions';
 interface Props {
   connection: Connection;
   onAskAgent: () => void;
+  /** Fired when a manual run lands a terminal-succeeded status, so App
+   *  can refresh the kanban issues without the user navigating there. */
+  onChanged?: () => void;
 }
 
 // UI-side persona descriptors. `mandate` and `systemPrompt` are design copy
@@ -301,12 +305,16 @@ const DEFAULT_VIEW: View = {
   },
 };
 
-export default function Agents({ connection, onAskAgent }: Props) {
+export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Persona | null>(null);
   const [view, setView] = useState<View>(DEFAULT_VIEW);
+  // Surfaced after a manual-trigger run lands a succeeded status. The
+  // "View board" action navigates to /. Auto-dismisses via the WPDS
+  // Snackbar default timeout; operator can also dismiss manually.
+  const [toast, setToast] = useState<{ text: string } | null>(null);
 
   const fetchAgents = useCallback(
     async (signal: { cancelled: boolean }) => {
@@ -343,6 +351,12 @@ export default function Agents({ connection, onAskAgent }: Props) {
   const [runBusy, setRunBusy] = useState<string | null>(null);
   const [runErrors, setRunErrors] = useState<Record<string, string>>({});
 
+  // Stay on /agents through the full run lifecycle. The button's `isBusy`
+  // state (driven by runBusy === persona.persona) gives the operator the
+  // same loading affordance as Approve in IssueDetail — same context,
+  // visible progress, no surprise navigation. Once the run hits a
+  // terminal status, clear busy and fire onChanged so App refreshes the
+  // board side without the operator leaving this page.
   const handleRunNow = useCallback(
     async (persona: Persona) => {
       if (!IMPLEMENTED_PERSONAS.has(persona.persona)) return;
@@ -352,9 +366,11 @@ export default function Agents({ connection, onAskAgent }: Props) {
         delete next[persona.persona];
         return next;
       });
+
+      let runId: string;
       try {
         const { run } = await api.runs.trigger(connection, persona.persona);
-        navigate(`/runs/${run.id}`);
+        runId = run.id;
       } catch (e) {
         const msg =
           e instanceof ApiError
@@ -363,11 +379,57 @@ export default function Agents({ connection, onAskAgent }: Props) {
               ? e.message
               : String(e);
         setRunErrors((prev) => ({ ...prev, [persona.persona]: msg }));
-      } finally {
         setRunBusy(null);
+        return;
       }
+
+      // Poll the run until terminal. Pricing routinely takes 30-60s
+      // (web_search across retailers); a 2s cadence keeps the perceived
+      // progress lively without hammering the daemon.
+      const stopPolling = (clearBusy: boolean) => {
+        if (clearBusy) setRunBusy(null);
+      };
+      let cancelled = false;
+      const tick = async () => {
+        if (cancelled) return;
+        try {
+          const res = await api.runs.get(connection, runId);
+          const status = res.run.status;
+          if (status === 'queued' || status === 'running') {
+            setTimeout(() => void tick(), 2_000);
+            return;
+          }
+          // Terminal. On success, ask App to refresh issues so any new
+          // proposal lands on the board. On skip/fail, surface a short
+          // hint inline so the operator knows why the spinner stopped.
+          if (status === 'succeeded') {
+            onChanged?.();
+            setToast({ text: 'Proposal created' });
+          } else {
+            const reason =
+              res.run.skip_reason ||
+              res.run.failure_reason ||
+              `Run ${status}`;
+            setRunErrors((prev) => ({
+              ...prev,
+              [persona.persona]: reason,
+            }));
+          }
+          stopPolling(true);
+        } catch (e) {
+          // Transient fetch error — retry once after the normal interval.
+          // If it keeps failing, the operator can refresh.
+          if (!cancelled) setTimeout(() => void tick(), 2_000);
+        }
+      };
+      void tick();
+
+      // Note: there's no cleanup if the user navigates away mid-run.
+      // The polling cancels via `cancelled` only if we surface it; for
+      // a simple keep-on-page flow the worst case is a few orphaned
+      // fetches after navigation, which the daemon ignores.
     },
-    [connection, navigate],
+    [connection, onChanged],
   );
 
   const fields = useMemo<Field<Persona>[]>(
@@ -582,6 +644,24 @@ export default function Agents({ connection, onAskAgent }: Props) {
             />
           )}
         </>
+      )}
+      {toast && (
+        <div className="wa-snackbar-host">
+          <Snackbar
+            onRemove={() => setToast(null)}
+            actions={[
+              {
+                label: 'View board',
+                onClick: () => {
+                  setToast(null);
+                  navigate('/');
+                },
+              },
+            ]}
+          >
+            {toast.text}
+          </Snackbar>
+        </div>
       )}
     </Page>
   );

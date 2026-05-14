@@ -1,6 +1,7 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner } from '@wordpress/components';
+import { Snackbar, Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { type Batch, type Issue } from '../api/client';
 import {
@@ -151,9 +152,30 @@ interface Props {
   onAskAgent: () => void;
 }
 
+// Toast carried via react-router location state from IssueDetail (and any
+// other screen that navigates here after a confirmation action). Kanban
+// reads it once, renders a Snackbar that auto-dismisses, then clears the
+// state from history so a browser refresh doesn't re-trigger it.
+type ToastState = { kind: 'success' | 'error'; text: string };
+
 export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
   const nav = useNavigate();
+  const location = useLocation();
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [searchParams] = useSearchParams();
+
+  // Pick up a toast passed via nav('/', { state: { toast } }) and clear the
+  // history entry's state so refresh doesn't re-show it.
+  useEffect(() => {
+    const incoming = (location.state as { toast?: ToastState } | null)?.toast;
+    if (incoming) {
+      setToast(incoming);
+      nav(location.pathname + location.search, {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location, nav]);
   // `?persona=<slug>` filters the board to one agent. Set by the "View issues"
   // action on the Agents roster row menu.
   const personaFilter = searchParams.get('persona');
@@ -165,34 +187,46 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
     ? `What the ${personaDisplayName(personaFilter).toLowerCase()} agent has staged for you. Approve in review, adjust the queue, or let it work.`
     : 'Everything your agents have staged for you. Approve in review, adjust the queue, or let them work.';
 
+  const snackbar = toast ? (
+    <div className="wa-snackbar-host">
+      <Snackbar onRemove={() => setToast(null)}>{toast.text}</Snackbar>
+    </div>
+  ) : null;
+
   if (error) {
     return (
-      <Page
-        title={title}
-        subTitle={subTitle}
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
-        hasPadding
-      >
-        <Notice.Root intent="error">
-          <Notice.Description>
-            Failed to load issues: {error}
-          </Notice.Description>
-        </Notice.Root>
-      </Page>
+      <>
+        <Page
+          title={title}
+          subTitle={subTitle}
+          actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+          hasPadding
+        >
+          <Notice.Root intent="error">
+            <Notice.Description>
+              Failed to load issues: {error}
+            </Notice.Description>
+          </Notice.Root>
+        </Page>
+        {snackbar}
+      </>
     );
   }
   if (issues === null) {
     return (
-      <Page
-        title={title}
-        subTitle={subTitle}
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
-        hasPadding
-      >
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Loading issues…</Text>
-        </Stack>
-      </Page>
+      <>
+        <Page
+          title={title}
+          subTitle={subTitle}
+          actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+          hasPadding
+        >
+          <Stack direction="row" gap="sm" align="center">
+            <Spinner /> <Text variant="body-sm">Loading issues…</Text>
+          </Stack>
+        </Page>
+        {snackbar}
+      </>
     );
   }
 
@@ -225,6 +259,7 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
   items.sort((a, b) => (a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0));
 
   return (
+    <>
     <Page
       title={title}
       subTitle={subTitle}
@@ -306,6 +341,8 @@ export default function Kanban({ issues, batches, error, onAskAgent }: Props) {
         })}
       </div>
     </Page>
+    {snackbar}
+    </>
   );
 }
 
