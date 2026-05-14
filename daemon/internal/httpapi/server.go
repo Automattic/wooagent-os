@@ -59,11 +59,12 @@ type Server struct {
 
 // New wires a Server with all required collaborators.
 //
-// `uiSessionToken` is the per-run bearer token the daemon mints (via
-// auth.Manager.MintUISession) so the embedded UI auto-connects without
-// the operator pasting a token. Pass "" to disable auto-auth (the UI
-// falls back to its manual URL+token form). Only ever delivered to
-// loopback Host headers — see uiassets.Handler.
+// `uiSessionToken` is the bearer token the daemon resolves at startup
+// (via auth.Manager.EnsureUISession) so the embedded UI auto-connects
+// without the operator pasting a token. Persists across restarts via
+// paths.UISessionFile. Pass "" to disable auto-auth (the UI falls back
+// to its manual URL+token form). Only ever delivered to loopback Host
+// headers — see uiassets.Handler.
 func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, uiSessionToken string) *Server {
 	if sec == nil {
 		panic("httpapi.New: secrets.Store is required")

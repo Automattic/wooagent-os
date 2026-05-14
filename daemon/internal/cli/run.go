@@ -81,15 +81,16 @@ func newRunCmd() *cobra.Command {
 				return fmt.Errorf("no auth tokens present — run `wooagent init` or `wooagent auth token create` first")
 			}
 
-			// Per-run UI session token. Templated into index.html by the
-			// uiassets handler so the embedded UI auto-connects without
-			// the operator pasting a bearer token. Operator-issued
-			// long-lived tokens (from `wooagent init` / `wooagent auth
-			// token create`) are unaffected — they still validate via
-			// the same Manager.Validate path.
-			uiSessionToken, err := am.MintUISession(ctx)
+			// Persistent UI session token. Templated into index.html by
+			// the uiassets handler so the embedded UI auto-connects
+			// without the operator pasting a bearer token. Plaintext
+			// lives in paths.UISessionFile (mode 0600) so restarts
+			// reuse the same token and don't break already-open
+			// browser sessions. Operator-issued long-lived tokens
+			// (`wooagent init` / `auth token create`) are unaffected.
+			uiSessionToken, err := am.EnsureUISession(ctx, paths.UISessionFile)
 			if err != nil {
-				return fmt.Errorf("mint UI session token: %w", err)
+				return fmt.Errorf("ensure UI session token: %w", err)
 			}
 
 			// MCP wiring is optional. The approve endpoint requires it; everything
@@ -203,24 +204,21 @@ func loadMCPClient(out interface{ Write([]byte) (int, error) }) *mcp.Client {
 	})
 }
 
-// loadSkillsForPersonas resolves the skills directory relative to the
-// daemon's working directory. Personas that need a specific skill look it
-// up by name in this map; personas that don't need any aren't affected by
-// a missing directory.
+// loadSkillsForPersonas returns the embedded skill registry by default,
+// or whatever WOOAGENT_SKILLS_DIR points at if the env var is set.
+// Personas that need a specific skill look it up by name in this map;
+// personas that don't need any aren't affected by a missing directory.
 func loadSkillsForPersonas(out io.Writer) (map[string]registry.Skill, error) {
-	// Prefer the override env (testing); fall back to the well-known repo
-	// layout. Production deployments will likely set the env explicitly so
-	// the daemon doesn't depend on cwd at all.
-	dir := os.Getenv("WOOAGENT_SKILLS_DIR")
-	if dir == "" {
-		dir = "skills"
-	}
-	skills, err := registry.LoadSkills(dir)
+	skills, err := registry.Skills()
 	if err != nil {
 		return nil, err
 	}
+	source := "embedded"
+	if dir := os.Getenv("WOOAGENT_SKILLS_DIR"); dir != "" {
+		source = fmt.Sprintf("disk override: %q", dir)
+	}
 	if len(skills) == 0 {
-		fmt.Fprintf(out, "→ persona init: no skills found in %q (set WOOAGENT_SKILLS_DIR if running from outside daemon/)\n", dir)
+		fmt.Fprintf(out, "→ persona init: no skills found (%s)\n", source)
 	}
 	return skills, nil
 }

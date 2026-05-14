@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -78,10 +80,11 @@ func TestValidate_EmptyToken(t *testing.T) {
 func TestValidate_UISessionName(t *testing.T) {
 	m := newTestManager(t)
 	ctx := context.Background()
+	tokenFile := filepath.Join(t.TempDir(), "ui-session.token")
 
-	tok, err := m.MintUISession(ctx)
+	tok, err := m.EnsureUISession(ctx, tokenFile)
 	if err != nil {
-		t.Fatalf("MintUISession: %v", err)
+		t.Fatalf("EnsureUISession: %v", err)
 	}
 
 	name, err := m.Validate(ctx, tok)
@@ -90,6 +93,46 @@ func TestValidate_UISessionName(t *testing.T) {
 	}
 	if name != UISessionTokenName {
 		t.Errorf("Validate returned name %q, want %q", name, UISessionTokenName)
+	}
+}
+
+func TestEnsureUISession_PersistsAcrossCalls(t *testing.T) {
+	m := newTestManager(t)
+	ctx := context.Background()
+	tokenFile := filepath.Join(t.TempDir(), "ui-session.token")
+
+	first, err := m.EnsureUISession(ctx, tokenFile)
+	if err != nil {
+		t.Fatalf("EnsureUISession (mint): %v", err)
+	}
+	second, err := m.EnsureUISession(ctx, tokenFile)
+	if err != nil {
+		t.Fatalf("EnsureUISession (reuse): %v", err)
+	}
+	if first != second {
+		t.Errorf("second call should reuse the persisted token, got fresh one")
+	}
+}
+
+func TestEnsureUISession_RotatesOnOrphanFile(t *testing.T) {
+	m := newTestManager(t)
+	ctx := context.Background()
+	tokenFile := filepath.Join(t.TempDir(), "ui-session.token")
+
+	// Pre-write a plaintext that doesn't correspond to any DB row.
+	if err := os.WriteFile(tokenFile, []byte("wo_pat_orphan\n"), 0o600); err != nil {
+		t.Fatalf("write orphan file: %v", err)
+	}
+	tok, err := m.EnsureUISession(ctx, tokenFile)
+	if err != nil {
+		t.Fatalf("EnsureUISession with orphan: %v", err)
+	}
+	if tok == "wo_pat_orphan" {
+		t.Errorf("should have rotated past orphan token, got the orphan back")
+	}
+	if name, err := m.Validate(ctx, tok); err != nil || name != UISessionTokenName {
+		t.Errorf("rotated token should validate as %q, got name=%q err=%v",
+			UISessionTokenName, name, err)
 	}
 }
 

@@ -53,6 +53,20 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 	s.queue = &Queue{DB: s.Store.DB, Now: s.Now}
 
+	// Sweep orphaned `running` rows from a prior daemon process before
+	// starting the worker. A run is marked `running` the moment a worker
+	// claims it; if the daemon dies (Ctrl+C, crash, OS restart) before
+	// MarkTerminal lands, the row stays `running` forever — and the
+	// Loop's hasActiveRun count then blocks all future tick enqueues for
+	// that persona. Mark them failed_permanent so the operator sees what
+	// happened and the scheduler unblocks. Queued rows don't need this;
+	// the new worker claims them naturally.
+	if swept, err := s.sweepOrphanedRunning(ctx); err != nil {
+		fmt.Fprintf(s.Out, "→ scheduler: orphan sweep failed: %v\n", err)
+	} else if swept > 0 {
+		fmt.Fprintf(s.Out, "→ scheduler: marked %d orphaned 'running' run(s) as failed_permanent (prior daemon process interrupted)\n", swept)
+	}
+
 	pmap := map[string]personas.Persona{}
 	for _, p := range s.Personas {
 		pmap[p.Slug()] = p
@@ -117,6 +131,28 @@ func personaEnabled(ctx context.Context, db *sql.DB, slug string) (bool, error) 
 		return false, err
 	}
 	return enabled == 1, nil
+}
+
+// sweepOrphanedRunning marks every `running` row as `failed_permanent`
+// with a descriptive failure_reason. Called once at scheduler startup —
+// any row left in `running` belongs to a prior daemon process that was
+// killed before the worker could record a terminal status. Returns the
+// number of rows updated for observability.
+func (s *Scheduler) sweepOrphanedRunning(ctx context.Context) (int64, error) {
+	now := s.Now().UTC().Format(time.RFC3339)
+	res, err := s.Store.DB.ExecContext(ctx, `
+		UPDATE runs
+		   SET status = 'failed_permanent',
+		       completed_at = ?,
+		       failure_reason = 'daemon process exited before run completed',
+		       failure_class = 'permanent'
+		 WHERE status = 'running'
+	`, now)
+	if err != nil {
+		return 0, fmt.Errorf("sweep orphans: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // personaRunnerAdapter wraps personas.RunAndPersist behind PersonaRunner.

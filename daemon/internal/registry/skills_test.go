@@ -1,12 +1,29 @@
 package registry
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestLoadSkills_PricingBenchmarkPresent(t *testing.T) {
-	dir, err := filepath.Abs("../../skills")
+// Skills() is the canonical accessor — uses the embedded skills/ tree
+// baked into the binary. This is what production code calls.
+func TestSkills_PricingBenchmarkPresent(t *testing.T) {
+	// Clear the disk-override so we exercise the embed path even when
+	// the test is run in an environment with WOOAGENT_SKILLS_DIR set.
+	t.Setenv("WOOAGENT_SKILLS_DIR", "")
+	skills, err := Skills()
+	if err != nil {
+		t.Fatalf("Skills: %v", err)
+	}
+	assertPricingBenchmark(t, skills)
+}
+
+// LoadSkills (disk path) keeps working for tests / dev iteration with
+// the WOOAGENT_SKILLS_DIR override. We point it at the package-local
+// skills/ tree so the test doesn't depend on cwd.
+func TestLoadSkills_DiskPath(t *testing.T) {
+	dir, err := filepath.Abs("skills")
 	if err != nil {
 		t.Fatalf("abs: %v", err)
 	}
@@ -14,6 +31,22 @@ func TestLoadSkills_PricingBenchmarkPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSkills: %v", err)
 	}
+	assertPricingBenchmark(t, skills)
+}
+
+// LoadSkills on a missing directory returns an empty map, not an error.
+func TestLoadSkills_MissingDirReturnsEmpty(t *testing.T) {
+	skills, err := LoadSkills(filepath.Join(os.TempDir(), "definitely-not-a-skills-dir-xyz"))
+	if err != nil {
+		t.Fatalf("LoadSkills should tolerate missing dir, got err: %v", err)
+	}
+	if len(skills) != 0 {
+		t.Errorf("expected empty map, got %v", keys(skills))
+	}
+}
+
+func assertPricingBenchmark(t *testing.T, skills map[string]Skill) {
+	t.Helper()
 	s, ok := skills["pricing.benchmark"]
 	if !ok {
 		t.Fatalf("pricing.benchmark not loaded; got: %v", keys(skills))
