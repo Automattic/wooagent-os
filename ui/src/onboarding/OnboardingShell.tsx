@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 import { Stack, Text } from '@wordpress/ui';
 import {
+  ApiError,
   api,
   type Connection,
   type ModelProvider,
@@ -63,10 +64,16 @@ export default function OnboardingShell({
     (async () => {
       try {
         const [storeRes, providerRes] = await Promise.all([
-          api.stores.list(connection).catch(() => ({ stores: [] as Store[] })),
+          api.stores.list(connection).catch((e) => {
+            if (e instanceof ApiError && e.status === 401) throw e;
+            return { stores: [] as Store[] };
+          }),
           api.modelProviders
             .list(connection)
-            .catch(() => ({ providers: [] as ModelProvider[] })),
+            .catch((e) => {
+              if (e instanceof ApiError && e.status === 401) throw e;
+              return { providers: [] as ModelProvider[] };
+            }),
         ]);
         if (cancelled) return;
         const paired =

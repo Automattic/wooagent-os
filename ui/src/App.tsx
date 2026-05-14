@@ -4,6 +4,7 @@ import { Stack, Text } from '@wordpress/ui';
 import OnboardingShell from './onboarding/OnboardingShell';
 import LeftNav from './components/LeftNav';
 import AskAgentDrawer from './components/AskAgentDrawer';
+import AuthExpiredModal from './components/AuthExpiredModal';
 import Kanban from './screens/Kanban';
 import IssueDetail from './screens/IssueDetail';
 import BatchReview from './screens/BatchReview';
@@ -26,6 +27,11 @@ import {
 } from './api/client';
 import { useIsMobile } from './lib/useMediaQuery';
 
+// Mirror of AUTH_NOTICE_FLAG in api/client.ts. Kept inline (rather than
+// imported) because the flag is a private state-machine detail of the
+// auth-recovery handler; App reads it but must not mutate it directly.
+const AUTH_NOTICE_FLAG = 'wooagent.authNoticeReason';
+
 export default function App() {
   // Every screen renders its own header via the WPDS <Page> component
   // (heading + global search + Ask agent on a single row, via the shared
@@ -43,6 +49,27 @@ export default function App() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [askAgentOpen, setAskAgentOpen] = useState(false);
+
+  // Watch sessionStorage for the auth-expired notice flag. api/client.ts
+  // sets it after a second 401 in a session; the modal renders until the
+  // operator clicks Reconnect. 500ms poll is the simplest cross-component
+  // signal that doesn't require new infrastructure (custom event bus,
+  // context provider). The modal only renders once per recovery cycle so
+  // the poll cost is negligible.
+  const [authExpired, setAuthExpired] = useState(
+    () =>
+      typeof sessionStorage !== 'undefined' &&
+      sessionStorage.getItem(AUTH_NOTICE_FLAG) === 'persistent_401',
+  );
+  useEffect(() => {
+    if (typeof sessionStorage === 'undefined') return;
+    const id = setInterval(() => {
+      const flag =
+        sessionStorage.getItem(AUTH_NOTICE_FLAG) === 'persistent_401';
+      setAuthExpired((prev) => (prev === flag ? prev : flag));
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
 
   // Global ⌘K / Ctrl+K opens the Ask Agent drawer from anywhere in the app.
   useEffect(() => {
@@ -173,7 +200,9 @@ export default function App() {
   const askAgentContext = `Board · Today's marketing queue · ${(issues ?? []).length} items`;
 
   return (
-    <Shell>
+    <>
+      {authExpired && <AuthExpiredModal />}
+      <Shell>
       {(drawer) => (
         <>
           <LeftNav
@@ -443,6 +472,7 @@ export default function App() {
         </>
       )}
     </Shell>
+    </>
   );
 }
 
