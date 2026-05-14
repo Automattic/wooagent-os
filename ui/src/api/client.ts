@@ -11,6 +11,8 @@
 // over via the localStorage fallback.
 
 const STORAGE_KEY = 'wooagent.connection';
+const AUTH_RELOAD_FLAG = 'wooagent.authReloadAttempted';
+const AUTH_NOTICE_FLAG = 'wooagent.authNoticeReason';
 
 export interface Connection {
   daemonUrl: string;
@@ -67,6 +69,28 @@ export class ApiError extends Error {
   }
 }
 
+// handleAuthExpired is the global 401-recovery state machine. First 401 in
+// a session clears localStorage and reloads (the daemon will inject a fresh
+// window.__WOOAGENT_TOKEN__ on serve). Second 401 sets a flag the App.tsx
+// modal-gate watches and throws an ApiError so callers stop optimistically
+// rendering data. See ui-auth-recovery-design.md.
+function handleAuthExpired(): never {
+  if (typeof window === 'undefined') {
+    throw new ApiError(401, 'auth_expired', 'Session expired (no window context).');
+  }
+  if (sessionStorage.getItem(AUTH_RELOAD_FLAG) === '1') {
+    sessionStorage.setItem(AUTH_NOTICE_FLAG, 'persistent_401');
+    throw new ApiError(401, 'auth_expired', 'Session expired and reload did not recover.');
+  }
+  sessionStorage.setItem(AUTH_RELOAD_FLAG, '1');
+  localStorage.removeItem(STORAGE_KEY);
+  window.location.reload();
+  // window.location.reload() doesn't synchronously halt the JS task; the
+  // throw is reachable before the navigation begins. Keep it explicit so
+  // the return type stays `never` and callers' control flow is correct.
+  throw new ApiError(401, 'auth_expired', 'Reloading to recover…');
+}
+
 async function request<T>(
   connection: Connection,
   path: string,
@@ -84,6 +108,15 @@ async function request<T>(
     headers.Authorization = `Bearer ${connection.token}`;
   }
   const res = await fetch(url, { ...init, headers });
+  if (res.status === 401) {
+    handleAuthExpired();
+  }
+  if (res.ok && headers.Authorization) {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(AUTH_RELOAD_FLAG);
+      sessionStorage.removeItem(AUTH_NOTICE_FLAG);
+    }
+  }
   if (!res.ok) {
     let code = 'http_error';
     let message = `${res.status} ${res.statusText}`;
