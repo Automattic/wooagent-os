@@ -31,7 +31,8 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 		name, err := s.auth.Validate(r.Context(), token)
 		if err != nil {
 			if errors.Is(err, auth.ErrInvalidToken) {
-				writeError(w, http.StatusUnauthorized, "auth_invalid", "token not recognized")
+				writeError(w, http.StatusUnauthorized, "auth_invalid",
+					"Bearer token does not match any active session. Restart the daemon (`wooagent run`) to mint a fresh ui-session token, or run `wooagent auth token create` for an operator token.")
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "auth_error", "auth lookup failed")
