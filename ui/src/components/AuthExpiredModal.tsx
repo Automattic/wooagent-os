@@ -1,6 +1,5 @@
 import { Button, Modal } from '@wordpress/components';
 import { Stack, Text } from '@wordpress/ui';
-import { useNavigate } from 'react-router-dom';
 
 // Storage-key constants must stay in sync with api/client.ts. Kept inline
 // here (rather than imported) because client.ts intentionally doesn't
@@ -12,15 +11,24 @@ const AUTH_NOTICE_FLAG = 'wooagent.authNoticeReason';
 const STORAGE_KEY = 'wooagent.connection';
 
 // AuthExpiredModal renders when api/client.ts has fired its second 401 in
-// a session (first 401 triggers a silent reload). Operator must take the
-// Reconnect action — the modal is non-dismissible by design.
+// a session (first 401 triggers a silent reload). The actual recovery in
+// the embedded UI is a daemon restart — the daemon mints a fresh
+// ui-session token at startup (per EnsureUISession, see F3) and templates
+// it into every served HTML page via window.__WOOAGENT_TOKEN__. We don't
+// expose a "Create new session token" button here because:
+//   (a) loadConnection() prefers the daemon-injected token over
+//       localStorage, so clearing localStorage doesn't recover.
+//   (b) The realistic 401 frequency (operator deleted state, daemon
+//       reinitialized, etc.) doesn't justify a new unauthed mutation
+//       endpoint on the daemon side.
+//
+// The modal is non-dismissible — operator must reload.
 export default function AuthExpiredModal() {
-  const nav = useNavigate();
-  const onReconnect = () => {
+  const onReload = () => {
     sessionStorage.removeItem(AUTH_RELOAD_FLAG);
     sessionStorage.removeItem(AUTH_NOTICE_FLAG);
     localStorage.removeItem(STORAGE_KEY);
-    nav('/onboard/daemon');
+    window.location.reload();
   };
 
   return (
@@ -30,30 +38,29 @@ export default function AuthExpiredModal() {
       shouldCloseOnClickOutside={false}
       shouldCloseOnEsc={false}
       onRequestClose={() => {
-        /* no-op — operator must take an action via the Reconnect button */
+        /* no-op — operator must take an action via the Reload button */
       }}
     >
       <Stack direction="column" gap="md">
         <Text variant="body-md">
-          WooAgent couldn't authenticate against the daemon at{' '}
-          <code>{typeof window !== 'undefined' ? window.location.host : ''}</code>.
-          The most common cause is a daemon restart that minted a fresh token
-          while this tab was open. Reconnect to continue.
+          WooAgent's auth token for the daemon at{' '}
+          <code>{typeof window !== 'undefined' ? window.location.host : ''}</code>{' '}
+          no longer works. This usually means the daemon was reinitialized or
+          its state directory was reset.
         </Text>
-        <Text
-          variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-        >
-          If reconnecting doesn't work, restart the daemon
-          (<code>wooagent run</code>) and reload this tab.
-        </Text>
+        <Text variant="body-md">To recover:</Text>
+        <Stack direction="column" gap="xs" style={{ marginLeft: 'var(--wpds-dimension-padding-md)' }}>
+          <Text variant="body-sm">
+            1. Stop the daemon (<code>Ctrl+C</code> in its terminal)
+          </Text>
+          <Text variant="body-sm">
+            2. Run <code>wooagent run</code> again
+          </Text>
+          <Text variant="body-sm">3. Reload this tab</Text>
+        </Stack>
         <Stack direction="row" gap="sm" justify="end">
-          <Button
-            __next40pxDefaultSize
-            variant="primary"
-            onClick={onReconnect}
-          >
-            Reconnect
+          <Button __next40pxDefaultSize variant="primary" onClick={onReload}>
+            Reload this tab
           </Button>
         </Stack>
       </Stack>
