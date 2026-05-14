@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -56,6 +57,17 @@ func newRunCmd() *cobra.Command {
 			}
 			if bind != "" {
 				cfg.BindAddr = bind
+			}
+
+			// Refuse to start if another process is already bound to this
+			// address. Done BEFORE store.Open / EnsureUISession / any other
+			// side-effect: F3's EnsureUISession is idempotent, but a doomed
+			// startup still does work that's pointless on a port collision.
+			// We could also detect "is the process specifically wooagent?"
+			// but pointing the operator at lsof/pgrep is portable and the
+			// information they need either way.
+			if err := probeBindAddr(cfg.BindAddr); err != nil {
+				return err
 			}
 
 			st, err := store.Open(ctx, paths.DBFile)
@@ -221,4 +233,33 @@ func loadSkillsForPersonas(out io.Writer) (map[string]registry.Skill, error) {
 		fmt.Fprintf(out, "→ persona init: no skills found (%s)\n", source)
 	}
 	return skills, nil
+}
+
+// probeBindAddr attempts to bind addr (closing the listener immediately)
+// so a port collision surfaces before `wooagent run` does any setup
+// side-effects (DB writes, token mints). Returns an error suitable for
+// surfacing directly to the operator — names the port and points at
+// concrete commands for locating the conflicting process.
+func probeBindAddr(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf(
+			"cannot bind %s: %w — is another daemon already running? "+
+				"check with: lsof -i :%s  or  pgrep -fl wooagent",
+			addr, err, portFromAddr(addr),
+		)
+	}
+	_ = ln.Close()
+	return nil
+}
+
+// portFromAddr extracts the port suffix from a host:port string, falling
+// back to the full string if parsing fails. Used by probeBindAddr to
+// build the lsof hint.
+func portFromAddr(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return port
 }
