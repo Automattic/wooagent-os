@@ -156,8 +156,8 @@ func TestCreateStore_HappyPath(t *testing.T) {
 	if got.PairingCode == "" || got.ExpiresAt == "" || got.PairURL == "" {
 		t.Errorf("missing pairing fields: %+v", got)
 	}
-	if got.MCPEndpoint != "https://mystore.com/wp-json/mcp/v1" {
-		t.Errorf("mcp_endpoint=%q", got.MCPEndpoint)
+	if got.MCPEndpoint != "https://mystore.com/wp-json/mcp/mcp-adapter-default-server" {
+		t.Errorf("mcp_endpoint=%q, want https://mystore.com/wp-json/mcp/mcp-adapter-default-server", got.MCPEndpoint)
 	}
 	exp, err := time.Parse(time.RFC3339, got.ExpiresAt)
 	if err != nil {
