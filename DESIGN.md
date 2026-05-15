@@ -56,7 +56,7 @@ When choosing a component, layout, or interaction for a customer-facing change, 
 2. **`@wordpress/ui`** — primary surfaces, layout, typography, status. `Card.Root` / `Stack` / `Text` / `Badge` / `Notice.Root` (compound). The default first stop for new UI.
 3. **`@wordpress/components`** — gap-fillers (`Button`, `Modal`, `Spinner`, `TextControl` / `SearchControl` / `SelectControl`, `FormToggle`). Always verify the component's **Status** in Storybook is `stable` — query the WPDS MCP server (`mcp__wordpress-design-system__get_component_details`) if uncertain. Pass `__next40pxDefaultSize` to every `Button`. **For outbound text links, use `Button variant="link" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon in children** — not `ExternalLink` (superseded), and not the `external` box-with-arrow icon (wrong shape).
 4. **`@wordpress/dataviews`** — when the shape is tabular. The agent roster and abilities screens are the references.
-5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
+5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `LeftNav`, `ActionBar`, `BatchProductCard`, `Kpi`, `SectionHeader`, `SourceRow`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
 6. **Bespoke with a `// CUSTOM:` comment** — last resort. The comment must explain (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers reject custom UI that isn't called out.
 
 Query the WPDS MCP (`mcp__wordpress-design-system__get_components`, `…__get_design_tokens`) before guessing whether a tier 2 / 3 component or token exists. The principle: **don't shout against the WPDS** — a screen built from bespoke divs inside a WPDS app reads as the one wrong note on the page.
@@ -191,6 +191,12 @@ Dark vertical sidebar. WooAgent wordmark at top, nav items below. Persistent acr
 
 Bottom bar on review / approve / batch surfaces, pinned to the viewport via the detail-shell layout (see Layout > The frame). Indigo primary CTA right, secondary actions left. Replaces inline per-row action buttons in batch contexts. The 13.1 review-and-approve view is the reference.
 
+### `BatchProductCard` (`ui/src/components/BatchProductCard.tsx`)
+
+Expandable per-product card used inside the pricing-batch review surface (`BatchReview.tsx` when the first child's `proposal_type === 'product_price_change'`). Collapsed row shows SKU + product name + price-change pill (~52px). Click anywhere on the header to expand and reveal the rationale + sources list. Carries a `// CUSTOM:` comment — composes `Card.Root` + `SectionHeader` + a Disclosure-style chevron; WPDS has no equivalent expandable-card component.
+
+**Note on `BatchReview.tsx`:** the screen dispatches on the first child issue's `proposal_type`. Marketing prose-variant batches (today's existing shape) render the variant-card body; pricing batches (`product_price_change`) render the `BatchProductCard` body with a pricing KPI strip (Products / Total impact / Median change / Sources). New batch shapes follow the same dispatch pattern — add a `renderXyzBody(data)` function alongside the existing two.
+
 ### `Kpi` (`ui/src/components/Kpi.tsx`)
 
 Single metric block: large tabular numeral, label below. Used in horizontal strips of 2–4 above queues and review surfaces. Never the *only* content on a screen.
@@ -262,7 +268,7 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### WooAgent components (`ui/src/components/`)
 
-Project-specific composites that wrap or extend the above. See the **Components** section above for descriptions: `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `SectionHeader`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing similar shapes.
+Project-specific composites that wrap or extend the above. See the **Components** section above for descriptions: `PersonaAvatar`, `LeftNav`, `ActionBar`, `BatchProductCard`, `Kpi`, `SectionHeader`, `SourceRow`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing similar shapes.
 
 ### Out of scope
 
