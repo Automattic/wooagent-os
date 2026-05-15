@@ -26,18 +26,21 @@ type PEP struct {
 	audit    *auditWriter
 	db       *sql.DB
 	schemas  *schemaCache
+	budget   *BudgetGate
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
 // the MCP client may be nil for ability fetch testing or UI-only daemon
-// runs (Invoke will refuse to dispatch in that case).
-func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB) *PEP {
+// runs (Invoke will refuse to dispatch in that case). budget may be nil
+// to disable budget enforcement (useful in tests that don't care about it).
+func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB, budget *BudgetGate) *PEP {
 	return &PEP{
 		manifest: m,
 		mcp:      mcpClient,
-		audit:    newAuditWriter(db),
+		audit:    newAuditWriter(db, budget),
 		db:       db,
 		schemas:  &schemaCache{},
+		budget:   budget,
 	}
 }
 
@@ -79,29 +82,29 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	// Run the six checks in PRD §8.4.2 order. First denial wins; subsequent
 	// checks are skipped.
 	if reason := p.checkTrustState(ctx, req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 	if reason := p.checkPersonaScope(req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 	if reason := p.checkSchema(ctx, req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 	if reason := p.checkPolicy(req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
-	if reason := p.checkBudget(req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+	if reason := p.checkBudget(ctx, req); reason != "" {
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 	if reason := p.checkScopeSufficiency(req); reason != "" {
-		return p.deny(ctx, auditID, reason)
+		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 
 	// All checks passed. Dispatch via MCP and finalize the row.
 	if p.mcp == nil {
 		// Audit row stays pending — finalize it as mcp_error so the operator
 		// can tell allowed-but-undispatched from genuine MCP failures.
-		if err := p.audit.finalize(ctx, auditID, OutcomeMCPError, ""); err != nil {
+		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, ""); err != nil {
 			return Decision{}, mcp.ToolCallResult{}, err
 		}
 		return Decision{}, mcp.ToolCallResult{}, ErrMCPNotConfigured
@@ -109,7 +112,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 
 	// Initialize is idempotent; persona-marketing and approve both call it.
 	if _, err := p.mcp.Initialize(ctx); err != nil {
-		_ = p.audit.finalize(ctx, auditID, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp init: %w", err)
 	}
 
@@ -118,11 +121,11 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 		"parameters":   req.Args,
 	})
 	if err != nil {
-		_ = p.audit.finalize(ctx, auditID, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp call %s: %w", req.Ability, err)
 	}
 
-	if err := p.audit.finalize(ctx, auditID, OutcomeSuccess, ""); err != nil {
+	if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeSuccess, ""); err != nil {
 		return Decision{}, res, err
 	}
 	return Decision{Allowed: true, AuditID: auditID}, res, nil
@@ -131,8 +134,8 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 // deny finalizes the audit row with the given reason and returns the decision.
 // Errors from finalize are surfaced — losing the audit row would compromise
 // the chain-of-identity story even on a denial.
-func (p *PEP) deny(ctx context.Context, auditID int64, reason ReasonCode) (Decision, mcp.ToolCallResult, error) {
-	if err := p.audit.finalize(ctx, auditID, OutcomeDenied, reason); err != nil {
+func (p *PEP) deny(ctx context.Context, auditID int64, persona manifest.Persona, reason ReasonCode) (Decision, mcp.ToolCallResult, error) {
+	if err := p.audit.finalize(ctx, auditID, persona, OutcomeDenied, reason); err != nil {
 		return Decision{}, mcp.ToolCallResult{}, err
 	}
 	return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
@@ -242,11 +245,19 @@ func (p *PEP) checkPolicy(_ Request) ReasonCode {
 	return ""
 }
 
-// checkBudget — Check 5. Phase 2 will enforce per-persona daily token, cost,
-// and call budgets. V1 has no autonomous agents burning budget.
-func (p *PEP) checkBudget(_ Request) ReasonCode {
-	// TODO(phase-2): consult per-persona budget counters.
-	return ""
+// checkBudget — Check 5. Refuses MCP dispatch when the persona is at or
+// over its daily cost or call limit. The scheduler also pre-checks budget
+// before starting a tick; this PEP-side gate is the backstop for any
+// path that bypasses the scheduler (e.g. operator-driven approve flows).
+func (p *PEP) checkBudget(ctx context.Context, req Request) ReasonCode {
+	if p.budget == nil {
+		return ""
+	}
+	reason, err := p.budget.Check(ctx, req.Persona)
+	if err != nil {
+		return ReasonBudgetExceeded
+	}
+	return reason
 }
 
 // checkScopeSufficiency — Check 6. For agent-originated calls, the Intent

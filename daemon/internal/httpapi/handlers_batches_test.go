@@ -92,7 +92,7 @@ func newTestRig(t *testing.T, mcpc pep.MCPClient) (*Server, *httptest.Server, *s
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	p := pep.New(lookup, mcpc, st.DB)
+	p := pep.New(lookup, mcpc, st.DB, nil)
 	s := &Server{store: st, pep: p}
 
 	r := chi.NewRouter()

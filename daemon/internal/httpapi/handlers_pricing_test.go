@@ -255,7 +255,7 @@ func newPricingTestRig(t *testing.T) *pricingRig {
 		t.Fatalf("lookup: %v", err)
 	}
 	rec := &recordingMCP{}
-	p := pep.New(lookup, rec, st.DB)
+	p := pep.New(lookup, rec, st.DB, nil)
 	s := &Server{store: st, pep: p}
 
 	r := chi.NewRouter()
