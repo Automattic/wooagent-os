@@ -411,6 +411,21 @@ func findLargestEligibleBucket(products []product, threshold int) *Bucket {
 	return best
 }
 
+// packAsBatch takes N successful Drafted results from the batch-path loop
+// and packs them into a single batch-shaped Drafted (one primary + N-1
+// siblings + BatchTitle + BatchIntent). Caller guarantees len(drafts) >= 1
+// and all drafts share the given category.
+func packAsBatch(drafts []personas.Drafted, category string) personas.Drafted {
+	primary := drafts[0]
+	primary.BatchSiblings = drafts[1:]
+	primary.BatchTitle = fmt.Sprintf(
+		"Pricing · %s seasonal parity run (%d products)",
+		category, len(drafts),
+	)
+	primary.BatchIntent = "pricing_bulk"
+	return primary
+}
+
 // ---------------------------------------------------------------- Anthropic
 
 type proposalSource struct {
