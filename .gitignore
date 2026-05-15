@@ -63,24 +63,22 @@ yarn-error.log*
 # Personal brainstorming/spec workspace (superpowers workflow)
 /docs/superpowers/
 
-# Internal-only planning + pitch docs (kept local, not in repo)
+# Root-level plan/design/proposal/brief docs are scratch by default.
+# Tracked specs go in docs/specs/; tracked plans (if any) go in docs/plans/.
+/*-plan.md
+/*-design.md
+/*-proposal.md
+/*-brief.md
+
+# Other internal-only docs kept local (not matched by the patterns above)
 /WooAgent_plan.md
 /WooAgent_Pitch.md
-/woopayments-abilities-proposal.md
 /wooagent-os-prd V2.md
 /wooagentcloud_PRD.md
-/wooagent-os-gepa-v2-plan.md
 /update-2026-04-22.md
 /progress.md
-/pep-implementation-plan.md
 /linearproject.md
 /hvmpersona.md
-/daemon-batch-issues-plan.md
-/companion-plugin-v0.1-plan.md
-/onboarding-design-brief.md
-/first-run-api-proposal.md
-/ability-discovery-proposal.md
 /architecturesummary.md
 /architecturesummary.jpg
 /internalcallfortesting.md
-/wooagent-os-public-launch-plan-2026-05-22.md
