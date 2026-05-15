@@ -224,11 +224,57 @@ func (p *PEP) checkBudget(_ Request) ReasonCode {
 	return ""
 }
 
-// checkScopeSufficiency — Check 6. Phase 2 will compare req.Intent against
-// the ability's manifest Scope and deny apply-against-propose etc. V1 stubs
-// this because the only call site (approve) is an operator-driven IntentApply
-// against abilities the operator approved by clicking the button.
-func (p *PEP) checkScopeSufficiency(_ Request) ReasonCode {
-	// TODO(phase-2): enforce scope sufficiency given Intent + Entry.Scope.
+// checkScopeSufficiency — Check 6. For agent-originated calls, the Intent
+// must not exceed the manifest entry's Scope (read < propose < apply).
+// Operator-originated calls bypass this gate: the operator IS the apply step
+// the persona proposed. Abilities without a manifest entry (operator-
+// approved at runtime) pass through; their scoping is the Phase-2 admin
+// surface's job.
+func (p *PEP) checkScopeSufficiency(req Request) ReasonCode {
+	entry := p.manifest.Get(req.Ability)
+	if entry == nil {
+		return ""
+	}
+	if req.Source == SourceOperator {
+		return ""
+	}
+	// Unknown Source (empty string) is treated as deny-by-default — callers
+	// that forget to set Source should not quietly pass through the gate.
+	if req.Source != SourceAgent {
+		return ReasonScopeInsufficient
+	}
+	ir := intentRank(req.Intent)
+	sr := scopeRank(entry.Scope)
+	if ir == 0 || ir > sr {
+		return ReasonScopeInsufficient
+	}
 	return ""
+}
+
+// intentRank returns the authority level of an Intent. Higher number = more
+// privileged. Zero means "unknown" — treated as too privileged to pass any
+// check so an unset Intent never quietly bypasses scope sufficiency.
+func intentRank(i Intent) int {
+	switch i {
+	case IntentRead:
+		return 1
+	case IntentPropose:
+		return 2
+	case IntentApply:
+		return 3
+	}
+	return 0
+}
+
+// scopeRank mirrors intentRank for manifest.Scope.
+func scopeRank(s manifest.Scope) int {
+	switch s {
+	case manifest.ScopeRead:
+		return 1
+	case manifest.ScopePropose:
+		return 2
+	case manifest.ScopeApply:
+		return 3
+	}
+	return 0
 }
