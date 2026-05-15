@@ -49,6 +49,19 @@ type SalesSupport struct{}
 func (SalesSupport) Slug() string        { return "sales-support" }
 func (SalesSupport) DisplayName() string { return "Sales Support agent" }
 
+// Cooldown: order-centric (proposal_target.order_id), with longer windows
+// than the product personas. A customer-facing message carries higher
+// risk than a copy or price change — once we've messaged an order, we
+// hold off for 30d; once the operator dismisses, 90d. Tunable later if
+// real follow-up needs surface a shorter window.
+func (SalesSupport) Cooldown() personas.CooldownPolicy {
+	return personas.CooldownPolicy{
+		TargetKey: "order_id",
+		Approved:  30 * 24 * time.Hour,
+		Dismissed: 90 * 24 * time.Hour,
+	}
+}
+
 const systemPrompt = `You are the customer-facing sales-support voice for a small-batch home-goods store.
 
 Voice: warm, personal, plainspoken. The customer is a person, not a ticket. Acknowledge what they ordered specifically. Don't oversell, don't upsell, don't promise timelines you can't keep. Avoid corporate phrases ("we appreciate your business", "thank you for your patience"). Sign off with a real first name (use "Elizabeth" as the default; the operator can swap before sending).
@@ -77,6 +90,11 @@ Or, when declining:
   "reason_no_proposal": "Order is on-hold pending payment; a customer-facing note from us would be premature."
 }`
 
+// maxDraftAttempts caps how many orders one Sales Support run will try.
+// Each attempt is ~10-20s of LLM work. See personas.Persona docstring
+// for the canonical pattern.
+const maxDraftAttempts = 3
+
 func (SalesSupport) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
 		return personas.Drafted{
@@ -95,13 +113,54 @@ func (SalesSupport) Draft(ctx context.Context, deps personas.Deps) (personas.Dra
 		return personas.Drafted{}, fmt.Errorf("mcp initialize: %w", err)
 	}
 
-	orderID, status, err := pickOrder(ctx, deps.MCP)
+	model := deps.Env.AnthropicModel
+	if model == "" {
+		model = defaultAnthropicModel
+	}
+
+	// Persistent cooldown set (see SalesSupport.Cooldown).
+	ss := SalesSupport{}
+	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, ss.Slug(), ss.Cooldown())
 	if err != nil {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: err.Error(),
+			SkipReason: fmt.Sprintf("look up recently-touched orders: %v", err),
 		}, nil
 	}
+
+	// Within-run iteration: if the LLM yields no_proposal / empty message
+	// for an order, add it to the run-local skip set and try the next
+	// eligible one. Up to maxDraftAttempts.
+	//
+	// pickOrder returns (id, status, err) but IterateDraft's PickerFunc
+	// is (id, err); we capture the status via a closure-local var so
+	// draftForOrder can read it without re-querying.
+	var pickedStatus string
+	return personas.IterateDraft(
+		maxDraftAttempts,
+		"order",
+		skip,
+		func(s map[int]struct{}) (int, error) {
+			id, status, err := pickOrder(ctx, deps.MCP, s)
+			pickedStatus = status
+			return id, err
+		},
+		func(id int) (personas.Drafted, error) {
+			return draftForOrder(ctx, deps, id, pickedStatus, model)
+		},
+	)
+}
+
+// draftForOrder does the per-order work. Returns Drafted{Skipped:true}
+// for any LLM-level skip (no_proposal, empty message) — the outer Draft
+// loop treats that as "try the next order" rather than ending the run.
+func draftForOrder(
+	ctx context.Context,
+	deps personas.Deps,
+	orderID int,
+	status string,
+	model string,
+) (personas.Drafted, error) {
 	o, err := getOrder(ctx, deps.MCP, orderID)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get order %d: %w", orderID, err)
@@ -109,11 +168,6 @@ func (SalesSupport) Draft(ctx context.Context, deps personas.Deps) (personas.Dra
 	// pickOrder told us the status; trust the get response if it differs.
 	if strings.TrimSpace(o.Status) != "" {
 		status = o.Status
-	}
-
-	model := deps.Env.AnthropicModel
-	if model == "" {
-		model = defaultAnthropicModel
 	}
 
 	out, raw, err := draftMessage(ctx, deps.Env.AnthropicAPIKey, model, o)
@@ -235,27 +289,38 @@ type orderSummary struct {
 // pickOrder returns the most recent order in a state where a customer
 // note is welcome. Skips on-hold / pending / cancelled / refunded — those
 // either need different copy or shouldn't get a proactive note from us.
-func pickOrder(ctx context.Context, c *mcp.Client) (int, string, error) {
+// pickOrder returns the first processing/completed order whose order_id
+// is not in skip. Pulls a wider page (100) than the original 25 so a
+// handful of orders in cooldown don't starve the picker.
+func pickOrder(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, string, error) {
 	var listOut struct {
 		Orders []orderSummary `json:"orders"`
 		Total  int            `json:"total"`
 	}
 	if err := callAbility(ctx, c, "wooagent-orders/list",
-		map[string]any{"per_page": 25}, &listOut); err != nil {
+		map[string]any{"per_page": 100}, &listOut); err != nil {
 		return 0, "", err
 	}
 	if len(listOut.Orders) == 0 {
 		return 0, "", fmt.Errorf("no orders in store")
 	}
+	skippedStatus, skippedCooldown := 0, 0
 	for _, o := range listOut.Orders {
 		switch strings.ToLower(strings.TrimSpace(o.Status)) {
 		case "processing", "completed":
+			if _, inCooldown := skip[o.ID]; inCooldown {
+				skippedCooldown++
+				continue
+			}
 			return o.ID, o.Status, nil
+		default:
+			skippedStatus++
 		}
 	}
 	return 0, "", fmt.Errorf(
-		"no recent orders in 'processing' or 'completed' (looked at %d orders); set PERSONA_PRODUCT_ID is not applicable here, place a real order or seed one to demo",
-		len(listOut.Orders),
+		"no eligible orders in first %d (skipped %d not-processing/completed, %d in cooldown); "+
+			"approved messages cool down for 30d, dismissed for 90d",
+		len(listOut.Orders), skippedStatus, skippedCooldown,
 	)
 }
 

@@ -54,6 +54,23 @@ type Pricing struct{}
 func (Pricing) Slug() string        { return "pricing" }
 func (Pricing) DisplayName() string { return "Pricing agent" }
 
+// Cooldown: product-centric (proposal_target.product_id). 7d after an
+// approve so the new price has time to settle; 30d after a dismiss so we
+// don't oscillate against the operator's "no".
+func (Pricing) Cooldown() personas.CooldownPolicy {
+	return personas.CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+	}
+}
+
+// maxDraftAttempts caps how many products one Pricing run will try.
+// Pricing's web_search is the most expensive LLM call in the system
+// (~20-30s per attempt), so 3 is a deliberate ceiling on a stuck run.
+// See personas.Persona docstring for the canonical pattern.
+const maxDraftAttempts = 3
+
 func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
 		return personas.Drafted{
@@ -80,33 +97,58 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 		currency = "USD"
 	}
 
+	model := deps.Env.AnthropicModel
+	if model == "" {
+		model = defaultAnthropicModel
+	}
+
 	// MCP handshake — idempotent; safe to call even if a parent already did.
 	if _, err := deps.MCP.Initialize(ctx); err != nil {
 		return personas.Drafted{}, fmt.Errorf("mcp initialize: %w", err)
 	}
 
-	productID := deps.Env.ProductIDOverride
-	if productID == 0 {
-		// Skip products that already have an open issue, an approved
-		// proposal within the last 7d, or a dismissed proposal within
-		// the last 30d for this persona. Keeps Pricing from oscillating
-		// on the same SKU and spreads coverage across the catalog.
-		skip, err := personas.RecentlyTouchedProductIDs(ctx, deps.Store, (Pricing{}).Slug())
-		if err != nil {
-			return personas.Drafted{
-				Skipped:    true,
-				SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
-			}, nil
-		}
-		first, err := pickFirstProduct(ctx, deps.MCP, skip)
-		if err != nil {
-			return personas.Drafted{
-				Skipped:    true,
-				SkipReason: err.Error(),
-			}, nil
-		}
-		productID = first
+	// Debug override: always draft on the operator-supplied product,
+	// bypassing both cooldown and within-run iteration.
+	if deps.Env.ProductIDOverride != 0 {
+		return draftForProduct(ctx, deps, deps.Env.ProductIDOverride, skill.Description, model, currency)
 	}
+
+	// Persistent cooldown set (see Pricing.Cooldown).
+	pr := Pricing{}
+	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, pr.Slug(), pr.Cooldown())
+	if err != nil {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
+		}, nil
+	}
+
+	// Within-run iteration: if the LLM yields no_proposal (or any other
+	// LLM-level skip) for a product, add it to the run-local skip set and
+	// try the next eligible one. Up to maxDraftAttempts.
+	return personas.IterateDraft(
+		maxDraftAttempts,
+		"product",
+		skip,
+		func(s map[int]struct{}) (int, error) { return pickFirstProduct(ctx, deps.MCP, s) },
+		func(id int) (personas.Drafted, error) {
+			return draftForProduct(ctx, deps, id, skill.Description, model, currency)
+		},
+	)
+}
+
+// draftForProduct does the per-product Pricing work: fetch + parse the
+// current price, call the LLM-with-web_search skill, validate the
+// proposal, assemble Drafted. Returns Drafted{Skipped:true} for any
+// LLM-level skip (no_proposal, insufficient sources, no usable
+// regular_price) — the outer Draft loop treats that as "try the next
+// product" rather than ending the run.
+func draftForProduct(
+	ctx context.Context,
+	deps personas.Deps,
+	productID int,
+	skillDescription, model, currency string,
+) (personas.Drafted, error) {
 	p, err := getProduct(ctx, deps.MCP, productID)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
@@ -119,12 +161,7 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 		}, nil
 	}
 
-	model := deps.Env.AnthropicModel
-	if model == "" {
-		model = defaultAnthropicModel
-	}
-
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skill.Description, p, currency, currentPrice)
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
