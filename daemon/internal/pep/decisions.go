@@ -29,9 +29,10 @@ const (
 // Source declares who originated the call. Operator-mediated calls (the
 // Approve button) bypass strict scope sufficiency because the operator IS
 // the apply step the persona proposed. Agent-mediated calls enforce
-// Intent <= Scope strictly. The zero value Source("") is treated as
-// SourceAgent in checks — deny-by-default for any caller that forgets to
-// set Source.
+// Intent <= Scope strictly. The zero value Source("") and any unrecognized
+// value are denied outright — callers must set Source explicitly to either
+// SourceOperator or SourceAgent, so a future caller that forgets cannot
+// quietly bypass the gate.
 type Source string
 
 const (
@@ -73,7 +74,7 @@ type Request struct {
 	// action (Approve button) or an autonomous agent path. checkScope
 	// Sufficiency uses Source to allow operator-mediated calls to apply
 	// against propose-scoped abilities while keeping the gate strict for
-	// agent paths. Empty Source is treated as SourceAgent.
+	// agent paths. An empty or unrecognized Source is denied outright.
 	Source Source
 }
 
