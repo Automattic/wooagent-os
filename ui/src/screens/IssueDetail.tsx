@@ -392,7 +392,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             score={activeVariant?.seo ?? 0}
             hint="Yoast · out of 100"
           />
-          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
+          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
         </div>
 
         {/* Body */}
@@ -848,7 +848,7 @@ function PriceIssueView(props: PriceViewProps) {
             label="Sources"
             value={proposal.sources.length}
             hint="Comparable products cited"
-            intent="success"
+            tone="success"
           />
         </div>
 
@@ -1386,7 +1386,7 @@ function MessageIssueView(props: MessageViewProps) {
             label="Note type"
             value={isInternal ? 'Internal' : 'Customer'}
             hint={isInternal ? 'wp-admin only' : 'emailed on approval'}
-            intent={isInternal ? 'neutral' : 'success'}
+            tone={isInternal ? 'neutral' : 'success'}
           />
         </div>
 
