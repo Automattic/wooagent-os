@@ -136,6 +136,37 @@ a {
   height: auto;
 }
 
+/* Marketing detail title row — 86×86 product thumbnail slot. Placeholder
+   fill + icon for v1; the daemon will plumb a real image URL in a follow-up.
+   Hides at <480px so the title gets the full width on phone. */
+.wa-detail-thumbnail {
+  flex: none;
+  width: 86px;
+  height: 86px;
+  border-radius: var(--wpds-border-radius-md);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+@media (max-width: 480px) {
+  .wa-detail-thumbnail {
+    display: none;
+  }
+}
+.wa-detail-title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--wpds-dimension-gap-lg);
+  margin-bottom: var(--wpds-dimension-gap-xl);
+}
+.wa-detail-title-row > .wa-detail-title-text {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Sub-page content wrapper. Constrains detail-view content to 1100px and
    centers it inside the Page's `.content.has-padding` container, matching
    the 533:4193 Figma layout. The Page header (with breadcrumbs + actions)

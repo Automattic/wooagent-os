@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
-import { Icon, arrowUpRight, rotateRight, check } from '@wordpress/icons';
+import { Icon, arrowUpRight, rotateRight, check, box } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -363,24 +363,33 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           </Text>
         </Stack>
 
-        {/* Title + subhead */}
-        <Text
-          variant="heading-2xl"
-          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
-        >
-          {issue.title}
-        </Text>
-        <Text
-          variant="body-md"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            maxWidth: 760,
-            marginBottom: 'var(--wpds-dimension-gap-xl)',
-          }}
-        >
-          {issue.description ??
-            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
-        </Text>
+        {/* Title row — 86×86 thumbnail placeholder + title + subhead */}
+        <div className="wa-detail-title-row">
+          {/* CUSTOM: 86×86 thumbnail placeholder. WPDS has no thumbnail/avatar
+               component at this size; box icon stands in until daemon plumbs a real
+               product image_url (follow-up tracked in Linear DSGWOO). */}
+          <div className="wa-detail-thumbnail" aria-hidden="true">
+            <Icon icon={box} size={32} />
+          </div>
+          <div className="wa-detail-title-text">
+            <Text
+              variant="heading-2xl"
+              render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+            >
+              {issue.title}
+            </Text>
+            <Text
+              variant="body-md"
+              style={{
+                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                maxWidth: 760,
+              }}
+            >
+              {issue.description ??
+                'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
+            </Text>
+          </div>
+        </div>
 
         {/* KPI row */}
         <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
