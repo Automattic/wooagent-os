@@ -87,7 +87,18 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 
 	productID := deps.Env.ProductIDOverride
 	if productID == 0 {
-		first, err := pickFirstProduct(ctx, deps.MCP)
+		// Skip products that already have an open issue, an approved
+		// proposal within the last 7d, or a dismissed proposal within
+		// the last 30d for this persona. Keeps Pricing from oscillating
+		// on the same SKU and spreads coverage across the catalog.
+		skip, err := personas.RecentlyTouchedProductIDs(ctx, deps.Store, (Pricing{}).Slug())
+		if err != nil {
+			return personas.Drafted{
+				Skipped:    true,
+				SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
+			}, nil
+		}
+		first, err := pickFirstProduct(ctx, deps.MCP, skip)
 		if err != nil {
 			return personas.Drafted{
 				Skipped:    true,
@@ -225,19 +236,22 @@ type productSummary struct {
 	RegularPrice string `json:"regular_price"`
 }
 
-func pickFirstProduct(ctx context.Context, c *mcp.Client) (int, error) {
+// pickFirstProduct returns the first simple, priced, published product
+// whose ID is not in skip. Pulls a wider page (100) than the original 50
+// so a handful of products in cooldown don't starve the picker.
+func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
 	var listOut struct {
 		Products []productSummary `json:"products"`
 		Total    int              `json:"total"`
 	}
 	if err := callAbility(ctx, c, "wooagent-products/list",
-		map[string]any{"per_page": 50}, &listOut); err != nil {
+		map[string]any{"per_page": 100}, &listOut); err != nil {
 		return 0, err
 	}
 	if len(listOut.Products) == 0 {
 		return 0, fmt.Errorf("no products in store")
 	}
-	skippedVariable, skippedNoPrice := 0, 0
+	skippedVariable, skippedNoPrice, skippedCooldown := 0, 0, 0
 	for _, p := range listOut.Products {
 		if p.Status != "publish" && p.Status != "" {
 			continue
@@ -250,12 +264,17 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client) (int, error) {
 			skippedNoPrice++
 			continue
 		}
+		if _, inCooldown := skip[p.ID]; inCooldown {
+			skippedCooldown++
+			continue
+		}
 		return p.ID, nil
 	}
 	return 0, fmt.Errorf(
-		"no priceable simple products in first %d (skipped %d variable, %d without regular_price); "+
+		"no priceable simple products in first %d (skipped %d variable, %d without regular_price, %d in cooldown); "+
+			"approved proposals cool down for 7d, dismissed for 30d; "+
 			"set a regular_price on a simple product in wp-admin or pass PERSONA_PRODUCT_ID=<id>",
-		len(listOut.Products), skippedVariable, skippedNoPrice,
+		len(listOut.Products), skippedVariable, skippedNoPrice, skippedCooldown,
 	)
 }
 
