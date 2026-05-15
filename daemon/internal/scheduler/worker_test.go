@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
 
@@ -257,6 +258,72 @@ func TestWorker_TransientFailure_EmptyBackoff_NoPanic(t *testing.T) {
 	want := fixed.Add(time.Second).Format(time.RFC3339)
 	if scheduledAt != want {
 		t.Errorf("scheduled_at = %s, want %s (zero delay)", scheduledAt, want)
+	}
+}
+
+func TestWorker_SkipsRunWhenPersonaOverBudget(t *testing.T) {
+	db := openTestDB(t)
+	fixed := time.Unix(1700000000, 0).UTC()
+	q := &Queue{DB: db, Now: func() time.Time { return fixed }}
+
+	// Seed a usage row that puts "marketing" at the call threshold (100/100).
+	// The gate uses time.Now internally, so we seed with today's actual local
+	// date rather than the fixed test timestamp.
+	today := time.Now().Local().Format("2006-01-02")
+	_, err := db.ExecContext(context.Background(),
+		`INSERT INTO persona_budget_usage(persona, usage_date, cost_usd, call_count, updated_at)
+		 VALUES(?, ?, 0, 100, ?)`,
+		"marketing", today, time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		t.Fatalf("seed usage: %v", err)
+	}
+
+	// Enqueue a marketing tick.
+	_, _ = q.Enqueue(context.Background(), EnqueueParams{
+		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
+	})
+
+	// Track whether the runner was called.
+	runnerCalled := false
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+		runnerCalled = true
+		return personas.Result{}, nil
+	}}
+
+	// Build a real BudgetGate with default thresholds (100 calls).
+	gate := pep.NewBudgetGate(db, pep.DefaultThresholds())
+
+	sp := &stubPersona{slug: "marketing"}
+	w := &Worker{
+		Queue:    q,
+		Runner:   runner,
+		Personas: map[string]personas.Persona{"marketing": sp},
+		Now:      func() time.Time { return fixed.Add(time.Second) },
+		Backoff:  DefaultBackoff,
+		Budget:   gate,
+	}
+
+	ran, err := w.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if !ran {
+		t.Fatalf("expected ran=true (run was claimed and processed)")
+	}
+	if runnerCalled {
+		t.Error("runner should NOT have been called for over-budget persona")
+	}
+
+	var status string
+	var skipReason sql.NullString
+	_ = db.QueryRowContext(context.Background(),
+		`SELECT status, skip_reason FROM runs LIMIT 1`).Scan(&status, &skipReason)
+	if status != string(StatusSkipped) {
+		t.Errorf("status = %s, want skipped", status)
+	}
+	if !skipReason.Valid || skipReason.String == "" {
+		t.Errorf("skip_reason should be non-empty, got %v", skipReason)
 	}
 }
 
