@@ -357,9 +357,10 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 			recordTurn(ctx, deps.Recorder, tracker, "", d)
 			return res, fmt.Errorf("insert batch: %w", err)
 		}
-		// Record the turn against the *primary* child's content, mirroring
-		// the single-issue path. The batch itself doesn't carry proposal
-		// content; the children do.
+		// Telemetry: record the turn using the *primary* child's
+		// ProposalContent. issueID is intentionally empty here — recordTurn
+		// tolerates that (see its body); the run isn't tied to a single
+		// issue row when a batch is produced.
 		recordTurn(ctx, deps.Recorder, tracker, "", d)
 		res.BatchID = batchID
 		return res, nil
@@ -445,6 +446,10 @@ func insertBatch(ctx context.Context, st *store.Store, persona string, d Drafted
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// TODO(run-id): batches.source_run_id is the chain-of-identity to the
+	// run that generated the batch (per migration 004's comment). Not yet
+	// plumbed through RunAndPersist's call sites — passing "" until a
+	// follow-up wires the run id through Deps.
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO batches(id, title, persona, intent, source_run_id, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
 		batchID, d.BatchTitle, persona, d.BatchIntent, "", now, now,
@@ -495,7 +500,10 @@ func insertChildIssue(ctx context.Context, tx *sql.Tx, batchID string, persona s
 		id, d.Title, d.Description, persona, "in_review", priority, now, now,
 		d.ProposalType, d.ProposalContent, targetJSON, batchID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("exec insert: %w", err)
+	}
+	return nil
 }
 
 // ---- Within-run iteration ----
