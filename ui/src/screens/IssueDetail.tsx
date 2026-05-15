@@ -870,7 +870,7 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Headline price comparison */}
             <Card.Root>
               <Card.Header>
-                <span className="wa-eyebrow">Price change</span>
+                <SectionHeader eyebrow="Price change" />
               </Card.Header>
               <Card.Content>
                 <Stack direction="row" gap="lg" align="center" wrap="wrap">
@@ -934,18 +934,20 @@ function PriceIssueView(props: PriceViewProps) {
             {hasObservedRange && (
               <Card.Root>
                 <Card.Header>
-                  <Stack direction="row" justify="space-between" align="center">
-                    <span className="wa-eyebrow">Observed market range</span>
-                    <span
-                      className="wa-mono"
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      from {proposal.sources.length} comparables
-                    </span>
-                  </Stack>
+                  <SectionHeader
+                    eyebrow="Observed market range"
+                    meta={
+                      <span
+                        className="wa-mono"
+                        style={{
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        }}
+                      >
+                        from {proposal.sources.length} comparables
+                      </span>
+                    }
+                  />
                 </Card.Header>
                 <Card.Content>
                   <ObservedRange
@@ -965,18 +967,20 @@ function PriceIssueView(props: PriceViewProps) {
               style={{ borderWidth: 'var(--wpds-border-width-md)' }}
             >
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <span className="wa-eyebrow">Rationale</span>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    every numeric claim cited below
-                  </span>
-                </Stack>
+                <SectionHeader
+                  eyebrow="Rationale"
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      every numeric claim cited below
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Text
@@ -991,9 +995,9 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Sources */}
             <Card.Root>
               <Card.Header>
-                <span className="wa-eyebrow">
-                  Sources · {proposal.sources.length} comparable{proposal.sources.length === 1 ? '' : 's'}
-                </span>
+                <SectionHeader
+                  eyebrow={`Sources · ${proposal.sources.length} comparable${proposal.sources.length === 1 ? '' : 's'}`}
+                />
               </Card.Header>
               <Card.Content>
                 {proposal.sources.length === 0 ? (
@@ -1408,18 +1412,20 @@ function MessageIssueView(props: MessageViewProps) {
             {/* Order summary */}
             <Card.Root>
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <span className="wa-eyebrow">Order context</span>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {proposal.orderStatus ?? '—'}
-                  </span>
-                </Stack>
+                <SectionHeader
+                  eyebrow="Order context"
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {proposal.orderStatus ?? '—'}
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Stack direction="column" gap="sm">
@@ -1475,12 +1481,10 @@ function MessageIssueView(props: MessageViewProps) {
               style={{ borderWidth: 'var(--wpds-border-width-md)' }}
             >
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <Stack direction="row" gap="sm" align="center">
-                    <span className="wa-eyebrow">
-                      {isInternal ? 'Internal note' : 'Customer-facing message'}
-                    </span>
-                    {proposal.subjectHint && (
+                <SectionHeader
+                  eyebrow={isInternal ? 'Internal note' : 'Customer-facing message'}
+                  badge={
+                    proposal.subjectHint ? (
                       <span
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
@@ -1492,18 +1496,20 @@ function MessageIssueView(props: MessageViewProps) {
                       >
                         {proposal.subjectHint}
                       </span>
-                    )}
-                  </Stack>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {charCount} chars
-                  </span>
-                </Stack>
+                    ) : undefined
+                  }
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {charCount} chars
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 {!isInternal && (
