@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
-import { Icon, arrowUpRight, rotateRight, check } from '@wordpress/icons';
+import { Icon, arrowUpRight, rotateRight, check, box } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -26,10 +26,12 @@ import {
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import Kpi from '../components/Kpi';
+import type { KpiTone } from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
 import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
+import SectionHeader from '../components/SectionHeader';
 
 interface Props {
   connection: Connection;
@@ -62,6 +64,19 @@ function voiceColorClass(score: number): string {
   if (score >= 90) return 'wa-score-label__value--good';
   if (score >= 75) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
+}
+
+// Score → Kpi tone. SEO uses success/caution/warning. Voice uses brand
+// (matches the Figma frame's blue for high-match voice) / caution / warning.
+function seoToneBand(score: number): KpiTone {
+  if (score >= 80) return 'success';
+  if (score >= 70) return 'caution';
+  return 'warning';
+}
+function voiceToneBand(score: number): KpiTone {
+  if (score >= 90) return 'brand';
+  if (score >= 75) return 'caution';
+  return 'warning';
 }
 
 const CURRENCY_SYMBOL: Record<string, string> = {
@@ -348,24 +363,33 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           </Text>
         </Stack>
 
-        {/* Title + subhead */}
-        <Text
-          variant="heading-2xl"
-          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
-        >
-          {issue.title}
-        </Text>
-        <Text
-          variant="body-md"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            maxWidth: 760,
-            marginBottom: 'var(--wpds-dimension-gap-xl)',
-          }}
-        >
-          {issue.description ??
-            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
-        </Text>
+        {/* Title row — 86×86 thumbnail placeholder + title + subhead */}
+        <div className="wa-detail-title-row">
+          {/* CUSTOM: 86×86 thumbnail placeholder. WPDS has no thumbnail/avatar
+               component at this size; box icon stands in until daemon plumbs a real
+               product image_url (follow-up tracked in Linear DSGWOO). */}
+          <div className="wa-detail-thumbnail" aria-hidden="true">
+            <Icon icon={box} size={32} />
+          </div>
+          <div className="wa-detail-title-text">
+            <Text
+              variant="heading-2xl"
+              render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+            >
+              {issue.title}
+            </Text>
+            <Text
+              variant="body-md"
+              style={{
+                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                maxWidth: 760,
+              }}
+            >
+              {issue.description ??
+                'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
+            </Text>
+          </div>
+        </div>
 
         {/* KPI row */}
         <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
@@ -384,15 +408,17 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             label="Brand voice match"
             value={`${activeVariant?.voice ?? 0}%`}
             score={activeVariant?.voice ?? 0}
+            tone={voiceToneBand(activeVariant?.voice ?? 0)}
             hint="vs. your voice model"
           />
           <Kpi
             label="SEO score"
             value={String(activeVariant?.seo ?? 0)}
             score={activeVariant?.seo ?? 0}
+            tone={seoToneBand(activeVariant?.seo ?? 0)}
             hint="Yoast · out of 100"
           />
-          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
+          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
         </div>
 
         {/* Body */}
@@ -401,10 +427,10 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             {/* Current description */}
             <Card.Root>
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <Stack direction="row" gap="sm" align="center">
-                    <span className="wa-eyebrow">Current description</span>
-                    {productBound ? (
+                <SectionHeader
+                  eyebrow="Current description"
+                  badge={
+                    productBound ? (
                       <span
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
@@ -414,7 +440,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           color: 'var(--wpds-color-fg-content-success)',
                         }}
                       >
-                        Bound: {productSku}
+                        Bound{productSku ? ` · ${productSku}` : ''}
                       </span>
                     ) : (
                       <span
@@ -428,18 +454,19 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                       >
                         No product bound
                       </span>
-                    )}
-                  </Stack>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {previous ? `${previous.length} chars` : '0 chars · sample'}
-                  </span>
-                </Stack>
+                    )
+                  }
+                  meta={
+                    <span
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {previous ? `${previous.length} chars` : '0 chars · sample'}
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Text
@@ -458,26 +485,20 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             </Card.Root>
 
             {/* Proposed section */}
-            <Stack direction="row" justify="space-between" align="end">
-              <Stack direction="column" gap="xs">
-                <span className="wa-eyebrow wa-eyebrow--persona">Proposed · pick one</span>
-                <Text variant="heading-md">
-                  {variants
-                    ? `${variants.length} variants · each with different emphasis`
-                    : proposal
-                      ? '1 variant · phase-1 single proposal'
-                      : 'No proposal attached yet'}
-                </Text>
-              </Stack>
-              <Button
-                __next40pxDefaultSize
-                variant="tertiary"
-                icon={rotateRight}
-                disabled
-              >
-                Regenerate
-              </Button>
-            </Stack>
+            <SectionHeader
+              title="Proposed · pick one"
+              action={
+                <Button
+                  __next40pxDefaultSize
+                  variant="tertiary"
+                  icon={rotateRight}
+                  disabled
+                >
+                  Regenerate
+                </Button>
+              }
+            />
+
 
             {!proposal ? (
               <Notice.Root intent="info">
@@ -517,6 +538,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           <div className="wa-variant-header">
                             <div className="wa-variant-header__left">
                               <span
+                                aria-hidden="true"
                                 style={{
                                   height: 24,
                                   width: 24,
@@ -524,7 +546,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  fontWeight: 700,
+                                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
                                   fontSize: 'var(--wpds-typography-font-size-sm)',
                                   flex: 'none',
                                   background: isSelected
@@ -540,20 +562,26 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                               >
                                 {v.id}
                               </span>
-                              {v.recommended && (
-                                <span className="wa-agent-pick-inline">Agent pick</span>
+                              {v.recommended ? (
+                                <Text
+                                  variant="body-sm"
+                                  style={{
+                                    color: 'var(--wpds-color-fg-interactive-brand)',
+                                    fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                                  }}
+                                >
+                                  Agent pick{v.label ? ` · ${v.label}` : ''}
+                                </Text>
+                              ) : (
+                                v.label && (
+                                  <Text
+                                    variant="body-sm"
+                                    style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                                  >
+                                    {v.label}
+                                  </Text>
+                                )
                               )}
-                              <span
-                                style={{
-                                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--wpds-border-radius-sm)',
-                                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                                  color: 'var(--wpds-color-fg-content-neutral)',
-                                }}
-                              >
-                                {v.label}
-                              </span>
                             </div>
                             <div className="wa-variant-header__right">
                               <span className="wa-score-label">
@@ -848,7 +876,7 @@ function PriceIssueView(props: PriceViewProps) {
             label="Sources"
             value={proposal.sources.length}
             hint="Comparable products cited"
-            intent="success"
+            tone="success"
           />
         </div>
 
@@ -858,7 +886,7 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Headline price comparison */}
             <Card.Root>
               <Card.Header>
-                <span className="wa-eyebrow wa-eyebrow--persona">Price change</span>
+                <SectionHeader eyebrow="Price change" />
               </Card.Header>
               <Card.Content>
                 <Stack direction="row" gap="lg" align="center" wrap="wrap">
@@ -922,18 +950,20 @@ function PriceIssueView(props: PriceViewProps) {
             {hasObservedRange && (
               <Card.Root>
                 <Card.Header>
-                  <Stack direction="row" justify="space-between" align="center">
-                    <span className="wa-eyebrow">Observed market range</span>
-                    <span
-                      className="wa-mono"
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      from {proposal.sources.length} comparables
-                    </span>
-                  </Stack>
+                  <SectionHeader
+                    eyebrow="Observed market range"
+                    meta={
+                      <span
+                        className="wa-mono"
+                        style={{
+                          fontSize: 'var(--wpds-typography-font-size-xs)',
+                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        }}
+                      >
+                        from {proposal.sources.length} comparables
+                      </span>
+                    }
+                  />
                 </Card.Header>
                 <Card.Content>
                   <ObservedRange
@@ -953,18 +983,20 @@ function PriceIssueView(props: PriceViewProps) {
               style={{ borderWidth: 'var(--wpds-border-width-md)' }}
             >
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <span className="wa-eyebrow wa-eyebrow--persona">Rationale</span>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    every numeric claim cited below
-                  </span>
-                </Stack>
+                <SectionHeader
+                  eyebrow="Rationale"
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      every numeric claim cited below
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Text
@@ -979,9 +1011,9 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Sources */}
             <Card.Root>
               <Card.Header>
-                <span className="wa-eyebrow">
-                  Sources · {proposal.sources.length} comparable{proposal.sources.length === 1 ? '' : 's'}
-                </span>
+                <SectionHeader
+                  eyebrow={`Sources · ${proposal.sources.length} comparable${proposal.sources.length === 1 ? '' : 's'}`}
+                />
               </Card.Header>
               <Card.Content>
                 {proposal.sources.length === 0 ? (
@@ -1386,7 +1418,7 @@ function MessageIssueView(props: MessageViewProps) {
             label="Note type"
             value={isInternal ? 'Internal' : 'Customer'}
             hint={isInternal ? 'wp-admin only' : 'emailed on approval'}
-            intent={isInternal ? 'neutral' : 'success'}
+            tone={isInternal ? 'neutral' : 'success'}
           />
         </div>
 
@@ -1396,18 +1428,20 @@ function MessageIssueView(props: MessageViewProps) {
             {/* Order summary */}
             <Card.Root>
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <span className="wa-eyebrow">Order context</span>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {proposal.orderStatus ?? '—'}
-                  </span>
-                </Stack>
+                <SectionHeader
+                  eyebrow="Order context"
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {proposal.orderStatus ?? '—'}
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Stack direction="column" gap="sm">
@@ -1463,12 +1497,10 @@ function MessageIssueView(props: MessageViewProps) {
               style={{ borderWidth: 'var(--wpds-border-width-md)' }}
             >
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <Stack direction="row" gap="sm" align="center">
-                    <span className="wa-eyebrow wa-eyebrow--persona">
-                      {isInternal ? 'Internal note' : 'Customer-facing message'}
-                    </span>
-                    {proposal.subjectHint && (
+                <SectionHeader
+                  eyebrow={isInternal ? 'Internal note' : 'Customer-facing message'}
+                  badge={
+                    proposal.subjectHint ? (
                       <span
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
@@ -1480,18 +1512,20 @@ function MessageIssueView(props: MessageViewProps) {
                       >
                         {proposal.subjectHint}
                       </span>
-                    )}
-                  </Stack>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {charCount} chars
-                  </span>
-                </Stack>
+                    ) : undefined
+                  }
+                  meta={
+                    <span
+                      className="wa-mono"
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {charCount} chars
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 {!isInternal && (
