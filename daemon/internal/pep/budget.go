@@ -147,3 +147,51 @@ func (g *BudgetGate) Check(ctx context.Context, persona manifest.Persona) (Reaso
 	}
 	return "", nil
 }
+
+// IncrementCost adds usdAmount to today's row for persona. UPSERT semantics:
+// creates the row if absent. Skips entirely when persona is empty
+// (defensive — empty-persona rows are noise and would never be looked up
+// by Check, which always supplies a typed persona slug).
+func (g *BudgetGate) IncrementCost(ctx context.Context, persona manifest.Persona, usdAmount float64) error {
+	if persona == "" {
+		return nil
+	}
+	today := g.clock().Local().Format("2006-01-02")
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := g.db.ExecContext(ctx, `
+		INSERT INTO persona_budget_usage (persona, usage_date, cost_usd, call_count, updated_at)
+		VALUES (?, ?, ?, 0, ?)
+		ON CONFLICT(persona, usage_date) DO UPDATE SET
+			cost_usd   = cost_usd + excluded.cost_usd,
+			updated_at = excluded.updated_at`,
+		string(persona), today, usdAmount, now,
+	)
+	if err != nil {
+		g.logger.Warn("budget cost increment failed", "persona", persona, "amount", usdAmount, "err", err)
+		return err
+	}
+	return nil
+}
+
+// IncrementCalls bumps today's call_count by 1 for persona. UPSERT.
+// Skips when persona is empty.
+func (g *BudgetGate) IncrementCalls(ctx context.Context, persona manifest.Persona) error {
+	if persona == "" {
+		return nil
+	}
+	today := g.clock().Local().Format("2006-01-02")
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := g.db.ExecContext(ctx, `
+		INSERT INTO persona_budget_usage (persona, usage_date, cost_usd, call_count, updated_at)
+		VALUES (?, ?, 0, 1, ?)
+		ON CONFLICT(persona, usage_date) DO UPDATE SET
+			call_count = call_count + 1,
+			updated_at = excluded.updated_at`,
+		string(persona), today, now,
+	)
+	if err != nil {
+		g.logger.Warn("budget call increment failed", "persona", persona, "err", err)
+		return err
+	}
+	return nil
+}

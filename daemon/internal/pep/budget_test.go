@@ -250,3 +250,113 @@ func TestBudgetGate_CheckRespectsLocalTZ(t *testing.T) {
 		t.Errorf("at 00:30 next day: got reason %q want allowed", reason2)
 	}
 }
+
+func readUsage(t *testing.T, db *sql.DB, persona, date string) (cost float64, calls int, exists bool) {
+	t.Helper()
+	err := db.QueryRow(
+		`SELECT cost_usd, call_count FROM persona_budget_usage WHERE persona = ? AND usage_date = ?`,
+		persona, date,
+	).Scan(&cost, &calls)
+	if err == sql.ErrNoRows {
+		return 0, 0, false
+	}
+	if err != nil {
+		t.Fatalf("read usage: %v", err)
+	}
+	return cost, calls, true
+}
+
+func TestBudgetGate_IncrementCostCreatesRow(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	if err := g.IncrementCost(context.Background(), manifest.PersonaMarketing, 2.50); err != nil {
+		t.Fatalf("increment: %v", err)
+	}
+	cost, calls, exists := readUsage(t, db, "marketing", today)
+	if !exists {
+		t.Fatal("expected row to be created")
+	}
+	if cost != 2.50 {
+		t.Errorf("cost = %v, want 2.50", cost)
+	}
+	if calls != 0 {
+		t.Errorf("calls = %v, want 0 (only cost incremented)", calls)
+	}
+}
+
+func TestBudgetGate_IncrementCostAccumulates(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	_ = g.IncrementCost(context.Background(), manifest.PersonaMarketing, 1.25)
+	_ = g.IncrementCost(context.Background(), manifest.PersonaMarketing, 2.50)
+	cost, _, _ := readUsage(t, db, "marketing", today)
+	if cost != 3.75 {
+		t.Errorf("accumulated cost = %v, want 3.75", cost)
+	}
+}
+
+func TestBudgetGate_IncrementCallsCreatesRow(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	if err := g.IncrementCalls(context.Background(), manifest.PersonaMarketing); err != nil {
+		t.Fatalf("increment: %v", err)
+	}
+	cost, calls, exists := readUsage(t, db, "marketing", today)
+	if !exists {
+		t.Fatal("expected row")
+	}
+	if calls != 1 {
+		t.Errorf("calls = %v, want 1", calls)
+	}
+	if cost != 0 {
+		t.Errorf("cost = %v, want 0 (only calls incremented)", cost)
+	}
+}
+
+func TestBudgetGate_IncrementCallsAccumulates(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	for i := 0; i < 3; i++ {
+		_ = g.IncrementCalls(context.Background(), manifest.PersonaMarketing)
+	}
+	_, calls, _ := readUsage(t, db, "marketing", today)
+	if calls != 3 {
+		t.Errorf("calls = %v, want 3", calls)
+	}
+}
+
+func TestBudgetGate_IncrementSkipsEmptyPersona(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	if err := g.IncrementCost(context.Background(), manifest.Persona(""), 1.0); err != nil {
+		t.Fatalf("increment empty: %v", err)
+	}
+	if err := g.IncrementCalls(context.Background(), manifest.Persona("")); err != nil {
+		t.Fatalf("increment empty: %v", err)
+	}
+	_, _, exists := readUsage(t, db, "", today)
+	if exists {
+		t.Error("expected no row to be created for empty persona")
+	}
+}
+
+func TestBudgetGate_IncrementUsesLocalTZForDate(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 23, 30)
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	_ = g.IncrementCalls(context.Background(), manifest.PersonaMarketing)
+	_, calls, exists := readUsage(t, db, "marketing", "2026-05-15")
+	if !exists || calls != 1 {
+		t.Errorf("expected row for 2026-05-15 with calls=1; exists=%v calls=%v", exists, calls)
+	}
+}
