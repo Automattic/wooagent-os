@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -354,6 +355,60 @@ func categoryString(p product) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// categoryOf returns the product's primary category name (the first
+// non-empty entry in p.Categories), or "" if the product is uncategorized.
+// Used by findLargestEligibleBucket to group products for batch pricing.
+func categoryOf(p product) string {
+	for _, c := range p.Categories {
+		if c.Name != "" {
+			return c.Name
+		}
+	}
+	return ""
+}
+
+// Bucket is a set of eligible products grouped by category, used by
+// Pricing.Draft to decide whether to emit a batch.
+type Bucket struct {
+	Category string
+	Products []product
+}
+
+// findLargestEligibleBucket buckets the given products by primary category
+// and returns the largest bucket whose size is >= threshold. Uncategorized
+// products (no category) never form a batch — they fall through to the
+// single-product path. Ties are broken alphabetically by category name so
+// the choice is deterministic across runs.
+func findLargestEligibleBucket(products []product, threshold int) *Bucket {
+	if threshold < 1 {
+		threshold = 1
+	}
+	byCat := map[string][]product{}
+	for _, p := range products {
+		cat := categoryOf(p)
+		if cat == "" {
+			continue
+		}
+		byCat[cat] = append(byCat[cat], p)
+	}
+	cats := make([]string, 0, len(byCat))
+	for c := range byCat {
+		cats = append(cats, c)
+	}
+	sort.Strings(cats)
+	var best *Bucket
+	for _, c := range cats {
+		b := byCat[c]
+		if len(b) < threshold {
+			continue
+		}
+		if best == nil || len(b) > len(best.Products) {
+			best = &Bucket{Category: c, Products: b}
+		}
+	}
+	return best
 }
 
 // ---------------------------------------------------------------- Anthropic

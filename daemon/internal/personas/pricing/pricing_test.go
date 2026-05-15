@@ -157,3 +157,89 @@ func TestExtractJSONObject_PrefixSuffixTolerated(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------- bucketing
+
+// bucketTestProduct is a lightweight fixture row for findLargestEligibleBucket
+// tests. The adapter below converts it into the real `product` struct,
+// matching whatever category shape the helper consumes.
+type bucketTestProduct struct {
+	id       int
+	sku      string
+	category string
+}
+
+func makeBucketProducts(in []bucketTestProduct) []product {
+	out := make([]product, len(in))
+	for i, p := range in {
+		out[i] = product{ID: p.id, SKU: p.sku}
+		if p.category != "" {
+			out[i].Categories = []struct {
+				Name string `json:"name"`
+			}{{Name: p.category}}
+		}
+	}
+	return out
+}
+
+func TestFindLargestEligibleBucket_ReturnsBucketWhenAtOrAboveThreshold(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{3, "SKU-003", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+		{101, "SKU-101", "Apparel"},
+	})
+	got := findLargestEligibleBucket(products, 3)
+	if got == nil {
+		t.Fatalf("expected bucket; got nil")
+	}
+	if got.Category != "Home & Textiles" {
+		t.Errorf("Category=%q, want Home & Textiles", got.Category)
+	}
+	if len(got.Products) != 3 {
+		t.Errorf("len(Products)=%d, want 3", len(got.Products))
+	}
+}
+
+func TestFindLargestEligibleBucket_NilWhenNoneAtThreshold(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+	})
+	if got := findLargestEligibleBucket(products, 3); got != nil {
+		t.Errorf("expected nil (no bucket >= 3); got Category=%q size=%d", got.Category, len(got.Products))
+	}
+}
+
+func TestFindLargestEligibleBucket_PicksLargestOnTie_AlphabeticalBreak(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{3, "SKU-003", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+		{101, "SKU-101", "Apparel"},
+		{102, "SKU-102", "Apparel"},
+	})
+	got := findLargestEligibleBucket(products, 3)
+	if got == nil {
+		t.Fatalf("expected bucket; got nil")
+	}
+	// Both buckets have 3; deterministic tie-break = alphabetical.
+	if got.Category != "Apparel" {
+		t.Errorf("Category=%q, want Apparel (alphabetical first)", got.Category)
+	}
+}
+
+func TestFindLargestEligibleBucket_IgnoresEmptyCategory(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", ""},
+		{2, "SKU-002", ""},
+		{3, "SKU-003", ""},
+		{100, "SKU-100", "Apparel"},
+	})
+	if got := findLargestEligibleBucket(products, 3); got != nil {
+		t.Errorf("uncategorized products should never form a batch; got bucket=%q", got.Category)
+	}
+}
