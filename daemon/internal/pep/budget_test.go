@@ -1,10 +1,15 @@
 package pep
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	_ "modernc.org/sqlite"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 )
@@ -80,5 +85,168 @@ func TestLoadBudgetOverlay_MalformedJSONReturnsError(t *testing.T) {
 	_, err := LoadBudgetOverlay(path, base, nullLogger)
 	if err == nil {
 		t.Fatal("expected parse error for malformed JSON")
+	}
+}
+
+// budgetUsageDDL is the inlined DDL for the persona_budget_usage table —
+// mirrors migration 012 so the budget tests don't depend on the full
+// migration runner.
+const budgetUsageDDL = `
+CREATE TABLE persona_budget_usage (
+    persona     TEXT NOT NULL,
+    usage_date  TEXT NOT NULL,
+    cost_usd    REAL NOT NULL DEFAULT 0,
+    call_count  INTEGER NOT NULL DEFAULT 0,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (persona, usage_date)
+);`
+
+func newBudgetDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(budgetUsageDDL); err != nil {
+		t.Fatalf("apply budget ddl: %v", err)
+	}
+	return db
+}
+
+// pinnedClock returns a clock fixed at a specific local time. The TZ comes
+// from time.Local at call time, matching production behavior.
+func pinnedClock(year int, month time.Month, day, hour, minute int) func() time.Time {
+	return func() time.Time {
+		return time.Date(year, month, day, hour, minute, 0, 0, time.Local)
+	}
+}
+
+func insertUsage(t *testing.T, db *sql.DB, persona, date string, cost float64, calls int) {
+	t.Helper()
+	_, err := db.Exec(
+		`INSERT INTO persona_budget_usage(persona, usage_date, cost_usd, call_count, updated_at) VALUES(?, ?, ?, ?, ?)`,
+		persona, date, cost, calls, time.Now().UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		t.Fatalf("seed usage row: %v", err)
+	}
+}
+
+func newGateWithThresholds(t *testing.T, db *sql.DB, costCap float64, callCap int, clock func() time.Time) *BudgetGate {
+	t.Helper()
+	g := NewBudgetGate(db, Thresholds{
+		manifest.PersonaMarketing: {DailyCostUSD: costCap, DailyCalls: callCap},
+	})
+	if clock != nil {
+		g.clock = clock
+	}
+	g.logger = nullLogger
+	return g
+}
+
+func TestBudgetGate_CheckNoRowAllows(t *testing.T) {
+	db := newBudgetDB(t)
+	g := newGateWithThresholds(t, db, 5.0, 100, nil)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if reason != "" {
+		t.Errorf("expected allowed, got reason %q", reason)
+	}
+}
+
+func TestBudgetGate_CheckUnderCostAllows(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	insertUsage(t, db, "marketing", today, 1.00, 10)
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil || reason != "" {
+		t.Errorf("under budget: got reason=%q err=%v", reason, err)
+	}
+}
+
+func TestBudgetGate_CheckAtCostThresholdDenies(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	insertUsage(t, db, "marketing", today, 5.00, 10)
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if reason != ReasonBudgetExceeded {
+		t.Errorf("at threshold: got reason %q want %q", reason, ReasonBudgetExceeded)
+	}
+}
+
+func TestBudgetGate_CheckAtCallThresholdDenies(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	insertUsage(t, db, "marketing", today, 1.00, 100)
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if reason != ReasonBudgetExceeded {
+		t.Errorf("at call threshold: got reason %q want %q", reason, ReasonBudgetExceeded)
+	}
+}
+
+func TestBudgetGate_CheckYesterdayDoesntBleed(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	yesterday := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local).Format("2006-01-02")
+	insertUsage(t, db, "marketing", yesterday, 100.00, 1000)
+	g := newGateWithThresholds(t, db, 5.0, 100, clock)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil || reason != "" {
+		t.Errorf("yesterday should not affect today: got reason=%q err=%v", reason, err)
+	}
+}
+
+func TestBudgetGate_CheckUnknownPersonaPassesThrough(t *testing.T) {
+	db := newBudgetDB(t)
+	g := newGateWithThresholds(t, db, 5.0, 100, nil)
+	reason, err := g.Check(context.Background(), manifest.Persona("ghost"))
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	if reason != "" {
+		t.Errorf("unknown persona should pass through, got reason %q", reason)
+	}
+}
+
+func TestBudgetGate_CheckDBErrorReturnsConservativeDeny(t *testing.T) {
+	db := newBudgetDB(t)
+	g := newGateWithThresholds(t, db, 5.0, 100, nil)
+	_ = db.Close()
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err == nil {
+		t.Fatal("expected db error")
+	}
+	if reason != ReasonBudgetExceeded {
+		t.Errorf("conservative deny: got reason %q want %q", reason, ReasonBudgetExceeded)
+	}
+}
+
+func TestBudgetGate_CheckRespectsLocalTZ(t *testing.T) {
+	db := newBudgetDB(t)
+	insertUsage(t, db, "marketing", "2026-05-15", 5.00, 0)
+	g := newGateWithThresholds(t, db, 5.0, 100, pinnedClock(2026, 5, 15, 23, 30))
+	reason, _ := g.Check(context.Background(), manifest.PersonaMarketing)
+	if reason != ReasonBudgetExceeded {
+		t.Errorf("at 23:30 same day: got reason %q want %q", reason, ReasonBudgetExceeded)
+	}
+	g2 := newGateWithThresholds(t, db, 5.0, 100, pinnedClock(2026, 5, 16, 0, 30))
+	reason2, _ := g2.Check(context.Background(), manifest.PersonaMarketing)
+	if reason2 != "" {
+		t.Errorf("at 00:30 next day: got reason %q want allowed", reason2)
 	}
 }
