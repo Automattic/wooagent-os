@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,11 +38,48 @@ import (
 
 // Persona is what a child package implements. Slug must match the value in
 // the agents table (and in manifest.PersonaXxx). DisplayName is operator-
-// readable. Draft does the actual work.
+// readable. Draft does the actual work. Cooldown reports the persona's
+// dedup policy so the picker can avoid re-proposing on a recently-touched
+// target (a product, an order, etc.).
+//
+// When adding a new persona (Inventory, Accounting, Reporting, Chief of
+// Staff, …), apply BOTH established patterns:
+//
+//   1. Implement Cooldown() with the right TargetKey + per-risk durations.
+//      Customer-facing targets (orders, messages) → longer windows; pure
+//      back-of-house copy/price tweaks → shorter windows. Call
+//      RecentlyTouchedTargets at the top of Draft and pass the set into
+//      the picker.
+//
+//   2. Run an in-Draft loop up to maxDraftAttempts (=3, defined per
+//      package). If the LLM returns no_proposal / empty draft for the
+//      first pick, add that target to a RUN-LOCAL skip set and try the
+//      next eligible one. Without this, an undraftable target (e.g. a
+//      product the web_search can't find comparables for) blocks the
+//      persona indefinitely — the failed target never enters the
+//      persistent cooldown because no issue was ever inserted.
+//
+// See marketing.go / pricing.go / sales-support.go for canonical examples.
 type Persona interface {
 	Slug() string
 	DisplayName() string
+	Cooldown() CooldownPolicy
 	Draft(ctx context.Context, deps Deps) (Drafted, error)
+}
+
+// CooldownPolicy is the per-persona dedup config consumed by
+// RecentlyTouchedTargets. TargetKey is the JSON key inside proposal_target
+// whose integer value identifies the thing the persona just proposed on —
+// "product_id" for product-centric personas (Marketing, Pricing), or
+// "order_id" for order-centric ones (Sales Support). Approved is how long
+// to suppress that target after an approve (status='done'); Dismissed is
+// how long after a dismiss (status='dismissed'). Different personas can
+// pick different windows: Sales Support's customer-facing messages carry
+// more risk than a product description rewrite, so we cool down longer.
+type CooldownPolicy struct {
+	TargetKey string
+	Approved  time.Duration
+	Dismissed time.Duration
 }
 
 // Deps is everything a persona is allowed to reach for. Adding new fields
@@ -176,60 +214,63 @@ func HasOpenWork(ctx context.Context, st *store.Store, slug string) (bool, error
 	return n > 0, nil
 }
 
-// Cooldown windows applied by RecentlyTouchedProductIDs. Approved (done)
-// proposals keep the product off the menu for a week; dismissed proposals
-// stay off for a month so the operator's "no" is respected before the
-// agent re-offers. Open issues are also included so a Draft running mid-
-// flight doesn't race the operator into a duplicate proposal.
-const (
-	approvedCooldown  = 7 * 24 * time.Hour
-	dismissedCooldown = 30 * 24 * time.Hour
-)
-
-// RecentlyTouchedProductIDs returns the set of product_ids that personas
-// should skip when picking the next product to propose on. A product is in
-// the set if persona has any:
+// RecentlyTouchedTargets returns the set of integer target ids the
+// persona should skip when picking the next thing to propose on, per the
+// provided CooldownPolicy. A target is in the set if persona has any:
 //   - open issue on it (todo / in_progress / in_review), or
-//   - approved-within-approvedCooldown issue on it (status='done'), or
-//   - dismissed-within-dismissedCooldown issue on it (status='dismissed').
+//   - approved issue on it (status='done')      within policy.Approved, or
+//   - dismissed issue on it (status='dismissed') within policy.Dismissed.
 //
-// product_id is read from the proposal_target JSON via json_extract; rows
-// without a numeric product_id are ignored. Returns an empty (non-nil)
-// map when nothing is in cooldown.
-func RecentlyTouchedProductIDs(ctx context.Context, st *store.Store, slug string) (map[int]struct{}, error) {
+// The target id is read from proposal_target JSON via json_extract on
+// policy.TargetKey (e.g. "product_id" or "order_id"); rows without a
+// numeric value for that key are ignored. Returns an empty (non-nil) map
+// when nothing is in cooldown. Returns an error if policy.TargetKey is
+// empty — a typo there would silently match every row.
+func RecentlyTouchedTargets(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) (map[int]struct{}, error) {
+	if policy.TargetKey == "" {
+		return nil, fmt.Errorf("RecentlyTouchedTargets: policy.TargetKey is empty")
+	}
 	now := time.Now().UTC()
-	approvedCutoff := now.Add(-approvedCooldown).Format(time.RFC3339)
-	dismissedCutoff := now.Add(-dismissedCooldown).Format(time.RFC3339)
+	approvedCutoff := now.Add(-policy.Approved).Format(time.RFC3339)
+	dismissedCutoff := now.Add(-policy.Dismissed).Format(time.RFC3339)
+	// json_extract path is built from the trusted persona-declared key, not
+	// from any operator/network input — concatenation here is safe.
+	jsonPath := "$." + policy.TargetKey
 
 	rows, err := st.DB.QueryContext(ctx, `
-		SELECT DISTINCT CAST(json_extract(proposal_target, '$.product_id') AS INTEGER) AS pid
+		SELECT DISTINCT CAST(json_extract(proposal_target, ?) AS INTEGER) AS tid
 		FROM issues
 		WHERE persona = ?
-		  AND json_extract(proposal_target, '$.product_id') IS NOT NULL
+		  AND json_extract(proposal_target, ?) IS NOT NULL
 		  AND (
 		        status IN ('todo','in_progress','in_review')
 		     OR (status = 'done'      AND updated_at   > ?)
 		     OR (status = 'dismissed' AND dismissed_at > ?)
 		  )`,
-		slug, approvedCutoff, dismissedCutoff,
+		jsonPath, slug, jsonPath, approvedCutoff, dismissedCutoff,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("query recently-touched products: %w", err)
+		return nil, fmt.Errorf("query recently-touched targets: %w", err)
 	}
 	defer rows.Close()
 
 	out := make(map[int]struct{})
 	for rows.Next() {
-		var pid sql.NullInt64
-		if err := rows.Scan(&pid); err != nil {
-			return nil, fmt.Errorf("scan product_id: %w", err)
+		var tid sql.NullInt64
+		if err := rows.Scan(&tid); err != nil {
+			return nil, fmt.Errorf("scan target id: %w", err)
 		}
-		if pid.Valid && pid.Int64 > 0 {
-			out[int(pid.Int64)] = struct{}{}
+		if tid.Valid && tid.Int64 > 0 {
+			out[int(tid.Int64)] = struct{}{}
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate product_ids: %w", err)
+		return nil, fmt.Errorf("iterate target ids: %w", err)
 	}
 	return out, nil
 }
@@ -341,4 +382,64 @@ func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted
 		return "", err
 	}
 	return id, nil
+}
+
+// ---- Within-run iteration ----
+
+// PickerFunc returns the next target id to try, or an error if no
+// eligible target remains. Implementations should consult the provided
+// skip set so a target marked off in a previous iteration is not
+// re-picked. The skip set is owned by IterateDraft — implementations
+// must not retain references to it across calls.
+type PickerFunc func(skip map[int]struct{}) (targetID int, err error)
+
+// DrafterFunc performs the per-target work (MCP fetch, LLM call,
+// validation). Returning Drafted{Skipped: true} signals an LLM-level
+// skip that should advance the iterator to the next target. Returning a
+// non-nil error signals a hard failure that should fail the run
+// immediately.
+type DrafterFunc func(targetID int) (Drafted, error)
+
+// IterateDraft runs the pick/draft loop until a target yields a non-
+// skipped Drafted or maxAttempts is exhausted. The skip map is mutated
+// in place: any target that returns Drafted{Skipped: true} is added so
+// the next pickFn call will avoid it. Callers typically seed skip with
+// the persistent cooldown set from RecentlyTouchedTargets before calling.
+//
+// targetName ("product", "order", …) shows up in the cumulative
+// SkipReason when every attempt skips, so the operator can read what was
+// tried. See marketing.go / pricing.go / sales-support.go for usage.
+func IterateDraft(
+	maxAttempts int,
+	targetName string,
+	skip map[int]struct{},
+	pickFn PickerFunc,
+	draftFn DrafterFunc,
+) (Drafted, error) {
+	var attempts []string
+	for i := 0; i < maxAttempts; i++ {
+		id, pickErr := pickFn(skip)
+		if pickErr != nil {
+			if len(attempts) > 0 {
+				return Drafted{
+					Skipped:    true,
+					SkipReason: fmt.Sprintf("tried %d %ss, none drafted: %s; then: %v", len(attempts), targetName, strings.Join(attempts, "; "), pickErr),
+				}, nil
+			}
+			return Drafted{Skipped: true, SkipReason: pickErr.Error()}, nil
+		}
+		drafted, draftErr := draftFn(id)
+		if draftErr != nil {
+			return Drafted{}, draftErr
+		}
+		if !drafted.Skipped {
+			return drafted, nil
+		}
+		attempts = append(attempts, fmt.Sprintf("%s %d: %s", targetName, id, drafted.SkipReason))
+		skip[id] = struct{}{}
+	}
+	return Drafted{
+		Skipped:    true,
+		SkipReason: fmt.Sprintf("tried %d %ss, none drafted: %s", maxAttempts, targetName, strings.Join(attempts, "; ")),
+	}, nil
 }

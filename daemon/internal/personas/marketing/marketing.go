@@ -120,6 +120,17 @@ type Marketing struct{}
 func (Marketing) Slug() string        { return "marketing" }
 func (Marketing) DisplayName() string { return "Marketing agent" }
 
+// Cooldown: product-centric (proposal_target.product_id). 7d after an
+// approve so we don't rewrite the same description we just wrote; 30d
+// after a dismiss so the operator's "no" sticks.
+func (Marketing) Cooldown() personas.CooldownPolicy {
+	return personas.CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+	}
+}
+
 const systemPrompt = `You are a copywriter for a small-batch home-goods store.
 Voice: warm, sincere, concrete. Avoid the words "luxe", "premium", "elevate",
 "curated". Prefer "small-batch", "handcrafted", "made to last". Lead with the
@@ -136,6 +147,14 @@ Constraints:
 - Distinct bodies (don't paraphrase the same sentence three times).
 - Each body 140-220 characters of plain prose, no markdown, no labels in the body.`
 
+// maxDraftAttempts caps how many products a single Draft run will try
+// before giving up. Each attempt costs one LLM call (~5-15s). 3 is a
+// pragmatic balance: most catalogs have only a few "undraftable" products
+// at any given time, and bounding latency keeps a run from hogging the
+// worker. The cooldown set is appended to in-memory after each LLM
+// no_proposal so the loop doesn't re-pick the same product.
+const maxDraftAttempts = 3
+
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
 		return personas.Drafted{
@@ -148,29 +167,41 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		return personas.Drafted{}, fmt.Errorf("mcp initialize: %w", err)
 	}
 
-	productID := deps.Env.ProductIDOverride
-	if productID == 0 {
-		// Skip products that already have an open issue, an approved
-		// proposal within the last 7d, or a dismissed proposal within
-		// the last 30d for this persona. Keeps the agent from re-
-		// proposing on the same product after every approve/dismiss and
-		// spreads coverage across the catalog.
-		skip, err := personas.RecentlyTouchedProductIDs(ctx, deps.Store, (Marketing{}).Slug())
-		if err != nil {
-			return personas.Drafted{
-				Skipped:    true,
-				SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
-			}, nil
-		}
-		first, err := pickFirstPublished(ctx, deps.MCP, skip)
-		if err != nil {
-			return personas.Drafted{
-				Skipped:    true,
-				SkipReason: err.Error(),
-			}, nil
-		}
-		productID = first
+	// Debug override: always draft on the operator-supplied product,
+	// bypassing both cooldown and the within-run loop.
+	if deps.Env.ProductIDOverride != 0 {
+		return draftForProduct(ctx, deps, deps.Env.ProductIDOverride)
 	}
+
+	// Skip products that already have an open issue, an approved
+	// proposal within the last 7d, or a dismissed proposal within the
+	// last 30d for this persona (see Marketing.Cooldown).
+	m := Marketing{}
+	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, m.Slug(), m.Cooldown())
+	if err != nil {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
+		}, nil
+	}
+
+	// Within-run iteration: if the LLM can't draft for a product (returns
+	// no_proposal / empty rewrite), add it to the run-local skip set and
+	// try the next eligible product. Up to maxDraftAttempts.
+	return personas.IterateDraft(
+		maxDraftAttempts,
+		"product",
+		skip,
+		func(s map[int]struct{}) (int, error) { return pickFirstPublished(ctx, deps.MCP, s) },
+		func(id int) (personas.Drafted, error) { return draftForProduct(ctx, deps, id) },
+	)
+}
+
+// draftForProduct does the per-product work: fetch via MCP, call the
+// LLM, parse variants, assemble Drafted. Returns Drafted{Skipped:true}
+// when the LLM yields no_proposal or an empty rewrite — the outer Draft
+// loop treats that as "try the next product" rather than ending the run.
+func draftForProduct(ctx context.Context, deps personas.Deps, productID int) (personas.Drafted, error) {
 	p, err := getProduct(ctx, deps.MCP, productID)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)

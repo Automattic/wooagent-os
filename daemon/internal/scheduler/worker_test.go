@@ -20,6 +20,11 @@ type stubPersona struct {
 
 func (p *stubPersona) Slug() string        { return p.slug }
 func (p *stubPersona) DisplayName() string { return p.slug }
+func (p *stubPersona) Cooldown() personas.CooldownPolicy {
+	// Scheduler tests don't exercise the picker dedup path; return a
+	// minimal non-zero policy to satisfy the interface.
+	return personas.CooldownPolicy{TargetKey: "product_id"}
+}
 func (p *stubPersona) Draft(ctx context.Context, _ personas.Deps) (personas.Drafted, error) {
 	return personas.Drafted{}, errors.New("stub Draft should not be called; worker uses Runner")
 }

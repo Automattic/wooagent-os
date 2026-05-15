@@ -2,7 +2,10 @@ package personas
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +25,12 @@ type fakePersona struct {
 
 func (f fakePersona) Slug() string                                  { return f.slug }
 func (f fakePersona) DisplayName() string                           { return "fake " + f.slug }
+func (f fakePersona) Cooldown() CooldownPolicy {
+	// fakePersona's Draft doesn't pick a target, so the policy is unused
+	// by the registry/lifecycle tests. Return a non-zero policy so any
+	// future caller that does consult it isn't surprised by zero values.
+	return CooldownPolicy{TargetKey: "product_id", Approved: 7 * 24 * time.Hour, Dismissed: 30 * 24 * time.Hour}
+}
 func (f fakePersona) Draft(_ context.Context, _ Deps) (Drafted, error) { return f.drafted, f.err }
 
 func newStore(t *testing.T) *store.Store {
@@ -152,19 +161,21 @@ func TestRunAndPersist_DuplicateGuard(t *testing.T) {
 
 // seedIssue inserts a fixture row directly so the test controls the
 // status, dismissed_at, updated_at, and proposal_target shape — bypassing
-// RunAndPersist's auto-set values. productID == 0 means "omit product_id
-// from proposal_target"; dismissedAt == "" means leave NULL.
+// RunAndPersist's auto-set values. targetID == 0 means "omit the key from
+// proposal_target"; dismissedAt == "" means leave NULL. targetKey is the
+// JSON key under which targetID lands (e.g. "product_id" or "order_id").
 func seedIssue(
 	t *testing.T,
 	st *store.Store,
 	persona, status string,
-	productID int,
+	targetKey string,
+	targetID int,
 	updatedAt, dismissedAt string,
 ) {
 	t.Helper()
 	var target string
-	if productID > 0 {
-		target = `{"product_id":` + strconv.Itoa(productID) + `}`
+	if targetID > 0 && targetKey != "" {
+		target = `{"` + targetKey + `":` + strconv.Itoa(targetID) + `}`
 	}
 	var targetArg any
 	if target != "" {
@@ -180,7 +191,7 @@ func seedIssue(
 	}
 }
 
-func TestRecentlyTouchedProductIDs(t *testing.T) {
+func TestRecentlyTouchedTargets_ProductCentric(t *testing.T) {
 	st := newStore(t)
 	ctx := context.Background()
 	// issues.persona has a FK to agents.persona, so seed both personas
@@ -191,23 +202,29 @@ func TestRecentlyTouchedProductIDs(t *testing.T) {
 	rfc := func(d time.Duration) string {
 		return now.Add(-d).Format(time.RFC3339)
 	}
+	policy := CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+	}
 
 	// Fixtures for persona "marketer" — should be returned:
-	seedIssue(t, st, "marketer", "in_review", 11, rfc(2*time.Hour), "")     // open
-	seedIssue(t, st, "marketer", "in_progress", 12, rfc(2*time.Hour), "")   // open
-	seedIssue(t, st, "marketer", "done", 13, rfc(6*24*time.Hour), "")       // approved 6d ago — under 7d
-	seedIssue(t, st, "marketer", "dismissed", 14, rfc(29*24*time.Hour), rfc(29*24*time.Hour)) // dismissed 29d ago — under 30d
+	seedIssue(t, st, "marketer", "in_review", "product_id", 11, rfc(2*time.Hour), "")     // open
+	seedIssue(t, st, "marketer", "in_progress", "product_id", 12, rfc(2*time.Hour), "")   // open
+	seedIssue(t, st, "marketer", "done", "product_id", 13, rfc(6*24*time.Hour), "")       // approved 6d ago — under 7d
+	seedIssue(t, st, "marketer", "dismissed", "product_id", 14, rfc(29*24*time.Hour), rfc(29*24*time.Hour)) // dismissed 29d ago — under 30d
 
 	// Fixtures for persona "marketer" — should NOT be returned:
-	seedIssue(t, st, "marketer", "done", 21, rfc(8*24*time.Hour), "")        // approved 8d ago — over 7d cooldown
-	seedIssue(t, st, "marketer", "dismissed", 22, rfc(31*24*time.Hour), rfc(31*24*time.Hour)) // dismissed 31d ago — over 30d cooldown
-	seedIssue(t, st, "marketer", "rejected", 23, rfc(1*time.Hour), "")       // rejected is not in scope
-	seedIssue(t, st, "marketer", "in_review", 0, rfc(1*time.Hour), "")       // no product_id in target
-	seedIssue(t, st, "pricer", "in_review", 99, rfc(1*time.Hour), "")        // different persona
+	seedIssue(t, st, "marketer", "done", "product_id", 21, rfc(8*24*time.Hour), "")                          // approved 8d ago — over 7d cooldown
+	seedIssue(t, st, "marketer", "dismissed", "product_id", 22, rfc(31*24*time.Hour), rfc(31*24*time.Hour))  // dismissed 31d ago — over 30d cooldown
+	seedIssue(t, st, "marketer", "rejected", "product_id", 23, rfc(1*time.Hour), "")                          // rejected is not in scope
+	seedIssue(t, st, "marketer", "in_review", "product_id", 0, rfc(1*time.Hour), "")                         // no product_id in target
+	seedIssue(t, st, "marketer", "in_review", "order_id", 77, rfc(1*time.Hour), "")                          // target under a different key — ignored
+	seedIssue(t, st, "pricer", "in_review", "product_id", 99, rfc(1*time.Hour), "")                          // different persona
 
-	got, err := RecentlyTouchedProductIDs(ctx, st, "marketer")
+	got, err := RecentlyTouchedTargets(ctx, st, "marketer", policy)
 	if err != nil {
-		t.Fatalf("RecentlyTouchedProductIDs: %v", err)
+		t.Fatalf("RecentlyTouchedTargets: %v", err)
 	}
 
 	want := map[int]struct{}{11: {}, 12: {}, 13: {}, 14: {}}
@@ -226,12 +243,239 @@ func TestRecentlyTouchedProductIDs(t *testing.T) {
 	}
 
 	// Empty result when persona has no issues at all.
-	empty, err := RecentlyTouchedProductIDs(ctx, st, "ghost")
+	empty, err := RecentlyTouchedTargets(ctx, st, "ghost", policy)
 	if err != nil {
 		t.Fatalf("ghost lookup: %v", err)
 	}
 	if len(empty) != 0 {
 		t.Errorf("expected empty set for persona with no issues, got %v", empty)
+	}
+}
+
+// Sales-support-style policy: order_id key, longer windows (30d/90d).
+// Verifies (a) different target keys are honored, (b) different cooldown
+// windows are honored, and (c) cross-key contamination doesn't happen.
+func TestRecentlyTouchedTargets_OrderCentricStricterWindows(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "ss", 1)
+	now := time.Now().UTC()
+	rfc := func(d time.Duration) string {
+		return now.Add(-d).Format(time.RFC3339)
+	}
+	policy := CooldownPolicy{
+		TargetKey: "order_id",
+		Approved:  30 * 24 * time.Hour,
+		Dismissed: 90 * 24 * time.Hour,
+	}
+
+	// Should be returned:
+	seedIssue(t, st, "ss", "in_review", "order_id", 100, rfc(1*time.Hour), "")                            // open
+	seedIssue(t, st, "ss", "done", "order_id", 101, rfc(29*24*time.Hour), "")                              // approved 29d ago — under 30d
+	seedIssue(t, st, "ss", "dismissed", "order_id", 102, rfc(89*24*time.Hour), rfc(89*24*time.Hour))       // dismissed 89d ago — under 90d
+
+	// Should NOT be returned:
+	seedIssue(t, st, "ss", "done", "order_id", 201, rfc(31*24*time.Hour), "")                              // approved 31d ago — over 30d
+	seedIssue(t, st, "ss", "dismissed", "order_id", 202, rfc(91*24*time.Hour), rfc(91*24*time.Hour))       // dismissed 91d ago — over 90d
+	seedIssue(t, st, "ss", "in_review", "product_id", 203, rfc(1*time.Hour), "")                           // wrong key (would match if SQL ignored TargetKey)
+
+	got, err := RecentlyTouchedTargets(ctx, st, "ss", policy)
+	if err != nil {
+		t.Fatalf("RecentlyTouchedTargets: %v", err)
+	}
+
+	want := map[int]struct{}{100: {}, 101: {}, 102: {}}
+	if len(got) != len(want) {
+		t.Errorf("got %d ids, want %d; got=%v want=%v", len(got), len(want), got, want)
+	}
+	for id := range want {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected order_id %d in cooldown set, missing", id)
+		}
+	}
+	for id := range got {
+		if _, ok := want[id]; !ok {
+			t.Errorf("unexpected order_id %d in cooldown set (cross-key contamination?)", id)
+		}
+	}
+}
+
+func TestRecentlyTouchedTargets_EmptyTargetKeyErrors(t *testing.T) {
+	st := newStore(t)
+	_, err := RecentlyTouchedTargets(context.Background(), st, "ghost", CooldownPolicy{})
+	if err == nil {
+		t.Fatal("expected error for empty TargetKey, got nil")
+	}
+}
+
+// ---- IterateDraft ----
+
+// pickFromSequence returns a PickerFunc that yields ids from `seq` in
+// order, skipping any id already present in the skip map (mirrors the
+// real picker's "first eligible" semantics). When the sequence is
+// exhausted, it returns the supplied exhaustErr.
+func pickFromSequence(seq []int, exhaustErr error) PickerFunc {
+	return func(skip map[int]struct{}) (int, error) {
+		for _, id := range seq {
+			if _, blocked := skip[id]; !blocked {
+				return id, nil
+			}
+		}
+		return 0, exhaustErr
+	}
+}
+
+func TestIterateDraft_SuccessFirstAttempt(t *testing.T) {
+	skip := map[int]struct{}{}
+	draftCalls := 0
+	drafted, err := IterateDraft(
+		3, "product", skip,
+		pickFromSequence([]int{42, 43, 44}, errors.New("exhausted")),
+		func(id int) (Drafted, error) {
+			draftCalls++
+			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if drafted.Skipped {
+		t.Errorf("expected non-skipped drafted, got Skipped with reason=%q", drafted.SkipReason)
+	}
+	if drafted.Title != "ok 42" {
+		t.Errorf("expected first id used, got Title=%q", drafted.Title)
+	}
+	if draftCalls != 1 {
+		t.Errorf("expected exactly 1 draft attempt, got %d", draftCalls)
+	}
+	if len(skip) != 0 {
+		t.Errorf("expected skip set untouched on first-attempt success, got %v", skip)
+	}
+}
+
+func TestIterateDraft_SkipThenSucceed(t *testing.T) {
+	skip := map[int]struct{}{}
+	draftCalls := 0
+	drafted, err := IterateDraft(
+		3, "product", skip,
+		pickFromSequence([]int{42, 43, 44}, errors.New("exhausted")),
+		func(id int) (Drafted, error) {
+			draftCalls++
+			// First two return skipped, third succeeds.
+			if id == 42 || id == 43 {
+				return Drafted{Skipped: true, SkipReason: fmt.Sprintf("no_proposal for %d", id)}, nil
+			}
+			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if drafted.Skipped {
+		t.Errorf("expected non-skipped drafted after iteration, got skipped reason=%q", drafted.SkipReason)
+	}
+	if drafted.Title != "ok 44" {
+		t.Errorf("expected id 44 used (after skipping 42, 43), got Title=%q", drafted.Title)
+	}
+	if draftCalls != 3 {
+		t.Errorf("expected 3 draft attempts, got %d", draftCalls)
+	}
+	if _, ok := skip[42]; !ok {
+		t.Errorf("expected id 42 added to skip after its skip, got %v", skip)
+	}
+	if _, ok := skip[43]; !ok {
+		t.Errorf("expected id 43 added to skip after its skip, got %v", skip)
+	}
+	if _, ok := skip[44]; ok {
+		t.Errorf("did not expect successful id 44 in skip set, got %v", skip)
+	}
+}
+
+func TestIterateDraft_AllAttemptsSkipped(t *testing.T) {
+	skip := map[int]struct{}{}
+	draftCalls := 0
+	drafted, err := IterateDraft(
+		3, "product", skip,
+		pickFromSequence([]int{1, 2, 3, 4, 5}, errors.New("exhausted")),
+		func(id int) (Drafted, error) {
+			draftCalls++
+			return Drafted{Skipped: true, SkipReason: fmt.Sprintf("no_proposal for %d", id)}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !drafted.Skipped {
+		t.Errorf("expected Skipped after exhausting maxAttempts, got non-skipped Title=%q", drafted.Title)
+	}
+	if draftCalls != 3 {
+		t.Errorf("expected exactly maxAttempts (3) draft calls, got %d", draftCalls)
+	}
+	// SkipReason should mention each tried id and the persona target name.
+	for _, want := range []string{"tried 3 products", "product 1", "product 2", "product 3", "no_proposal for 1"} {
+		if !strings.Contains(drafted.SkipReason, want) {
+			t.Errorf("SkipReason missing %q; got %q", want, drafted.SkipReason)
+		}
+	}
+}
+
+func TestIterateDraft_PickerExhaustsAfterSomeSkips(t *testing.T) {
+	// Only 2 ids available; both skip; third pick returns exhaustErr.
+	skip := map[int]struct{}{}
+	exhaustErr := errors.New("no more eligible products in window")
+	drafted, err := IterateDraft(
+		5, "product", skip,
+		pickFromSequence([]int{10, 20}, exhaustErr),
+		func(id int) (Drafted, error) {
+			return Drafted{Skipped: true, SkipReason: "no_proposal"}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !drafted.Skipped {
+		t.Errorf("expected Skipped, got non-skipped Title=%q", drafted.Title)
+	}
+	// Reason should report what was tried before the picker ran out.
+	for _, want := range []string{"tried 2 products", "no more eligible products"} {
+		if !strings.Contains(drafted.SkipReason, want) {
+			t.Errorf("SkipReason missing %q; got %q", want, drafted.SkipReason)
+		}
+	}
+}
+
+func TestIterateDraft_PickerEmptyOnFirstCall(t *testing.T) {
+	// Cooldown already excludes everything — picker errs immediately.
+	skip := map[int]struct{}{}
+	drafted, err := IterateDraft(
+		3, "product", skip,
+		pickFromSequence(nil, errors.New("every published product is in cooldown")),
+		func(id int) (Drafted, error) {
+			t.Fatalf("draftFn should not be called when picker errs on first attempt; got id=%d", id)
+			return Drafted{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !drafted.Skipped {
+		t.Errorf("expected Skipped on first-attempt picker error, got non-skipped")
+	}
+	if drafted.SkipReason != "every published product is in cooldown" {
+		t.Errorf("expected raw picker error as SkipReason, got %q", drafted.SkipReason)
+	}
+}
+
+func TestIterateDraft_HardErrorFromDraftFnPropagates(t *testing.T) {
+	skip := map[int]struct{}{}
+	hardErr := errors.New("mcp unreachable")
+	_, err := IterateDraft(
+		3, "product", skip,
+		pickFromSequence([]int{1}, errors.New("exhausted")),
+		func(id int) (Drafted, error) { return Drafted{}, hardErr },
+	)
+	if !errors.Is(err, hardErr) {
+		t.Errorf("expected hardErr propagated, got %v", err)
 	}
 }
 
