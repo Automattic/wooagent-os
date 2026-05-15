@@ -150,7 +150,19 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 
 	productID := deps.Env.ProductIDOverride
 	if productID == 0 {
-		first, err := pickFirstPublished(ctx, deps.MCP)
+		// Skip products that already have an open issue, an approved
+		// proposal within the last 7d, or a dismissed proposal within
+		// the last 30d for this persona. Keeps the agent from re-
+		// proposing on the same product after every approve/dismiss and
+		// spreads coverage across the catalog.
+		skip, err := personas.RecentlyTouchedProductIDs(ctx, deps.Store, (Marketing{}).Slug())
+		if err != nil {
+			return personas.Drafted{
+				Skipped:    true,
+				SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
+			}, nil
+		}
+		first, err := pickFirstPublished(ctx, deps.MCP, skip)
 		if err != nil {
 			return personas.Drafted{
 				Skipped:    true,
@@ -264,23 +276,41 @@ type productSummary struct {
 	Status string `json:"status"`
 }
 
-func pickFirstPublished(ctx context.Context, c *mcp.Client) (int, error) {
+// pickFirstPublished returns the first published product whose ID is not
+// in skip. Pulls a wider page (100) than the original 5 so a few products
+// in cooldown don't starve the picker. If every published product in the
+// fetched window is in skip, returns an explanatory error so the run
+// surfaces as Skipped rather than re-proposing on a cooldown product.
+func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
 	var listOut struct {
 		Products []productSummary `json:"products"`
 	}
 	if err := callAbility(ctx, c, "wooagent-products/list",
-		map[string]any{"per_page": 5}, &listOut); err != nil {
+		map[string]any{"per_page": 100}, &listOut); err != nil {
 		return 0, err
-	}
-	for _, p := range listOut.Products {
-		if p.Status == "publish" || p.Status == "" {
-			return p.ID, nil
-		}
 	}
 	if len(listOut.Products) == 0 {
 		return 0, fmt.Errorf("no products in store")
 	}
-	return listOut.Products[0].ID, nil
+	skipped := 0
+	for _, p := range listOut.Products {
+		if p.Status != "publish" && p.Status != "" {
+			continue
+		}
+		if _, inCooldown := skip[p.ID]; inCooldown {
+			skipped++
+			continue
+		}
+		return p.ID, nil
+	}
+	if skipped > 0 {
+		return 0, fmt.Errorf(
+			"every published product in the first %d is in cooldown (%d skipped); "+
+				"approved proposals cool down for 7d, dismissed for 30d",
+			len(listOut.Products), skipped,
+		)
+	}
+	return 0, fmt.Errorf("no published products in store")
 }
 
 type product struct {

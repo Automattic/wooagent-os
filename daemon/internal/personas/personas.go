@@ -176,6 +176,64 @@ func HasOpenWork(ctx context.Context, st *store.Store, slug string) (bool, error
 	return n > 0, nil
 }
 
+// Cooldown windows applied by RecentlyTouchedProductIDs. Approved (done)
+// proposals keep the product off the menu for a week; dismissed proposals
+// stay off for a month so the operator's "no" is respected before the
+// agent re-offers. Open issues are also included so a Draft running mid-
+// flight doesn't race the operator into a duplicate proposal.
+const (
+	approvedCooldown  = 7 * 24 * time.Hour
+	dismissedCooldown = 30 * 24 * time.Hour
+)
+
+// RecentlyTouchedProductIDs returns the set of product_ids that personas
+// should skip when picking the next product to propose on. A product is in
+// the set if persona has any:
+//   - open issue on it (todo / in_progress / in_review), or
+//   - approved-within-approvedCooldown issue on it (status='done'), or
+//   - dismissed-within-dismissedCooldown issue on it (status='dismissed').
+//
+// product_id is read from the proposal_target JSON via json_extract; rows
+// without a numeric product_id are ignored. Returns an empty (non-nil)
+// map when nothing is in cooldown.
+func RecentlyTouchedProductIDs(ctx context.Context, st *store.Store, slug string) (map[int]struct{}, error) {
+	now := time.Now().UTC()
+	approvedCutoff := now.Add(-approvedCooldown).Format(time.RFC3339)
+	dismissedCutoff := now.Add(-dismissedCooldown).Format(time.RFC3339)
+
+	rows, err := st.DB.QueryContext(ctx, `
+		SELECT DISTINCT CAST(json_extract(proposal_target, '$.product_id') AS INTEGER) AS pid
+		FROM issues
+		WHERE persona = ?
+		  AND json_extract(proposal_target, '$.product_id') IS NOT NULL
+		  AND (
+		        status IN ('todo','in_progress','in_review')
+		     OR (status = 'done'      AND updated_at   > ?)
+		     OR (status = 'dismissed' AND dismissed_at > ?)
+		  )`,
+		slug, approvedCutoff, dismissedCutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recently-touched products: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int]struct{})
+	for rows.Next() {
+		var pid sql.NullInt64
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("scan product_id: %w", err)
+		}
+		if pid.Valid && pid.Int64 > 0 {
+			out[int(pid.Int64)] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate product_ids: %w", err)
+	}
+	return out, nil
+}
+
 // RunAndPersist is the boot-time entry point. Checks agents.enabled,
 // guards against duplicate seeding, calls Draft, and inserts the issue.
 // All persistence happens here so child packages stay focused on the

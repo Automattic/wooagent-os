@@ -2,9 +2,11 @@ package personas
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
@@ -145,6 +147,91 @@ func TestRunAndPersist_DuplicateGuard(t *testing.T) {
 	}
 	if res2.IssueID == "" {
 		t.Errorf("expected new IssueID; got empty")
+	}
+}
+
+// seedIssue inserts a fixture row directly so the test controls the
+// status, dismissed_at, updated_at, and proposal_target shape — bypassing
+// RunAndPersist's auto-set values. productID == 0 means "omit product_id
+// from proposal_target"; dismissedAt == "" means leave NULL.
+func seedIssue(
+	t *testing.T,
+	st *store.Store,
+	persona, status string,
+	productID int,
+	updatedAt, dismissedAt string,
+) {
+	t.Helper()
+	var target string
+	if productID > 0 {
+		target = `{"product_id":` + strconv.Itoa(productID) + `}`
+	}
+	var targetArg any
+	if target != "" {
+		targetArg = target
+	}
+	_, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, dismissed_at)
+		 VALUES(?, 'fixture', '', ?, ?, 'medium', ?, ?, 'x', '', ?, NULLIF(?, ''))`,
+		uuid.NewString(), persona, status, updatedAt, updatedAt, targetArg, dismissedAt,
+	)
+	if err != nil {
+		t.Fatalf("seed issue: %v", err)
+	}
+}
+
+func TestRecentlyTouchedProductIDs(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	// issues.persona has a FK to agents.persona, so seed both personas
+	// referenced by the fixtures below.
+	seedAgent(t, st, "marketer", 1)
+	seedAgent(t, st, "pricer", 1)
+	now := time.Now().UTC()
+	rfc := func(d time.Duration) string {
+		return now.Add(-d).Format(time.RFC3339)
+	}
+
+	// Fixtures for persona "marketer" — should be returned:
+	seedIssue(t, st, "marketer", "in_review", 11, rfc(2*time.Hour), "")     // open
+	seedIssue(t, st, "marketer", "in_progress", 12, rfc(2*time.Hour), "")   // open
+	seedIssue(t, st, "marketer", "done", 13, rfc(6*24*time.Hour), "")       // approved 6d ago — under 7d
+	seedIssue(t, st, "marketer", "dismissed", 14, rfc(29*24*time.Hour), rfc(29*24*time.Hour)) // dismissed 29d ago — under 30d
+
+	// Fixtures for persona "marketer" — should NOT be returned:
+	seedIssue(t, st, "marketer", "done", 21, rfc(8*24*time.Hour), "")        // approved 8d ago — over 7d cooldown
+	seedIssue(t, st, "marketer", "dismissed", 22, rfc(31*24*time.Hour), rfc(31*24*time.Hour)) // dismissed 31d ago — over 30d cooldown
+	seedIssue(t, st, "marketer", "rejected", 23, rfc(1*time.Hour), "")       // rejected is not in scope
+	seedIssue(t, st, "marketer", "in_review", 0, rfc(1*time.Hour), "")       // no product_id in target
+	seedIssue(t, st, "pricer", "in_review", 99, rfc(1*time.Hour), "")        // different persona
+
+	got, err := RecentlyTouchedProductIDs(ctx, st, "marketer")
+	if err != nil {
+		t.Fatalf("RecentlyTouchedProductIDs: %v", err)
+	}
+
+	want := map[int]struct{}{11: {}, 12: {}, 13: {}, 14: {}}
+	if len(got) != len(want) {
+		t.Errorf("got %d ids, want %d; got=%v want=%v", len(got), len(want), got, want)
+	}
+	for id := range want {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected product_id %d in cooldown set, missing", id)
+		}
+	}
+	for id := range got {
+		if _, ok := want[id]; !ok {
+			t.Errorf("unexpected product_id %d in cooldown set", id)
+		}
+	}
+
+	// Empty result when persona has no issues at all.
+	empty, err := RecentlyTouchedProductIDs(ctx, st, "ghost")
+	if err != nil {
+		t.Fatalf("ghost lookup: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("expected empty set for persona with no issues, got %v", empty)
 	}
 }
 
