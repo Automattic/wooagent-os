@@ -31,6 +31,7 @@ import ActionBar from '../components/ActionBar';
 import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
+import SectionHeader from '../components/SectionHeader';
 
 interface Props {
   connection: Connection;
@@ -417,10 +418,10 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             {/* Current description */}
             <Card.Root>
               <Card.Header>
-                <Stack direction="row" justify="space-between" align="center">
-                  <Stack direction="row" gap="sm" align="center">
-                    <span className="wa-eyebrow">Current description</span>
-                    {productBound ? (
+                <SectionHeader
+                  eyebrow="Current description"
+                  badge={
+                    productBound ? (
                       <span
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
@@ -430,7 +431,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           color: 'var(--wpds-color-fg-content-success)',
                         }}
                       >
-                        Bound: {productSku}
+                        Bound{productSku ? ` · ${productSku}` : ''}
                       </span>
                     ) : (
                       <span
@@ -444,18 +445,19 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                       >
                         No product bound
                       </span>
-                    )}
-                  </Stack>
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                    }}
-                  >
-                    {previous ? `${previous.length} chars` : '0 chars · sample'}
-                  </span>
-                </Stack>
+                    )
+                  }
+                  meta={
+                    <span
+                      style={{
+                        fontSize: 'var(--wpds-typography-font-size-xs)',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      {previous ? `${previous.length} chars` : '0 chars · sample'}
+                    </span>
+                  }
+                />
               </Card.Header>
               <Card.Content>
                 <Text
@@ -474,26 +476,20 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             </Card.Root>
 
             {/* Proposed section */}
-            <Stack direction="row" justify="space-between" align="end">
-              <Stack direction="column" gap="xs">
-                <span className="wa-eyebrow">Proposed · pick one</span>
-                <Text variant="heading-md">
-                  {variants
-                    ? `${variants.length} variants · each with different emphasis`
-                    : proposal
-                      ? '1 variant · phase-1 single proposal'
-                      : 'No proposal attached yet'}
-                </Text>
-              </Stack>
-              <Button
-                __next40pxDefaultSize
-                variant="tertiary"
-                icon={rotateRight}
-                disabled
-              >
-                Regenerate
-              </Button>
-            </Stack>
+            <SectionHeader
+              title="Proposed · pick one"
+              action={
+                <Button
+                  __next40pxDefaultSize
+                  variant="tertiary"
+                  icon={rotateRight}
+                  disabled
+                >
+                  Regenerate
+                </Button>
+              }
+            />
+
 
             {!proposal ? (
               <Notice.Root intent="info">
