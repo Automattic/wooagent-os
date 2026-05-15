@@ -3,8 +3,11 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
 
@@ -24,6 +27,10 @@ type Worker struct {
 	Now         func() time.Time
 	Backoff     []time.Duration
 	MaxAttempts int // default 3 if zero
+	// Budget is the PEP budget gate. When non-nil, RunOnce checks the gate
+	// before dispatching a claimed run; over-budget runs are marked Skipped
+	// immediately without invoking the LLM.
+	Budget *pep.BudgetGate
 }
 
 // RunOnce claims the next due run and processes it. Returns ran=true when a
@@ -43,6 +50,28 @@ func (w *Worker) RunOnce(ctx context.Context) (ran bool, err error) {
 	if !ok {
 		_ = w.markPermanent(ctx, r, fmt.Sprintf("no implementation registered for persona %q", r.Persona))
 		return true, nil
+	}
+	// Pre-tick budget check. The PEP gate is the backstop; this stops the
+	// LLM from being called at all for an over-budget persona. Match the
+	// existing skip path in executeAndRecord — terminal status=Skipped,
+	// reason describes the budget block.
+	if w.Budget != nil {
+		reason, _ := w.Budget.Check(ctx, manifest.Persona(r.Persona))
+		if reason != "" {
+			slog.Info("scheduler skipped tick over budget",
+				"persona", r.Persona,
+				"reason", string(reason),
+			)
+			end := w.Now()
+			_ = w.Queue.MarkTerminal(ctx, MarkTerminalParams{
+				ID:          r.ID,
+				Status:      StatusSkipped,
+				CompletedAt: end,
+				LatencyMS:   0,
+				SkipReason:  "over daily budget — counters reset at local midnight",
+			})
+			return true, nil
+		}
 	}
 	return true, w.executeAndRecord(ctx, r, persona)
 }
