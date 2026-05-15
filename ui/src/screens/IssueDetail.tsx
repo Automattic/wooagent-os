@@ -29,6 +29,7 @@ import Kpi from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
 import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 interface Props {
   connection: Connection;
@@ -183,31 +184,41 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     }
   };
 
+  const idLabel = id ? id.slice(0, 8).toUpperCase() : 'Issue';
+
   if (error) {
     return (
       <Page
-        title="Issue review"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: idLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Notice.Root intent="error">
-          <Notice.Description>
-            Failed to load issue: {error} <Link to="/">Back to board</Link>
-          </Notice.Description>
-        </Notice.Root>
+        <div className="wa-subpage-content">
+          <Notice.Root intent="error">
+            <Notice.Description>
+              Failed to load issue: {error} <Link to="/">Back to board</Link>
+            </Notice.Description>
+          </Notice.Root>
+        </div>
       </Page>
     );
   }
   if (!data) {
     return (
       <Page
-        title="Issue review"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: idLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Loading issue…</Text>
-        </Stack>
+        <div className="wa-subpage-content">
+          <Stack direction="row" gap="sm" align="center">
+            <Spinner /> <Text variant="body-sm">Loading issue…</Text>
+          </Stack>
+        </div>
       </Page>
     );
   }
@@ -306,35 +317,25 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   return (
     <div className="wa-detail-shell">
       <Page
-        title="Issue review"
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: 'Board', to: '/' },
+              { label: issue.id.slice(0, 8).toUpperCase() },
+            ]}
+          />
+        }
+        badges={
+          <>
+            <StatusBadge status={issue.status} />
+            <KindBadge kind={kind} />
+          </>
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
         className="wa-detail-shell-page"
       >
-        {/* Breadcrumb */}
-        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
-          <Link
-            to="/"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-            }}
-          >
-            ← Board
-          </Link>
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-            }}
-          >
-            {issue.id.slice(0, 8).toUpperCase()}
-          </span>
-          <StatusBadge status={issue.status} />
-          <KindBadge kind={kind} />
-        </Stack>
-
+        <div className="wa-subpage-content">
         {/* Persona eyebrow */}
         <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
           <PersonaAvatar persona={personaKey} size="md" />
@@ -350,7 +351,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         {/* Title + subhead */}
         <Text
           variant="heading-2xl"
-          render={<h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
         >
           {issue.title}
         </Text>
@@ -669,6 +670,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             <IssueRuns connection={connection} issueId={issue.id} />
           </div>
         </div>
+        </div>
       </Page>
 
       {isDone ? (
@@ -762,40 +764,25 @@ function PriceIssueView(props: PriceViewProps) {
   return (
     <div className="wa-detail-shell">
       <Page
-        title="Issue review"
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: 'Board', to: '/' },
+              { label: issue.id.slice(0, 8).toUpperCase() },
+            ]}
+          />
+        }
+        badges={
+          <>
+            <StatusBadge status={issue.status} />
+            <KindBadge kind={kind} />
+          </>
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
         className="wa-detail-shell-page"
       >
-        {/* Breadcrumb */}
-        <Stack
-          direction="row"
-          gap="sm"
-          align="center"
-          style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}
-        >
-          <Link
-            to="/"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-            }}
-          >
-            ← Board
-          </Link>
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-            }}
-          >
-            {issue.id.slice(0, 8).toUpperCase()}
-          </span>
-          <StatusBadge status={issue.status} />
-          <KindBadge kind={kind} />
-        </Stack>
-
+        <div className="wa-subpage-content">
         {/* Persona eyebrow */}
         <Stack
           direction="row"
@@ -819,7 +806,7 @@ function PriceIssueView(props: PriceViewProps) {
         {/* Title + subhead */}
         <Text
           variant="heading-2xl"
-          render={<h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
         >
           {issue.title}
         </Text>
@@ -1029,6 +1016,7 @@ function PriceIssueView(props: PriceViewProps) {
 
             <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
+        </div>
         </div>
       </Page>
 
@@ -1309,55 +1297,40 @@ function MessageIssueView(props: MessageViewProps) {
   return (
     <div className="wa-detail-shell">
       <Page
-        title="Issue review"
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: 'Board', to: '/' },
+              { label: issue.id.slice(0, 8).toUpperCase() },
+            ]}
+          />
+        }
+        badges={
+          <>
+            <StatusBadge status={issue.status} />
+            <KindBadge kind={kind} />
+            <span
+              style={{
+                fontSize: 'var(--wpds-typography-font-size-xs)',
+                padding: '2px 8px',
+                borderRadius: 'var(--wpds-border-radius-sm)',
+                background: isInternal
+                  ? 'var(--wpds-color-bg-surface-warning-weak)'
+                  : 'var(--wpds-color-bg-surface-success-weak)',
+                color: isInternal
+                  ? 'var(--wpds-color-fg-content-warning)'
+                  : 'var(--wpds-color-fg-content-success)',
+              }}
+            >
+              {isInternal ? 'Internal note' : 'Customer-facing'}
+            </span>
+          </>
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
         className="wa-detail-shell-page"
       >
-        {/* Breadcrumb */}
-        <Stack
-          direction="row"
-          gap="sm"
-          align="center"
-          style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}
-        >
-          <Link
-            to="/"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-            }}
-          >
-            ← Board
-          </Link>
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-            }}
-          >
-            {issue.id.slice(0, 8).toUpperCase()}
-          </span>
-          <StatusBadge status={issue.status} />
-          <KindBadge kind={kind} />
-          <span
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-              padding: '2px 8px',
-              borderRadius: 'var(--wpds-border-radius-sm)',
-              background: isInternal
-                ? 'var(--wpds-color-bg-surface-warning-weak)'
-                : 'var(--wpds-color-bg-surface-success-weak)',
-              color: isInternal
-                ? 'var(--wpds-color-fg-content-warning)'
-                : 'var(--wpds-color-fg-content-success)',
-            }}
-          >
-            {isInternal ? 'Internal note' : 'Customer-facing'}
-          </span>
-        </Stack>
-
+        <div className="wa-subpage-content">
         {/* Persona eyebrow */}
         <Stack
           direction="row"
@@ -1382,7 +1355,7 @@ function MessageIssueView(props: MessageViewProps) {
         <Text
           variant="heading-2xl"
           render={
-            <h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />
+            <h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />
           }
         >
           {issue.title}
@@ -1558,6 +1531,7 @@ function MessageIssueView(props: MessageViewProps) {
 
             <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
+        </div>
         </div>
       </Page>
 

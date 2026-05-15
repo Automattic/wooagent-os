@@ -139,6 +139,44 @@ a {
   height: auto;
 }
 
+/* Sub-page content wrapper. Constrains detail-view content to 1100px and
+   centers it inside the Page's `.content.has-padding` container, matching
+   the 533:4193 Figma layout. The Page header (with breadcrumbs + actions)
+   stays full-width above; only the body is constrained. */
+.wa-subpage-content {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+/* Breadcrumbs — mirrors @wordpress/admin-ui Breadcrumbs styling. The
+   component lives in ui/src/components/Breadcrumbs.tsx and renders inside
+   Page's `breadcrumbs` slot. */
+.wa-breadcrumbs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.wa-breadcrumbs > li {
+  flex-shrink: 0;
+}
+.wa-breadcrumbs > li:last-child {
+  flex-shrink: 1;
+  min-width: 0;
+}
+.wa-breadcrumbs__current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}
+.wa-breadcrumbs__separator {
+  color: var(--wpds-color-stroke-surface-neutral);
+  margin: 0 var(--wpds-dimension-gap-sm);
+  user-select: none;
+}
+
 /* Bottom action bar on IssueDetail / BatchReview. Lives as the last child
    of `.wa-detail-shell` — naturally pinned to viewport bottom by flex
    layout. */
@@ -1006,6 +1044,12 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: var(--wpds-dimension-gap-md);
+  /* Match the 1100px sub-page content width so the action bar's left/right
+     groups align with the centered body content above (Figma 533:4193). */
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 .wa-action-bar-actions {
   display: flex;

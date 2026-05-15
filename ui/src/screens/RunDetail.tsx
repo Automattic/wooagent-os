@@ -12,6 +12,7 @@ import {
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 interface Props {
   connection: Connection;
@@ -217,19 +218,25 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
     };
   }, [connection, id, onRunTerminal]);
 
+  const runLabel = id ? id.slice(0, 8).toUpperCase() : 'Run';
+
   if (error) {
     return (
       <Page
-        title="Run detail"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Runs', to: '/runs' }, { label: runLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Notice.Root intent="error">
-          <Notice.Description>
-            Failed to load run: {error}{' '}
-            <Link to="/runs">Back to Runs</Link>
-          </Notice.Description>
-        </Notice.Root>
+        <div className="wa-subpage-content">
+          <Notice.Root intent="error">
+            <Notice.Description>
+              Failed to load run: {error}{' '}
+              <Link to="/runs">Back to Runs</Link>
+            </Notice.Description>
+          </Notice.Root>
+        </div>
       </Page>
     );
   }
@@ -237,13 +244,17 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
   if (!data) {
     return (
       <Page
-        title="Run detail"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Runs', to: '/runs' }, { label: runLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Loading run…</Text>
-        </Stack>
+        <div className="wa-subpage-content">
+          <Stack direction="row" gap="sm" align="center">
+            <Spinner /> <Text variant="body-sm">Loading run…</Text>
+          </Stack>
+        </div>
       </Page>
     );
   }
@@ -253,38 +264,19 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
 
   return (
     <Page
-      title="Run detail"
+      breadcrumbs={
+        <Breadcrumbs
+          items={[
+            { label: 'Runs', to: '/runs' },
+            { label: run.id.slice(0, 8).toUpperCase() },
+          ]}
+        />
+      }
+      badges={<RunStatusBadge status={run.status} />}
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       hasPadding
     >
-      {/* Breadcrumb */}
-      <Stack
-        direction="row"
-        gap="sm"
-        align="center"
-        style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}
-      >
-        <Link
-          to="/runs"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            fontSize: 'var(--wpds-typography-font-size-sm)',
-          }}
-        >
-          ← Runs
-        </Link>
-        <span
-          className="wa-mono"
-          style={{
-            fontSize: 'var(--wpds-typography-font-size-sm)',
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-          }}
-        >
-          {run.id.slice(0, 8).toUpperCase()}
-        </span>
-        <RunStatusBadge status={run.status} />
-      </Stack>
-
+      <div className="wa-subpage-content">
       <Stack direction="column" gap="lg">
         {/* Header card */}
         <Card.Root>
@@ -499,6 +491,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
           </Card.Root>
         )}
       </Stack>
+      </div>
     </Page>
   );
 }
