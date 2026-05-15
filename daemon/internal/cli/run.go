@@ -178,7 +178,7 @@ func newRunCmd() *cobra.Command {
 						MCP:      mcpClient,
 						Skills:   skills,
 						Env:      env,
-						Recorder: telemetry.NewSQLiteRecorder(st.DB),
+						Recorder: telemetry.NewSQLiteRecorder(st.DB, budgetGate),
 					},
 					Out: out,
 				}

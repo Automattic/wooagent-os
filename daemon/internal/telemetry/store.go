@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 )
 
 // LoadTurnEvent reads a single turn_events row by turn_id. Returns
@@ -91,13 +94,16 @@ type Recorder interface {
 	Record(ctx context.Context, e TurnEvent) error
 }
 
-// SQLiteRecorder writes turn events into the daemon's main SQLite DB. It is
-// the only production impl; tests use an in-memory stub.
+// SQLiteRecorder writes turn events into the daemon's main SQLite DB and
+// bumps the per-persona daily cost counter via the BudgetGate.
 type SQLiteRecorder struct {
-	DB *sql.DB
+	DB     *sql.DB
+	Budget *pep.BudgetGate
 }
 
-func NewSQLiteRecorder(db *sql.DB) *SQLiteRecorder { return &SQLiteRecorder{DB: db} }
+func NewSQLiteRecorder(db *sql.DB, budget *pep.BudgetGate) *SQLiteRecorder {
+	return &SQLiteRecorder{DB: db, Budget: budget}
+}
 
 func (r *SQLiteRecorder) Record(ctx context.Context, e TurnEvent) error {
 	if e.TurnID == "" {
@@ -137,6 +143,21 @@ func (r *SQLiteRecorder) Record(ctx context.Context, e TurnEvent) error {
 	if err != nil {
 		return fmt.Errorf("insert turn_event: %w", err)
 	}
+
+	// Bump the per-persona daily cost counter. Sum the model_calls' cost.
+	// Log + swallow on increment failure: a missed increment is a slight
+	// under-count, which favors the operator. The recorder shouldn't fail
+	// the turn over a telemetry-side increment error.
+	if r.Budget != nil && e.Persona != "" {
+		var totalCost float64
+		for _, mc := range e.ModelCalls {
+			totalCost += mc.CostUSD
+		}
+		if totalCost > 0 {
+			_ = r.Budget.IncrementCost(ctx, manifest.Persona(e.Persona), totalCost)
+		}
+	}
+
 	return nil
 }
 
