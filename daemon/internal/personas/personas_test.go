@@ -479,6 +479,87 @@ func TestIterateDraft_HardErrorFromDraftFnPropagates(t *testing.T) {
 	}
 }
 
+func TestRunAndPersist_EmitsBatchWhenSiblingsSet(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "pricer-batch", 1)
+	sibling1 := Drafted{
+		Title:           "Price change · SKU-002 · $52.00 → $48.00 (-7.7%)",
+		Priority:        "medium",
+		ProposalType:    "product_price_change",
+		ProposalContent: "Comparable retailers list $46-$50.",
+		Target: map[string]any{
+			"product_id":     202,
+			"product_sku":    "SKU-002",
+			"previous_price": 52.00,
+			"proposed_price": 48.00,
+			"percent_change": -7.7,
+			"direction":      "decrease",
+			"currency":       "USD",
+		},
+	}
+	sibling2 := Drafted{
+		Title:           "Price change · SKU-003 · $39.00 → $36.00 (-7.7%)",
+		Priority:        "medium",
+		ProposalType:    "product_price_change",
+		ProposalContent: "Comparable retailers list $35-$38.",
+		Target: map[string]any{
+			"product_id":     203,
+			"product_sku":    "SKU-003",
+			"previous_price": 39.00,
+			"proposed_price": 36.00,
+			"percent_change": -7.7,
+			"direction":      "decrease",
+			"currency":       "USD",
+		},
+	}
+	p := fakePersona{
+		slug: "pricer-batch",
+		drafted: Drafted{
+			Title:           "Price change · SKU-001 · $42.00 → $38.00 (-9.5%)",
+			Priority:        "medium",
+			ProposalType:    "product_price_change",
+			ProposalContent: "Comparable retailers list $36-$40.",
+			Target: map[string]any{
+				"product_id":     201,
+				"product_sku":    "SKU-001",
+				"previous_price": 42.00,
+				"proposed_price": 38.00,
+				"percent_change": -9.5,
+				"direction":      "decrease",
+				"currency":       "USD",
+			},
+			BatchSiblings: []Drafted{sibling1, sibling2},
+			BatchTitle:    "Pricing · Home & Textiles seasonal parity run (3 products)",
+			BatchIntent:   "pricing_bulk",
+		},
+	}
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("RunAndPersist returned error: %v", err)
+	}
+	if res.BatchID == "" {
+		t.Fatalf("expected non-empty BatchID on Result; got empty string")
+	}
+
+	// Verify the batch row exists.
+	var batchTitle string
+	if err := st.DB.QueryRow(`SELECT title FROM batches WHERE id = ?`, res.BatchID).Scan(&batchTitle); err != nil {
+		t.Fatalf("batches row lookup failed: %v", err)
+	}
+	if batchTitle != "Pricing · Home & Textiles seasonal parity run (3 products)" {
+		t.Errorf("batch title=%q, want the spec'd title", batchTitle)
+	}
+
+	// Verify 3 issues all carry the batch_id.
+	var count int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM issues WHERE batch_id = ?`, res.BatchID).Scan(&count); err != nil {
+		t.Fatalf("issues count query failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("issues with batch_id %s: got %d, want 3", res.BatchID, count)
+	}
+}
+
 func TestRunAndPersist_DraftSkipPropagated(t *testing.T) {
 	st := newStore(t)
 	seedAgent(t, st, "fake-skip", 1)
