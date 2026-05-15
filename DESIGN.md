@@ -195,6 +195,10 @@ Bottom bar on review / approve / batch surfaces, pinned to the viewport via the 
 
 Single metric block: large tabular numeral, label below. Used in horizontal strips of 2–4 above queues and review surfaces. Never the *only* content on a screen.
 
+### `SectionHeader` (`ui/src/components/SectionHeader.tsx`)
+
+Shared eyebrow + optional title / inline badge / right-aligned meta or action row. Used inside `<Card.Header>` across the three issue-detail views (`IssueDetail` prose path, `PriceIssueView`, `MessageIssueView`) and standalone above the variant list. Replaces the recurring `Stack direction="row" justify="space-between" align="center"` shape that those headers previously hand-rolled. Carries a `// CUSTOM:` comment — composes three WPDS primitives (`Stack`, eyebrow span, `Text`); no WPDS section-header component exists.
+
 ### `StatusBadge` (`ui/src/components/StatusBadge.tsx`)
 
 Uses WPDS intent variants only (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). No persona color. No custom hex.
@@ -258,7 +262,7 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### WooAgent components (`ui/src/components/`)
 
-Project-specific composites that wrap or extend the above. See the **Components** section above for descriptions: `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing similar shapes.
+Project-specific composites that wrap or extend the above. See the **Components** section above for descriptions: `PersonaAvatar`, `LeftNav`, `ActionBar`, `Kpi`, `SectionHeader`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing similar shapes.
 
 ### Out of scope
 
@@ -271,7 +275,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 ### Don't expand the persona-color exception
 
-Persona color appears in `PersonaAvatar` and the kind pill on cards (`KindBadge` + supporting `app.css` rules). **That's it.** The `LeftNav` brand "W" tile used to sit here but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
+Persona color appears in `PersonaAvatar` and the kind pill on cards (`KindBadge` + supporting `app.css` rules). **That's it.** The `LeftNav` brand "W" tile used to sit here but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. The `.wa-eyebrow--persona` modifier (pink eyebrows on "Proposed", "Rationale", "Price change", "Customer-facing message") used to be a third de-facto site; it was removed when aligning the Marketing detail to the 2.0/Single Product Figma frame (2026-05-15). A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
 ### No monospace fonts (one exception)
 
