@@ -538,6 +538,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           <div className="wa-variant-header">
                             <div className="wa-variant-header__left">
                               <span
+                                aria-hidden="true"
                                 style={{
                                   height: 24,
                                   width: 24,
@@ -545,7 +546,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
-                                  fontWeight: 700,
+                                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
                                   fontSize: 'var(--wpds-typography-font-size-sm)',
                                   flex: 'none',
                                   background: isSelected
@@ -561,20 +562,26 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                               >
                                 {v.id}
                               </span>
-                              {v.recommended && (
-                                <span className="wa-agent-pick-inline">Agent pick</span>
+                              {v.recommended ? (
+                                <Text
+                                  variant="body-sm"
+                                  style={{
+                                    color: 'var(--wpds-color-fg-interactive-brand)',
+                                    fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                                  }}
+                                >
+                                  Agent pick{v.label ? ` · ${v.label}` : ''}
+                                </Text>
+                              ) : (
+                                v.label && (
+                                  <Text
+                                    variant="body-sm"
+                                    style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                                  >
+                                    {v.label}
+                                  </Text>
+                                )
                               )}
-                              <span
-                                style={{
-                                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--wpds-border-radius-sm)',
-                                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                                  color: 'var(--wpds-color-fg-content-neutral)',
-                                }}
-                              >
-                                {v.label}
-                              </span>
                             </div>
                             <div className="wa-variant-header__right">
                               <span className="wa-score-label">
