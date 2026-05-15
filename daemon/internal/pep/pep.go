@@ -25,6 +25,7 @@ type PEP struct {
 	mcp      MCPClient
 	audit    *auditWriter
 	db       *sql.DB
+	schemas  *schemaCache
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
@@ -36,6 +37,7 @@ func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB) *PEP {
 		mcp:      mcpClient,
 		audit:    newAuditWriter(db),
 		db:       db,
+		schemas:  &schemaCache{},
 	}
 }
 
@@ -82,7 +84,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	if reason := p.checkPersonaScope(req); reason != "" {
 		return p.deny(ctx, auditID, reason)
 	}
-	if reason := p.checkSchema(req); reason != "" {
+	if reason := p.checkSchema(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, reason)
 	}
 	if reason := p.checkPolicy(req); reason != "" {
@@ -200,12 +202,35 @@ func (p *PEP) checkPersonaScope(req Request) ReasonCode {
 	return ReasonPersonaForbidden
 }
 
-// checkSchema — Check 3. Phase 2 will validate req.Args against the
-// ability's input_schema using github.com/santhosh-tekuri/jsonschema/v5.
-// V1 returns pass-through; the companion plugin still validates at the WP
-// boundary, so wire shape errors are caught one hop later.
-func (p *PEP) checkSchema(_ Request) ReasonCode {
-	// TODO(phase-2): wire JSON Schema validator.
+// checkSchema — Check 3. Validate req.Args against the ability's cached
+// input_schema. Pass-through when no cached schema is available (companion
+// plugin validates at the WP boundary one hop later). Conservative deny on
+// any compile failure or DB infra error.
+func (p *PEP) checkSchema(ctx context.Context, req Request) ReasonCode {
+	var schemaJSON, schemaHash sql.NullString
+	err := p.db.QueryRowContext(ctx,
+		`SELECT schema_json, schema_hash FROM abilities WHERE name = ?`,
+		req.Ability,
+	).Scan(&schemaJSON, &schemaHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ""
+	}
+	if err != nil {
+		return ReasonSchemaCompileError
+	}
+	if !schemaJSON.Valid || schemaJSON.String == "" {
+		return ""
+	}
+	s, err := p.schemas.compileOrGet(req.Ability, schemaHash.String, schemaJSON.String)
+	if err != nil {
+		return ReasonSchemaCompileError
+	}
+	if s == nil {
+		return ""
+	}
+	if err := s.Validate(req.Args); err != nil {
+		return ReasonInvalidArguments
+	}
 	return ""
 }
 
