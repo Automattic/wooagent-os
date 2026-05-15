@@ -13,9 +13,6 @@ interface Props {
   tone?: KpiTone;
 }
 
-// Token mapping for non-neutral tones. Verified against the WPDS token
-// reference; success/warning/caution bars use the normal-strength
-// bg-surface-* tokens because no -strong variant exists for those tones.
 const TONE_FG: Record<KpiTone, string> = {
   neutral: 'var(--wpds-color-fg-content-neutral)',
   brand: 'var(--wpds-color-fg-interactive-brand)',
@@ -24,6 +21,8 @@ const TONE_FG: Record<KpiTone, string> = {
   caution: 'var(--wpds-color-fg-content-caution)',
 };
 
+// success/warning/caution bars use normal-strength bg-surface-* tokens
+// because WPDS has no -strong variant for those tones.
 const TONE_BAR: Record<KpiTone, string | null> = {
   neutral: null,
   brand: 'var(--wpds-color-bg-interactive-brand-strong)',
@@ -37,7 +36,7 @@ const TONE_BAR: Record<KpiTone, string | null> = {
 export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Props) {
   const barFill = TONE_BAR[tone];
   const barStyle: CSSProperties | undefined = barFill
-    ? ({ ['--bar-fill' as string]: barFill } as CSSProperties)
+    ? ({ '--bar-fill': barFill } as CSSProperties)
     : undefined;
   return (
     <Card.Root style={{ flex: 1, minWidth: 0 }}>
