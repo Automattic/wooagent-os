@@ -51,6 +51,9 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if _, err := db.Exec(abilitiesDDL); err != nil {
 		t.Fatalf("apply abilities ddl: %v", err)
 	}
+	if _, err := db.Exec(budgetUsageDDL); err != nil {
+		t.Fatalf("apply budget ddl: %v", err)
+	}
 
 	m := &manifest.Manifest{
 		Version: 1,
@@ -67,7 +70,7 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	return New(lookup, mcpc, db), db
+	return New(lookup, mcpc, db, NewBudgetGate(db, DefaultThresholds())), db
 }
 
 // auditDDL is the minimal DDL for the audit table — same shape as the

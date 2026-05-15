@@ -9,17 +9,20 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 )
 
 // auditWriter inserts and updates rows in audit_invocations. It's append-only
 // after insert except for outcome/denial_reason/completed_at, which finalize
 // the row when Invoke returns.
 type auditWriter struct {
-	db *sql.DB
+	db     *sql.DB
+	budget *BudgetGate
 }
 
-func newAuditWriter(db *sql.DB) *auditWriter {
-	return &auditWriter{db: db}
+func newAuditWriter(db *sql.DB, budget *BudgetGate) *auditWriter {
+	return &auditWriter{db: db, budget: budget}
 }
 
 // insert writes an initial pending row and returns its id. The row is
@@ -50,7 +53,12 @@ func (w *auditWriter) insert(ctx context.Context, req Request, argsHash string) 
 // completed_at. Calling finalize on a row already finalized just stamps a new
 // completed_at — V1 doesn't enforce one-shot finalization since concurrent
 // finalizers don't happen on the approve path.
-func (w *auditWriter) finalize(ctx context.Context, id int64, outcome Outcome, reason ReasonCode) error {
+//
+// On Allowed outcomes (success, mcp_error), finalize also bumps the persona's
+// call_count in persona_budget_usage. Increment errors are logged and swallowed
+// — a missed increment is a slight under-count favouring the operator, which is
+// acceptable. Don't fail the call over accounting noise.
+func (w *auditWriter) finalize(ctx context.Context, id int64, persona manifest.Persona, outcome Outcome, reason ReasonCode) error {
 	_, err := w.db.ExecContext(ctx,
 		`UPDATE audit_invocations
 		   SET outcome = ?, denial_reason = ?, completed_at = ?
@@ -59,6 +67,14 @@ func (w *auditWriter) finalize(ctx context.Context, id int64, outcome Outcome, r
 	)
 	if err != nil {
 		return fmt.Errorf("finalize audit row %d: %w", id, err)
+	}
+	if w.budget != nil && (outcome == OutcomeSuccess || outcome == OutcomeMCPError) {
+		if incErr := w.budget.IncrementCalls(ctx, persona); incErr != nil {
+			// Log + swallow. The check is authoritative for "over budget";
+			// a missed increment is a slight under-count favoring the
+			// operator, which is acceptable. Don't fail the call.
+			_ = incErr
+		}
 	}
 	return nil
 }

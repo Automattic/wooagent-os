@@ -130,11 +130,12 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("index manifest: %w", err)
 			}
+			budgetGate := pep.NewBudgetGate(st.DB, pep.DefaultThresholds())
 			var pepInstance *pep.PEP
 			if mcpClient != nil {
-				pepInstance = pep.New(lookup, mcpClient, st.DB)
+				pepInstance = pep.New(lookup, mcpClient, st.DB, budgetGate)
 			} else {
-				pepInstance = pep.New(lookup, nil, st.DB)
+				pepInstance = pep.New(lookup, nil, st.DB, budgetGate)
 			}
 
 			srv := httpapi.New(st, am, pepInstance, secretStore, uiSessionToken)
