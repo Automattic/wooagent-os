@@ -476,7 +476,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             {/* Proposed section */}
             <Stack direction="row" justify="space-between" align="end">
               <Stack direction="column" gap="xs">
-                <span className="wa-eyebrow wa-eyebrow--persona">Proposed · pick one</span>
+                <span className="wa-eyebrow">Proposed · pick one</span>
                 <Text variant="heading-md">
                   {variants
                     ? `${variants.length} variants · each with different emphasis`
@@ -874,7 +874,7 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Headline price comparison */}
             <Card.Root>
               <Card.Header>
-                <span className="wa-eyebrow wa-eyebrow--persona">Price change</span>
+                <span className="wa-eyebrow">Price change</span>
               </Card.Header>
               <Card.Content>
                 <Stack direction="row" gap="lg" align="center" wrap="wrap">
@@ -970,7 +970,7 @@ function PriceIssueView(props: PriceViewProps) {
             >
               <Card.Header>
                 <Stack direction="row" justify="space-between" align="center">
-                  <span className="wa-eyebrow wa-eyebrow--persona">Rationale</span>
+                  <span className="wa-eyebrow">Rationale</span>
                   <span
                     className="wa-mono"
                     style={{
@@ -1481,7 +1481,7 @@ function MessageIssueView(props: MessageViewProps) {
               <Card.Header>
                 <Stack direction="row" justify="space-between" align="center">
                   <Stack direction="row" gap="sm" align="center">
-                    <span className="wa-eyebrow wa-eyebrow--persona">
+                    <span className="wa-eyebrow">
                       {isInternal ? 'Internal note' : 'Customer-facing message'}
                     </span>
                     {proposal.subjectHint && (
