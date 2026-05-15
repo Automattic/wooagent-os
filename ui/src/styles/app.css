@@ -202,7 +202,7 @@ a {
 .wa-score-bar > div {
   height: 100%;
   border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-bg-interactive-brand-strong);
+  background: var(--bar-fill, var(--wpds-color-bg-interactive-brand-strong));
 }
 
 .wa-variant-card {

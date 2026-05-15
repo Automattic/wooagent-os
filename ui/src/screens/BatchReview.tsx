@@ -353,7 +353,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             score={91}
             hint="Yoast · out of 100"
           />
-          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" intent="success" />
+          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
         </div>
 
         {/* Counter strip */}
