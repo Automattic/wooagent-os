@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
 
 // The lenient UnmarshalJSON handles three real drifts we've seen from the
@@ -241,5 +243,54 @@ func TestFindLargestEligibleBucket_IgnoresEmptyCategory(t *testing.T) {
 	})
 	if got := findLargestEligibleBucket(products, 3); got != nil {
 		t.Errorf("uncategorized products should never form a batch; got bucket=%q", got.Category)
+	}
+}
+
+// ---------------------------------------------------------------- packAsBatch
+
+// makeDraft is a helper for test drafts.
+func makeDraft(sku string, productID int, category string) personas.Drafted {
+	return personas.Drafted{
+		Title:           "Price change · " + sku,
+		ProposalType:    "product_price_change",
+		Priority:        "medium",
+		ProposalContent: "rationale",
+		Target: map[string]any{
+			"product_id":       productID,
+			"product_sku":      sku,
+			"product_category": category,
+			"previous_price":   50.0,
+			"proposed_price":   45.0,
+			"percent_change":   -10.0,
+			"direction":        "decrease",
+			"currency":         "USD",
+		},
+	}
+}
+
+func TestPackAsBatch_FillsBatchFields(t *testing.T) {
+	drafts := []personas.Drafted{
+		makeDraft("SKU-001", 1, "Home & Textiles"),
+		makeDraft("SKU-002", 2, "Home & Textiles"),
+		makeDraft("SKU-003", 3, "Home & Textiles"),
+	}
+	packed := packAsBatch(drafts, "Home & Textiles")
+	if packed.BatchTitle == "" {
+		t.Error("BatchTitle should be set")
+	}
+	if !strings.Contains(packed.BatchTitle, "Home & Textiles") {
+		t.Errorf("BatchTitle should name the category; got %q", packed.BatchTitle)
+	}
+	if !strings.Contains(packed.BatchTitle, "3 products") {
+		t.Errorf("BatchTitle should show product count; got %q", packed.BatchTitle)
+	}
+	if packed.BatchIntent != "pricing_bulk" {
+		t.Errorf("BatchIntent=%q, want pricing_bulk", packed.BatchIntent)
+	}
+	if len(packed.BatchSiblings) != 2 {
+		t.Errorf("BatchSiblings length=%d, want 2 (primary + 2 siblings = 3 total)", len(packed.BatchSiblings))
+	}
+	if got := packed.Target["product_sku"]; got != "SKU-001" {
+		t.Errorf("primary should be the first draft; got product_sku=%v", got)
 	}
 }
