@@ -142,7 +142,13 @@ func (g *BudgetGate) Check(ctx context.Context, persona manifest.Persona) (Reaso
 		g.logger.Warn("budget check: persona has no threshold entry, passing through", "persona", persona)
 		return "", nil
 	}
-	if costUSD >= threshold.DailyCostUSD || callCount >= threshold.DailyCalls {
+	// A threshold of zero means "no limit in this dimension" (per
+	// Threshold's docstring). Without this guard, a literal `0` in
+	// budgets.json would block every call — `0 >= 0` is true.
+	if threshold.DailyCostUSD > 0 && costUSD >= threshold.DailyCostUSD {
+		return ReasonBudgetExceeded, nil
+	}
+	if threshold.DailyCalls > 0 && callCount >= threshold.DailyCalls {
 		return ReasonBudgetExceeded, nil
 	}
 	return "", nil

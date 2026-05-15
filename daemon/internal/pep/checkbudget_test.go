@@ -125,6 +125,35 @@ func TestCheckBudget_DeniedCallDoesNotIncrement(t *testing.T) {
 	}
 }
 
+// TestCheckBudget_YesterdayRowDoesNotBleed confirms at the integration level
+// (through PEP.Invoke) that a heavy-usage row for yesterday's date does not
+// affect today's budget evaluation.
+func TestCheckBudget_YesterdayRowDoesNotBleed(t *testing.T) {
+	mcpc := &fakeMCP{result: mcp.ToolCallResult{Content: []mcp.ContentPart{{Type: "text", Text: `{"ok":true}`}}}}
+	p, db := newTestPEP(t, mcpc)
+	yesterday := time.Now().Local().AddDate(0, 0, -1).Format("2006-01-02")
+	// Heavy usage that would deny today if it bled in.
+	if _, err := db.Exec(
+		`INSERT INTO persona_budget_usage(persona, usage_date, cost_usd, call_count, updated_at) VALUES(?, ?, ?, ?, ?)`,
+		"marketing", yesterday, 1000.00, 5000, time.Now().UTC().Format(time.RFC3339),
+	); err != nil {
+		t.Fatalf("seed usage: %v", err)
+	}
+	dec, _, err := p.Invoke(context.Background(), Request{
+		Persona: manifest.PersonaMarketing,
+		Ability: "wooagent-products/update",
+		Args:    map[string]any{"id": 1},
+		Intent:  IntentApply,
+		Source:  SourceOperator,
+	})
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if !dec.Allowed {
+		t.Errorf("yesterday's usage should not affect today: got reason %q", dec.Reason)
+	}
+}
+
 func TestCheckBudget_MCPErrorStillIncrements(t *testing.T) {
 	mcpc := &fakeMCP{callErr: errors.New("boom")}
 	p, db := newTestPEP(t, mcpc)

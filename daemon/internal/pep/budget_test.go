@@ -251,6 +251,39 @@ func TestBudgetGate_CheckRespectsLocalTZ(t *testing.T) {
 	}
 }
 
+// TestBudgetGate_CheckZeroThresholdMeansNoLimit confirms that a threshold of
+// zero (whether baked-in or set via budgets.json overlay) is treated as "no
+// limit in this dimension" — matching the Threshold docstring.
+func TestBudgetGate_CheckZeroThresholdMeansNoLimit(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	// Heavy accumulated usage in both dimensions.
+	insertUsage(t, db, "marketing", today, 1000.00, 5000)
+	// Thresholds both zero — should pass through.
+	g := newGateWithThresholds(t, db, 0, 0, clock)
+	reason, err := g.Check(context.Background(), manifest.PersonaMarketing)
+	if err != nil || reason != "" {
+		t.Errorf("zero thresholds: got reason=%q err=%v, want allowed", reason, err)
+	}
+}
+
+// TestBudgetGate_CheckPartialZeroThreshold confirms that a zero in one
+// dimension and a positive value in the other still enforces the positive
+// dimension.
+func TestBudgetGate_CheckPartialZeroThreshold(t *testing.T) {
+	db := newBudgetDB(t)
+	clock := pinnedClock(2026, 5, 15, 12, 0)
+	today := clock().Local().Format("2006-01-02")
+	// Over the call cap but cost is zero (which is fine because cost-cap=0).
+	insertUsage(t, db, "marketing", today, 0.0, 100)
+	g := newGateWithThresholds(t, db, 0, 100, clock) // cost cap=0 means unlimited, call cap=100
+	reason, _ := g.Check(context.Background(), manifest.PersonaMarketing)
+	if reason != ReasonBudgetExceeded {
+		t.Errorf("partial zero, calls over: got reason %q want %q", reason, ReasonBudgetExceeded)
+	}
+}
+
 func readUsage(t *testing.T, db *sql.DB, persona, date string) (cost float64, calls int, exists bool) {
 	t.Helper()
 	err := db.QueryRow(
