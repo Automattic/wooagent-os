@@ -17,7 +17,7 @@ func TestLoadTurnEvent_RoundTrip(t *testing.T) {
 	}
 	defer st.Close()
 
-	rec := NewSQLiteRecorder(st.DB)
+	rec := NewSQLiteRecorder(st.DB, nil)
 	e := TurnEvent{
 		TurnID:    "t1",
 		Persona:   "marketing",
