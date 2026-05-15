@@ -121,6 +121,23 @@ type Drafted struct {
 	Target          map[string]any
 	Skipped         bool
 	SkipReason      string
+
+	// BatchSiblings, when non-nil, turns this Drafted into the *first* child
+	// of a batch. RunAndPersist creates a row in the `batches` table and
+	// attaches this Drafted plus each sibling as a child issue, all sharing
+	// the new batch_id. Each sibling's own Title / ProposalType / Target /
+	// Cooldown is honored. Used by personas that group their scan results
+	// (e.g. Pricing emitting a category batch when N>=3 products are flagged).
+	BatchSiblings []Drafted
+
+	// BatchTitle is the title of the parent batches row. Required when
+	// BatchSiblings is non-nil; ignored otherwise. Example:
+	// "Pricing · Home & Textiles seasonal parity run (11 products)".
+	BatchTitle string
+
+	// BatchIntent is the batches.intent column value (e.g. "pricing_bulk").
+	// Required when BatchSiblings is non-nil; ignored otherwise.
+	BatchIntent string
 }
 
 // Result is what RunAndPersist returns. IssueID is empty when Skipped or
