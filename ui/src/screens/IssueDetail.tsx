@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
-import { Icon, arrowUpRight, rotateRight, check, box } from '@wordpress/icons';
+import { Icon, rotateRight, check, box } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -32,6 +32,7 @@ import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import SectionHeader from '../components/SectionHeader';
+import SourceRow from '../components/SourceRow';
 
 interface Props {
   connection: Connection;
@@ -87,7 +88,7 @@ const CURRENCY_SYMBOL: Record<string, string> = {
   EUR: '€',
 };
 
-function formatPrice(amount: number, currency: string): string {
+export function formatPrice(amount: number, currency: string): string {
   const sym = CURRENCY_SYMBOL[currency.toUpperCase()] ?? '';
   return `${sym}${amount.toFixed(2)}`;
 }
@@ -1173,115 +1174,6 @@ function ObservedRange({ low, median, high, proposed, currency }: ObservedRangeP
           ? `Proposed ${formatPrice(proposed, currency)} sits inside the observed band.`
           : `Proposed ${formatPrice(proposed, currency)} is outside the observed band — operator review recommended.`}
       </Text>
-    </Stack>
-  );
-}
-
-interface SourceRowProps {
-  source: import('../api/client').PriceSource;
-  currency: string;
-  proposed: number;
-}
-
-function SourceRow({ source, currency, proposed }: SourceRowProps) {
-  const sourceCurrency = source.currency ?? currency;
-  const diff = source.observed_price - proposed;
-  const diffStr =
-    Math.abs(diff) < 0.005
-      ? 'matches proposed'
-      : diff > 0
-        ? `${formatPrice(diff, sourceCurrency)} higher`
-        : `${formatPrice(-diff, sourceCurrency)} lower`;
-  let host = source.url;
-  try {
-    host = new URL(source.url).hostname.replace(/^www\./, '');
-  } catch {
-    /* fall through with raw url */
-  }
-  return (
-    <Stack
-      direction="row"
-      justify="space-between"
-      align="center"
-      gap="md"
-      wrap="wrap"
-      style={{
-        padding: 'var(--wpds-dimension-padding-md)',
-        borderRadius: 'var(--wpds-border-radius-sm)',
-        background: 'var(--wpds-color-bg-surface-neutral-weak)',
-      }}
-    >
-      <Stack direction="column" gap="xs" style={{ minWidth: 0, flex: 1 }}>
-        <Stack direction="row" gap="sm" align="center" wrap="wrap">
-          {source.retailer && (
-            <span
-              style={{
-                fontSize: 'var(--wpds-typography-font-size-xs)',
-                fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                padding: '2px 8px',
-                borderRadius: 'var(--wpds-border-radius-sm)',
-                background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                color: 'var(--wpds-color-fg-content-neutral)',
-              }}
-            >
-              {source.retailer}
-            </span>
-          )}
-          <Text
-            variant="body-sm"
-            style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-          >
-            {source.comparable_product}
-          </Text>
-        </Stack>
-        <span style={{ fontSize: 'var(--wpds-typography-font-size-xs)' }}>
-          <Button
-            variant="link"
-            href={source.url}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {host}
-            <Icon
-              icon={arrowUpRight}
-              size={16}
-              style={{
-                verticalAlign: 'text-bottom',
-                marginInlineStart: 'var(--wpds-dimension-padding-xs)',
-              }}
-            />
-          </Button>
-        </span>
-        {source.note && (
-          <Text
-            variant="body-sm"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              fontSize: 'var(--wpds-typography-font-size-xs)',
-            }}
-          >
-            {source.note}
-          </Text>
-        )}
-      </Stack>
-      <Stack direction="column" gap="xs" align="end">
-        <Text
-          variant="body-sm"
-          className="wa-mono"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          {formatPrice(source.observed_price, sourceCurrency)}
-        </Text>
-        <Text
-          variant="body-sm"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            fontSize: 'var(--wpds-typography-font-size-xs)',
-          }}
-        >
-          {diffStr}
-        </Text>
-      </Stack>
     </Stack>
   );
 }

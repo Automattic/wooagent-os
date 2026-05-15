@@ -243,6 +243,31 @@ a {
   box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
 }
 
+/* Pricing-batch product card — expandable row inside the batch review. The
+   header is the only interactive surface; click anywhere on it to toggle.
+   Collapsed = ~52px; expanded adds rationale + sources beneath. */
+.wa-batch-product-card {
+  position: relative;
+  cursor: var(--wpds-cursor-control);
+  transition: box-shadow 0.14s, border-color 0.14s;
+}
+.wa-batch-product-card__header {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--wpds-dimension-padding-md);
+  background: transparent;
+  border: none;
+  cursor: var(--wpds-cursor-control);
+}
+.wa-batch-product-card__header:focus-visible {
+  outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus-brand);
+  outline-offset: 2px;
+}
+.wa-batch-product-card--expanded {
+  border-color: var(--wpds-color-stroke-surface-neutral-strong) !important;
+}
+
 /* "Agent pick" chip rendered inline at the top of the recommended variant
    card — same shape as the prototype. */
 .wa-agent-pick {

@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,39 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
 		}, nil
+	}
+
+	// Batch pre-check: do we have a category with >= 3 eligible products?
+	// If yes, run the expensive web_search loop on the full bucket. This
+	// path bypasses maxDraftAttempts — when a batch is forming, we want
+	// to process every product in the bucket, not stop at the first 3
+	// tries. Cost: ~1 Claude+web_search call per product (~20-30s each).
+	const batchThreshold = 3
+	eligible, eligErr := listEligibleProducts(ctx, deps.MCP, skip)
+	if eligErr != nil {
+		// Pre-check failed; fall through to single-product path
+		// (don't bail — single-product mode still works when the
+		// catalog list is unreachable for a transient reason).
+		_ = eligErr
+	} else if bucket := findLargestEligibleBucket(eligible, batchThreshold); bucket != nil {
+		var drafts []personas.Drafted
+		for _, prod := range bucket.Products {
+			d, err := draftForProduct(ctx, deps, prod.ID, skill.Description, model, currency)
+			if err != nil {
+				// Per-product error: log via continue and move on;
+				// one bad product shouldn't kill the batch.
+				continue
+			}
+			if d.Skipped {
+				continue
+			}
+			drafts = append(drafts, d)
+		}
+		if len(drafts) >= batchThreshold {
+			return packAsBatch(drafts, bucket.Category), nil
+		}
+		// Batch path didn't yield enough successful drafts (too many
+		// LLM-level skips). Fall through to single-product mode.
 	}
 
 	// Within-run iteration: if the LLM yields no_proposal (or any other
@@ -273,23 +307,35 @@ type productSummary struct {
 	RegularPrice string `json:"regular_price"`
 }
 
-// pickFirstProduct returns the first simple, priced, published product
-// whose ID is not in skip. Pulls a wider page (100) than the original 50
-// so a handful of products in cooldown don't starve the picker.
-func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
+// listProductSummaries fetches the first page of products from MCP as
+// lightweight summaries (no descriptions, no categories). Cheap call —
+// no LLM, no web_search. v0.1 doesn't paginate; large catalogs (>~100
+// products) may need a follow-up.
+func listProductSummaries(ctx context.Context, c *mcp.Client) ([]productSummary, error) {
 	var listOut struct {
 		Products []productSummary `json:"products"`
 		Total    int              `json:"total"`
 	}
 	if err := callAbility(ctx, c, "wooagent-products/list",
 		map[string]any{"per_page": 100}, &listOut); err != nil {
+		return nil, err
+	}
+	return listOut.Products, nil
+}
+
+// pickFirstProduct returns the first simple, priced, published product
+// whose ID is not in skip. Pulls a wider page (100) than the original 50
+// so a handful of products in cooldown don't starve the picker.
+func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
+	summaries, err := listProductSummaries(ctx, c)
+	if err != nil {
 		return 0, err
 	}
-	if len(listOut.Products) == 0 {
+	if len(summaries) == 0 {
 		return 0, fmt.Errorf("no products in store")
 	}
 	skippedVariable, skippedNoPrice, skippedCooldown := 0, 0, 0
-	for _, p := range listOut.Products {
+	for _, p := range summaries {
 		if p.Status != "publish" && p.Status != "" {
 			continue
 		}
@@ -311,8 +357,43 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{})
 		"no priceable simple products in first %d (skipped %d variable, %d without regular_price, %d in cooldown); "+
 			"approved proposals cool down for 7d, dismissed for 30d; "+
 			"set a regular_price on a simple product in wp-admin or pass PERSONA_PRODUCT_ID=<id>",
-		len(listOut.Products), skippedVariable, skippedNoPrice, skippedCooldown,
+		len(summaries), skippedVariable, skippedNoPrice, skippedCooldown,
 	)
+}
+
+// listEligibleProducts returns the catalog products that are eligible for
+// pricing (simple, published, with a regular_price) and are not in the
+// cooldown skip set. Single cheap MCP call — no LLM, no web_search.
+// Decodes directly into the full `product` struct so Categories ride
+// along for bucket grouping (the WooCommerce REST list response includes
+// categories per product). v0.1 doesn't paginate; large catalogs (>~100
+// products) may need a follow-up.
+func listEligibleProducts(ctx context.Context, c *mcp.Client, skip map[int]struct{}) ([]product, error) {
+	var listOut struct {
+		Products []product `json:"products"`
+		Total    int       `json:"total"`
+	}
+	if err := callAbility(ctx, c, "wooagent-products/list",
+		map[string]any{"per_page": 100}, &listOut); err != nil {
+		return nil, err
+	}
+	out := make([]product, 0, len(listOut.Products))
+	for _, p := range listOut.Products {
+		if p.Status != "publish" && p.Status != "" {
+			continue
+		}
+		if p.Type == "variable" {
+			continue
+		}
+		if strings.TrimSpace(p.RegularPrice) == "" {
+			continue
+		}
+		if _, blocked := skip[p.ID]; blocked {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 type product struct {
@@ -354,6 +435,75 @@ func categoryString(p product) string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// categoryOf returns the product's primary category name (the first
+// non-empty entry in p.Categories), or "" if the product is uncategorized.
+// Used by findLargestEligibleBucket to group products for batch pricing.
+func categoryOf(p product) string {
+	for _, c := range p.Categories {
+		if c.Name != "" {
+			return c.Name
+		}
+	}
+	return ""
+}
+
+// Bucket is a set of eligible products grouped by category, used by
+// Pricing.Draft to decide whether to emit a batch.
+type Bucket struct {
+	Category string
+	Products []product
+}
+
+// findLargestEligibleBucket buckets the given products by primary category
+// and returns the largest bucket whose size is >= threshold. Uncategorized
+// products (no category) never form a batch — they fall through to the
+// single-product path. Ties are broken alphabetically by category name so
+// the choice is deterministic across runs.
+func findLargestEligibleBucket(products []product, threshold int) *Bucket {
+	if threshold < 1 {
+		threshold = 1
+	}
+	byCat := map[string][]product{}
+	for _, p := range products {
+		cat := categoryOf(p)
+		if cat == "" {
+			continue
+		}
+		byCat[cat] = append(byCat[cat], p)
+	}
+	cats := make([]string, 0, len(byCat))
+	for c := range byCat {
+		cats = append(cats, c)
+	}
+	sort.Strings(cats)
+	var best *Bucket
+	for _, c := range cats {
+		b := byCat[c]
+		if len(b) < threshold {
+			continue
+		}
+		if best == nil || len(b) > len(best.Products) {
+			best = &Bucket{Category: c, Products: b}
+		}
+	}
+	return best
+}
+
+// packAsBatch takes N successful Drafted results from the batch-path loop
+// and packs them into a single batch-shaped Drafted (one primary + N-1
+// siblings + BatchTitle + BatchIntent). Caller guarantees len(drafts) >= 1
+// and all drafts share the given category.
+func packAsBatch(drafts []personas.Drafted, category string) personas.Drafted {
+	primary := drafts[0]
+	primary.BatchSiblings = drafts[1:]
+	primary.BatchTitle = fmt.Sprintf(
+		"Pricing · %s seasonal parity run (%d products)",
+		category, len(drafts),
+	)
+	primary.BatchIntent = "pricing_bulk"
+	return primary
 }
 
 // ---------------------------------------------------------------- Anthropic
