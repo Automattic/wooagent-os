@@ -11,12 +11,14 @@ import {
   type BatchApproveChild,
   type BatchDetail,
   type Connection,
+  type PriceSource,
 } from '../api/client';
 import { KindBadge } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
+import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
 
 interface Props {
   connection: Connection;
@@ -267,6 +269,297 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   const personaLabel =
     batch.persona === 'marketing' ? 'Marketing agent' : `${batch.persona ?? 'unassigned'} agent`;
   const pendingCount = batch.pending;
+  const firstProposal = data.issues[0]?.proposal;
+  const isPricingBatch = firstProposal?.type === 'product_price_change';
+
+  // Marketing-shape body: KPI strip + per-child variant accordion. Captures
+  // component state (selectedVariants, expanded, busy, approveRow, rejectRow).
+  // Behavior is unchanged from before the pricing dispatch landed.
+  const renderMarketingBody = () => (
+    <>
+      {/* KPI row */}
+      <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
+        <Kpi
+          label="Scope"
+          value={`${batch.total} products selected`}
+          hint="3 variants each"
+        />
+        <Kpi
+          label="Brand voice match"
+          value="96%"
+          score={96}
+          hint="vs. your voice model"
+        />
+        <Kpi
+          label="SEO score"
+          value="91"
+          score={91}
+          hint="Yoast · out of 100"
+        />
+        <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
+      </div>
+
+      {/* Per-child accordion */}
+      <Stack direction="column" gap="md">
+        {issues.map(({ issue, proposal }, idx) => {
+          const variants = variantsFromProposal(proposal);
+          const target = (proposal?.target ?? {}) as Record<string, unknown>;
+          const previousCopy =
+            typeof target.previous === 'string' ? target.previous : '';
+          const productName =
+            typeof target.product_name === 'string' ? target.product_name : issue.title;
+          const productSku =
+            typeof target.sku === 'string' ? target.sku : issue.id.slice(0, 8);
+          const isExpanded = expanded[issue.id] ?? false;
+          const selectedVariantID = selectedVariants[issue.id];
+          const selectedVariant = variants?.find((v) => v.id === selectedVariantID) ?? null;
+          const reviewable = issue.status === 'in_review';
+          const rowBusy = busy === `approve-row:${issue.id}` || busy === `reject-row:${issue.id}`;
+
+          return (
+            <Card.Root key={issue.id}>
+              {/* CUSTOM: row-header click target to toggle expansion. (a) WPDS has no expandable-row primitive — DataViews owns its own row chrome; this is a non-DataViews list. (b) <button> wraps the row header with shared .wa-batch-row__header chrome + aria-expanded. (c) Follow-up: revisit if DataViews adds expandable-row support. */}
+              <button
+                type="button"
+                className="wa-batch-row__header"
+                onClick={() =>
+                  setExpanded((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
+                }
+                aria-expanded={isExpanded}
+              >
+                <span
+                  className="wa-mono"
+                  style={{
+                    fontSize: 'var(--wpds-typography-font-size-xs)',
+                    color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    width: 32,
+                    flex: 'none',
+                  }}
+                >
+                  {idx + 1} / {issues.length}
+                </span>
+                <PersonaAvatar persona={personaKey} size="md" />
+                <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                  <Text
+                    variant="body-md"
+                    style={{
+                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                      textAlign: 'left',
+                    }}
+                  >
+                    {productName}
+                  </Text>
+                  <span
+                    className="wa-mono"
+                    style={{
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
+                  >
+                    {productSku}
+                  </span>
+                </Stack>
+                {selectedVariant && (
+                  <span className="wa-score-label">
+                    Best SEO{' '}
+                    <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
+                      {selectedVariant.seo}
+                    </span>
+                  </span>
+                )}
+                {selectedVariant && (
+                  <span className="wa-score-label">
+                    Voice{' '}
+                    <span className={`wa-score-label__value ${voiceColorClass(selectedVariant.voice)}`}>
+                      {selectedVariant.voice}%
+                    </span>
+                  </span>
+                )}
+                <span className={`wa-status-pill wa-status-pill--${rowStatusTone(issue.status)}`}>
+                  {rowStatusLabel(issue.status)}
+                </span>
+                <span aria-hidden="true">
+                  <Icon icon={isExpanded ? chevronUp : chevronDown} size={18} />
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="wa-batch-row__body">
+                  <div className="wa-batch-cols">
+                    {/* Current column */}
+                    <div className="wa-batch-col wa-batch-col--current">
+                      <span className="wa-eyebrow">Current</span>
+                      <Text
+                        variant="body-sm"
+                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                      >
+                        Live on store
+                      </Text>
+                      <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                        Description
+                      </span>
+                      <Text
+                        variant="body-sm"
+                        style={{
+                          color: previousCopy
+                            ? 'var(--wpds-color-fg-content-neutral)'
+                            : 'var(--wpds-color-fg-content-neutral-weak)',
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {previousCopy || '— empty —'}
+                      </Text>
+                    </div>
+
+                    {/* Variant columns */}
+                    {(variants ?? []).map((v) => {
+                      const isSelected = selectedVariantID === v.id;
+                      // CUSTOM: variant-column click target inside a batch row. (a) WPDS has no selectable-column / radio-card component. (b) <button> wraps the column with .wa-batch-col chrome and selected state. (c) Follow-up: see CardLink composite note in Kanban.tsx.
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          className={`wa-batch-col wa-batch-col--variant${
+                            isSelected ? ' wa-batch-col--selected' : ''
+                          }`}
+                          onClick={() =>
+                            reviewable &&
+                            setSelectedVariants((prev) => ({ ...prev, [issue.id]: v.id }))
+                          }
+                          disabled={!reviewable}
+                        >
+                          <div className="wa-batch-col__head">
+                            <span
+                              className="wa-batch-col__letter"
+                              style={{
+                                background: isSelected
+                                  ? 'var(--wpds-color-bg-interactive-brand-strong)'
+                                  : 'transparent',
+                                color: isSelected
+                                  ? 'var(--wpds-color-fg-interactive-brand-strong)'
+                                  : 'var(--wpds-color-fg-content-neutral)',
+                                border: isSelected
+                                  ? 'none'
+                                  : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
+                              }}
+                            >
+                              {v.id}
+                            </span>
+                            {v.recommended && (
+                              <span className="wa-agent-pick-inline">Agent pick</span>
+                            )}
+                            <span
+                              style={{
+                                fontSize: 'var(--wpds-typography-font-size-xs)',
+                                padding: '2px 8px',
+                                borderRadius: 'var(--wpds-border-radius-sm)',
+                                background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                                color: 'var(--wpds-color-fg-content-neutral)',
+                              }}
+                            >
+                              {v.label}
+                            </span>
+                            <span
+                              className={`wa-radio-mark${
+                                isSelected ? ' wa-radio-mark--selected' : ''
+                              }`}
+                              aria-hidden="true"
+                              style={{ marginLeft: 'auto' }}
+                            >
+                              {isSelected && <Icon icon={check} size={14} />}
+                            </span>
+                          </div>
+                          <div className="wa-batch-col__scores">
+                            <span className="wa-score-label">
+                              SEO{' '}
+                              <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                {v.seo}
+                              </span>
+                            </span>
+                            <span className="wa-score-label">
+                              Voice{' '}
+                              <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
+                                {v.voice}%
+                              </span>
+                            </span>
+                            <span className="wa-score-label">
+                              <span className="wa-score-label__value">
+                                {v.charCount} ch
+                              </span>
+                            </span>
+                          </div>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
+                          >
+                            {v.body}
+                          </Text>
+                          {v.note && (
+                            <div
+                              style={{
+                                marginTop: 'var(--wpds-dimension-gap-sm)',
+                                fontSize: 'var(--wpds-typography-font-size-xs)',
+                                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                                fontStyle: 'italic',
+                                textAlign: 'left',
+                              }}
+                            >
+                              {v.note}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Per-row footer */}
+                  <div className="wa-batch-row__footer">
+                    <Text
+                      variant="body-sm"
+                      style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                    >
+                      {!reviewable
+                        ? `Already ${issue.status === 'done' ? 'approved' : issue.status}`
+                        : selectedVariantID
+                          ? `Variant ${selectedVariantID} selected`
+                          : 'No variant selected yet — click a column above to choose'}
+                    </Text>
+                    <div className="wa-batch-row__footer-actions">
+                      <Button
+                        __next40pxDefaultSize
+                        variant="tertiary"
+                        isDestructive
+                        onClick={() => rejectRow(issue.id)}
+                        disabled={!reviewable || rowBusy || busy !== null}
+                      >
+                        {busy === `reject-row:${issue.id}` ? 'Rejecting…' : 'Reject'}
+                      </Button>
+                      <Button
+                        __next40pxDefaultSize
+                        variant="secondary"
+                        onClick={() => approveRow(issue.id)}
+                        disabled={!reviewable || !selectedVariantID || rowBusy || busy !== null}
+                      >
+                        {busy === `approve-row:${issue.id}`
+                          ? 'Applying…'
+                          : selectedVariantID
+                            ? `Approve Variant ${selectedVariantID}`
+                            : 'Approve selected'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card.Root>
+          );
+        })}
+      </Stack>
+    </>
+  );
 
   return (
     <div className="wa-detail-shell">
@@ -309,8 +602,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
               {personaLabel}
             </strong>{' '}
-            proposes content · {relativeTime(batch.updated_at)} ·{' '}
-            <span className="wa-mono">Claude Sonnet 4.6</span>
+            {isPricingBatch ? 'proposes a pricing run' : 'proposes content'} ·{' '}
+            {relativeTime(batch.updated_at)} ·{' '}
+            <span className="wa-mono">
+              {isPricingBatch ? 'Claude Haiku 4.5 · web_search' : 'Claude Sonnet 4.6'}
+            </span>
           </Text>
         </Stack>
 
@@ -329,32 +625,10 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             marginBottom: 'var(--wpds-dimension-gap-xl)',
           }}
         >
-          Three voice variants per product. Pick one, approve, and the agent
-          writes it straight to WooCommerce. The previous copy is snapshotted
-          — reversible from the Done column.
+          {isPricingBatch
+            ? 'Review every product in this run. Approve to apply all proposed price changes to your store; the previous prices are snapshotted — reversible from the Done column.'
+            : 'Three voice variants per product. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
         </Text>
-
-        {/* KPI row */}
-        <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
-          <Kpi
-            label="Scope"
-            value={`${batch.total} products selected`}
-            hint="3 variants each"
-          />
-          <Kpi
-            label="Brand voice match"
-            value="96%"
-            score={96}
-            hint="vs. your voice model"
-          />
-          <Kpi
-            label="SEO score"
-            value="91"
-            score={91}
-            hint="Yoast · out of 100"
-          />
-          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
-        </div>
 
         {/* Counter strip */}
         <Card.Root style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
@@ -392,265 +666,10 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           </Card.Content>
         </Card.Root>
 
-        {/* Per-child accordion */}
-        <Stack direction="column" gap="md">
-          {issues.map(({ issue, proposal }, idx) => {
-            const variants = variantsFromProposal(proposal);
-            const target = (proposal?.target ?? {}) as Record<string, unknown>;
-            const previousCopy =
-              typeof target.previous === 'string' ? target.previous : '';
-            const productName =
-              typeof target.product_name === 'string' ? target.product_name : issue.title;
-            const productSku =
-              typeof target.sku === 'string' ? target.sku : issue.id.slice(0, 8);
-            const isExpanded = expanded[issue.id] ?? false;
-            const selectedVariantID = selectedVariants[issue.id];
-            const selectedVariant = variants?.find((v) => v.id === selectedVariantID) ?? null;
-            const reviewable = issue.status === 'in_review';
-            const rowBusy = busy === `approve-row:${issue.id}` || busy === `reject-row:${issue.id}`;
-
-            return (
-              <Card.Root key={issue.id}>
-                {/* CUSTOM: row-header click target to toggle expansion. (a) WPDS has no expandable-row primitive — DataViews owns its own row chrome; this is a non-DataViews list. (b) <button> wraps the row header with shared .wa-batch-row__header chrome + aria-expanded. (c) Follow-up: revisit if DataViews adds expandable-row support. */}
-                <button
-                  type="button"
-                  className="wa-batch-row__header"
-                  onClick={() =>
-                    setExpanded((prev) => ({ ...prev, [issue.id]: !prev[issue.id] }))
-                  }
-                  aria-expanded={isExpanded}
-                >
-                  <span
-                    className="wa-mono"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      width: 32,
-                      flex: 'none',
-                    }}
-                  >
-                    {idx + 1} / {issues.length}
-                  </span>
-                  <PersonaAvatar persona={personaKey} size="md" />
-                  <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                    <Text
-                      variant="body-md"
-                      style={{
-                        fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                        textAlign: 'left',
-                      }}
-                    >
-                      {productName}
-                    </Text>
-                    <span
-                      className="wa-mono"
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      {productSku}
-                    </span>
-                  </Stack>
-                  {selectedVariant && (
-                    <span className="wa-score-label">
-                      Best SEO{' '}
-                      <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
-                        {selectedVariant.seo}
-                      </span>
-                    </span>
-                  )}
-                  {selectedVariant && (
-                    <span className="wa-score-label">
-                      Voice{' '}
-                      <span className={`wa-score-label__value ${voiceColorClass(selectedVariant.voice)}`}>
-                        {selectedVariant.voice}%
-                      </span>
-                    </span>
-                  )}
-                  <span className={`wa-status-pill wa-status-pill--${rowStatusTone(issue.status)}`}>
-                    {rowStatusLabel(issue.status)}
-                  </span>
-                  <span aria-hidden="true">
-                    <Icon icon={isExpanded ? chevronUp : chevronDown} size={18} />
-                  </span>
-                </button>
-
-                {isExpanded && (
-                  <div className="wa-batch-row__body">
-                    <div className="wa-batch-cols">
-                      {/* Current column */}
-                      <div className="wa-batch-col wa-batch-col--current">
-                        <span className="wa-eyebrow">Current</span>
-                        <Text
-                          variant="body-sm"
-                          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-                        >
-                          Live on store
-                        </Text>
-                        <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                          Description
-                        </span>
-                        <Text
-                          variant="body-sm"
-                          style={{
-                            color: previousCopy
-                              ? 'var(--wpds-color-fg-content-neutral)'
-                              : 'var(--wpds-color-fg-content-neutral-weak)',
-                            whiteSpace: 'pre-wrap',
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {previousCopy || '— empty —'}
-                        </Text>
-                      </div>
-
-                      {/* Variant columns */}
-                      {(variants ?? []).map((v) => {
-                        const isSelected = selectedVariantID === v.id;
-                        // CUSTOM: variant-column click target inside a batch row. (a) WPDS has no selectable-column / radio-card component. (b) <button> wraps the column with .wa-batch-col chrome and selected state. (c) Follow-up: see CardLink composite note in Kanban.tsx.
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            className={`wa-batch-col wa-batch-col--variant${
-                              isSelected ? ' wa-batch-col--selected' : ''
-                            }`}
-                            onClick={() =>
-                              reviewable &&
-                              setSelectedVariants((prev) => ({ ...prev, [issue.id]: v.id }))
-                            }
-                            disabled={!reviewable}
-                          >
-                            <div className="wa-batch-col__head">
-                              <span
-                                className="wa-batch-col__letter"
-                                style={{
-                                  background: isSelected
-                                    ? 'var(--wpds-color-bg-interactive-brand-strong)'
-                                    : 'transparent',
-                                  color: isSelected
-                                    ? 'var(--wpds-color-fg-interactive-brand-strong)'
-                                    : 'var(--wpds-color-fg-content-neutral)',
-                                  border: isSelected
-                                    ? 'none'
-                                    : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
-                                }}
-                              >
-                                {v.id}
-                              </span>
-                              {v.recommended && (
-                                <span className="wa-agent-pick-inline">Agent pick</span>
-                              )}
-                              <span
-                                style={{
-                                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--wpds-border-radius-sm)',
-                                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                                  color: 'var(--wpds-color-fg-content-neutral)',
-                                }}
-                              >
-                                {v.label}
-                              </span>
-                              <span
-                                className={`wa-radio-mark${
-                                  isSelected ? ' wa-radio-mark--selected' : ''
-                                }`}
-                                aria-hidden="true"
-                                style={{ marginLeft: 'auto' }}
-                              >
-                                {isSelected && <Icon icon={check} size={14} />}
-                              </span>
-                            </div>
-                            <div className="wa-batch-col__scores">
-                              <span className="wa-score-label">
-                                SEO{' '}
-                                <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
-                                  {v.seo}
-                                </span>
-                              </span>
-                              <span className="wa-score-label">
-                                Voice{' '}
-                                <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
-                                  {v.voice}%
-                                </span>
-                              </span>
-                              <span className="wa-score-label">
-                                <span className="wa-score-label__value">
-                                  {v.charCount} ch
-                                </span>
-                              </span>
-                            </div>
-                            <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                              Description
-                            </span>
-                            <Text
-                              variant="body-sm"
-                              style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
-                            >
-                              {v.body}
-                            </Text>
-                            {v.note && (
-                              <div
-                                style={{
-                                  marginTop: 'var(--wpds-dimension-gap-sm)',
-                                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                                  color: 'var(--wpds-color-fg-content-neutral-weak)',
-                                  fontStyle: 'italic',
-                                  textAlign: 'left',
-                                }}
-                              >
-                                {v.note}
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Per-row footer */}
-                    <div className="wa-batch-row__footer">
-                      <Text
-                        variant="body-sm"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-                      >
-                        {!reviewable
-                          ? `Already ${issue.status === 'done' ? 'approved' : issue.status}`
-                          : selectedVariantID
-                            ? `Variant ${selectedVariantID} selected`
-                            : 'No variant selected yet — click a column above to choose'}
-                      </Text>
-                      <div className="wa-batch-row__footer-actions">
-                        <Button
-                          __next40pxDefaultSize
-                          variant="tertiary"
-                          isDestructive
-                          onClick={() => rejectRow(issue.id)}
-                          disabled={!reviewable || rowBusy || busy !== null}
-                        >
-                          {busy === `reject-row:${issue.id}` ? 'Rejecting…' : 'Reject'}
-                        </Button>
-                        <Button
-                          __next40pxDefaultSize
-                          variant="secondary"
-                          onClick={() => approveRow(issue.id)}
-                          disabled={!reviewable || !selectedVariantID || rowBusy || busy !== null}
-                        >
-                          {busy === `approve-row:${issue.id}`
-                            ? 'Applying…'
-                            : selectedVariantID
-                              ? `Approve Variant ${selectedVariantID}`
-                              : 'Approve selected'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </Card.Root>
-            );
-          })}
-        </Stack>
+        {/* Branch body on first child's proposal type. Marketing keeps the
+            existing variant-accordion + Marketing KPI strip; pricing renders
+            BatchProductCard rows with a pricing KPI strip. */}
+        {isPricingBatch ? renderPricingBody(data) : renderMarketingBody()}
 
         {actionMsg && (
           <div style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
@@ -723,7 +742,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               onClick={rejectAll}
               disabled={pendingCount === 0 || busy !== null}
             >
-              {busy === 'reject-all' ? 'Rejecting…' : 'Reject all'}
+              {busy === 'reject-all'
+                ? 'Rejecting…'
+                : isPricingBatch
+                  ? 'Dismiss batch'
+                  : 'Reject all'}
             </Button>
             <Button variant="tertiary" __next40pxDefaultSize onClick={() => nav('/')}>
               Cancel
@@ -734,7 +757,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               onClick={approveAll}
               disabled={pendingCount === 0 || busy !== null}
             >
-              {busy === 'approve-all' ? 'Applying to store…' : 'Approve & apply to store'}
+              {busy === 'approve-all'
+                ? 'Applying to store…'
+                : isPricingBatch
+                  ? `Approve & apply ${data.issues.length} prices to store`
+                  : 'Approve & apply to store'}
             </Button>
           </div>
         </div>
@@ -811,3 +838,103 @@ function Counter({ label, value, tone }: CounterProps) {
   );
 }
 
+// Pricing-shape body: KPI strip aggregated across the batch + a vertical
+// list of BatchProductCards. Pure: no closure over component state — the
+// Approve / Reject wiring still flows through the sticky action bar in the
+// parent. Task 7 will refine the action-bar copy for pricing batches.
+function renderPricingBody(data: BatchDetail) {
+  const products: BatchProduct[] = data.issues.map((iwp) => {
+    const t = (iwp.proposal?.target ?? {}) as Record<string, unknown>;
+    const direction: BatchProduct['direction'] =
+      t.direction === 'increase' || t.direction === 'decrease'
+        ? t.direction
+        : 'flat';
+    return {
+      productId: typeof t.product_id === 'number' ? t.product_id : 0,
+      sku: typeof t.product_sku === 'string' ? t.product_sku : '',
+      name: typeof t.product_name === 'string' ? t.product_name : iwp.issue.title,
+      categoryPath:
+        typeof t.product_category === 'string' ? t.product_category : undefined,
+      previousPrice: typeof t.previous_price === 'number' ? t.previous_price : 0,
+      proposedPrice: typeof t.proposed_price === 'number' ? t.proposed_price : 0,
+      percentChange: typeof t.percent_change === 'number' ? t.percent_change : 0,
+      direction,
+      currency: typeof t.currency === 'string' ? t.currency : 'USD',
+      rationale: iwp.proposal?.content ?? '',
+      sources: Array.isArray(t.sources) ? (t.sources as PriceSource[]) : [],
+    };
+  });
+
+  // Aggregate KPIs across the batch.
+  const totalDelta = products.reduce(
+    (acc, p) => acc + (p.proposedPrice - p.previousPrice),
+    0,
+  );
+  const totalPct =
+    products.length > 0
+      ? products.reduce((acc, p) => acc + p.percentChange, 0) / products.length
+      : 0;
+  const uniqueSourceURLs = new Set(
+    products.flatMap((p) => p.sources.map((s) => s.url)),
+  );
+  const currency = products[0]?.currency ?? 'USD';
+  const sym = currencySymbol(currency);
+  const totalToneCalc: 'success' | 'warning' = totalDelta >= 0 ? 'success' : 'warning';
+  const medianToneCalc: 'neutral' | 'warning' | 'success' =
+    Math.abs(totalPct) < 5 ? 'neutral' : totalPct >= 0 ? 'warning' : 'success';
+
+  return (
+    <Stack direction="column" gap="lg">
+      <div className="wa-kpi-row">
+        <Kpi
+          label="Products"
+          value={String(products.length)}
+          hint={products[0]?.categoryPath ?? ''}
+        />
+        <Kpi
+          label="Total impact"
+          value={`${totalDelta >= 0 ? '+' : '−'}${sym}${Math.abs(totalDelta).toFixed(2)}`}
+          tone={totalToneCalc}
+          hint="across batch"
+        />
+        <Kpi
+          label="Median change"
+          value={`${totalPct >= 0 ? '+' : ''}${totalPct.toFixed(1)}%`}
+          tone={medianToneCalc}
+          hint="median across batch"
+        />
+        <Kpi
+          label="Sources"
+          value={String(uniqueSourceURLs.size)}
+          tone={uniqueSourceURLs.size >= 3 ? 'success' : 'caution'}
+          hint="comparable products"
+        />
+      </div>
+
+      <Stack direction="column" gap="sm">
+        {products.map((p, idx) => (
+          <BatchProductCard
+            key={p.productId || idx}
+            product={p}
+            defaultExpanded={idx === 0}
+          />
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
+
+function currencySymbol(code: string): string {
+  switch (code.toUpperCase()) {
+    case 'USD':
+    case 'CAD':
+    case 'AUD':
+      return '$';
+    case 'GBP':
+      return '£';
+    case 'EUR':
+      return '€';
+    default:
+      return '';
+  }
+}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
 
 // The lenient UnmarshalJSON handles three real drifts we've seen from the
@@ -155,5 +157,140 @@ func TestExtractJSONObject_PrefixSuffixTolerated(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------- bucketing
+
+// bucketTestProduct is a lightweight fixture row for findLargestEligibleBucket
+// tests. The adapter below converts it into the real `product` struct,
+// matching whatever category shape the helper consumes.
+type bucketTestProduct struct {
+	id       int
+	sku      string
+	category string
+}
+
+func makeBucketProducts(in []bucketTestProduct) []product {
+	out := make([]product, len(in))
+	for i, p := range in {
+		out[i] = product{ID: p.id, SKU: p.sku}
+		if p.category != "" {
+			out[i].Categories = []struct {
+				Name string `json:"name"`
+			}{{Name: p.category}}
+		}
+	}
+	return out
+}
+
+func TestFindLargestEligibleBucket_ReturnsBucketWhenAtOrAboveThreshold(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{3, "SKU-003", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+		{101, "SKU-101", "Apparel"},
+	})
+	got := findLargestEligibleBucket(products, 3)
+	if got == nil {
+		t.Fatalf("expected bucket; got nil")
+	}
+	if got.Category != "Home & Textiles" {
+		t.Errorf("Category=%q, want Home & Textiles", got.Category)
+	}
+	if len(got.Products) != 3 {
+		t.Errorf("len(Products)=%d, want 3", len(got.Products))
+	}
+}
+
+func TestFindLargestEligibleBucket_NilWhenNoneAtThreshold(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+	})
+	if got := findLargestEligibleBucket(products, 3); got != nil {
+		t.Errorf("expected nil (no bucket >= 3); got Category=%q size=%d", got.Category, len(got.Products))
+	}
+}
+
+func TestFindLargestEligibleBucket_PicksLargestOnTie_AlphabeticalBreak(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", "Home & Textiles"},
+		{2, "SKU-002", "Home & Textiles"},
+		{3, "SKU-003", "Home & Textiles"},
+		{100, "SKU-100", "Apparel"},
+		{101, "SKU-101", "Apparel"},
+		{102, "SKU-102", "Apparel"},
+	})
+	got := findLargestEligibleBucket(products, 3)
+	if got == nil {
+		t.Fatalf("expected bucket; got nil")
+	}
+	// Both buckets have 3; deterministic tie-break = alphabetical.
+	if got.Category != "Apparel" {
+		t.Errorf("Category=%q, want Apparel (alphabetical first)", got.Category)
+	}
+}
+
+func TestFindLargestEligibleBucket_IgnoresEmptyCategory(t *testing.T) {
+	products := makeBucketProducts([]bucketTestProduct{
+		{1, "SKU-001", ""},
+		{2, "SKU-002", ""},
+		{3, "SKU-003", ""},
+		{100, "SKU-100", "Apparel"},
+	})
+	if got := findLargestEligibleBucket(products, 3); got != nil {
+		t.Errorf("uncategorized products should never form a batch; got bucket=%q", got.Category)
+	}
+}
+
+// ---------------------------------------------------------------- packAsBatch
+
+// makeDraft is a helper for test drafts.
+func makeDraft(sku string, productID int, category string) personas.Drafted {
+	return personas.Drafted{
+		Title:           "Price change · " + sku,
+		ProposalType:    "product_price_change",
+		Priority:        "medium",
+		ProposalContent: "rationale",
+		Target: map[string]any{
+			"product_id":       productID,
+			"product_sku":      sku,
+			"product_category": category,
+			"previous_price":   50.0,
+			"proposed_price":   45.0,
+			"percent_change":   -10.0,
+			"direction":        "decrease",
+			"currency":         "USD",
+		},
+	}
+}
+
+func TestPackAsBatch_FillsBatchFields(t *testing.T) {
+	drafts := []personas.Drafted{
+		makeDraft("SKU-001", 1, "Home & Textiles"),
+		makeDraft("SKU-002", 2, "Home & Textiles"),
+		makeDraft("SKU-003", 3, "Home & Textiles"),
+	}
+	packed := packAsBatch(drafts, "Home & Textiles")
+	if packed.BatchTitle == "" {
+		t.Error("BatchTitle should be set")
+	}
+	if !strings.Contains(packed.BatchTitle, "Home & Textiles") {
+		t.Errorf("BatchTitle should name the category; got %q", packed.BatchTitle)
+	}
+	if !strings.Contains(packed.BatchTitle, "3 products") {
+		t.Errorf("BatchTitle should show product count; got %q", packed.BatchTitle)
+	}
+	if packed.BatchIntent != "pricing_bulk" {
+		t.Errorf("BatchIntent=%q, want pricing_bulk", packed.BatchIntent)
+	}
+	if len(packed.BatchSiblings) != 2 {
+		t.Errorf("BatchSiblings length=%d, want 2 (primary + 2 siblings = 3 total)", len(packed.BatchSiblings))
+	}
+	if got := packed.Target["product_sku"]; got != "SKU-001" {
+		t.Errorf("primary should be the first draft; got product_sku=%v", got)
 	}
 }
