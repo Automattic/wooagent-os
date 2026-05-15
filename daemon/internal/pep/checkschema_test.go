@@ -138,6 +138,9 @@ func TestCheckSchema_DeniesWrongType(t *testing.T) {
 	if dec.Reason != ReasonInvalidArguments {
 		t.Errorf("reason = %q, want %q", dec.Reason, ReasonInvalidArguments)
 	}
+	if mcpc.calls != 0 {
+		t.Errorf("denied call should not reach mcp, got %d calls", mcpc.calls)
+	}
 }
 
 func TestCheckSchema_DeniesOnCompileFailure(t *testing.T) {
@@ -159,6 +162,9 @@ func TestCheckSchema_DeniesOnCompileFailure(t *testing.T) {
 	}
 	if dec.Reason != ReasonSchemaCompileError {
 		t.Errorf("reason = %q, want %q", dec.Reason, ReasonSchemaCompileError)
+	}
+	if mcpc.calls != 0 {
+		t.Errorf("denied call should not reach mcp, got %d calls", mcpc.calls)
 	}
 }
 
