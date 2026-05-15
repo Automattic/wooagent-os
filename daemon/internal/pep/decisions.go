@@ -3,11 +3,12 @@
 // Every store-mutating MCP call routes through pep.Invoke; the rule "no
 // orchestrator → MCP shortcut" is enforced by making this the only path.
 //
-// V1 ships two of the six checks plus the chain-of-identity audit log. The
-// other four checks (schema validation, policy predicates, budgets, scope
-// sufficiency) are stubbed pass-through with TODO links to the post-V1 phase
-// that lights them up. Defining the full surface in V1 means each later phase
-// is additive, not refactor-y.
+// Phase 2 ships checks 1–3 and 6 (trust state, persona scope, schema, scope
+// sufficiency) plus the chain-of-identity audit log. The remaining two —
+// policy predicates (4) and budgets (5) — are still stubbed pass-through
+// with TODO(phase-2) markers; each needs its own design surface (operator
+// policy admin UI; per-persona counter store). Defining the full check
+// surface up front means each later phase is additive, not refactor-y.
 package pep
 
 import (
@@ -71,10 +72,10 @@ type Request struct {
 	PromptHash string
 
 	// Source declares whether this invocation originated from an operator
-	// action (Approve button) or an autonomous agent path. checkScope
-	// Sufficiency uses Source to allow operator-mediated calls to apply
-	// against propose-scoped abilities while keeping the gate strict for
-	// agent paths. An empty or unrecognized Source is denied outright.
+	// action (Approve button) or an autonomous agent path.
+	// checkScopeSufficiency uses Source to allow operator-mediated calls to
+	// apply against propose-scoped abilities while keeping the gate strict
+	// for agent paths. An empty or unrecognized Source is denied outright.
 	Source Source
 }
 
