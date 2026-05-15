@@ -496,6 +496,7 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		Ability: dispatch.ability,
 		Args:    params,
 		Intent:  pep.IntentApply,
+		Source:  pep.SourceOperator,
 		IssueID: issueID,
 		BatchID: batchIDStr,
 	})
