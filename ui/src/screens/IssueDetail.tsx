@@ -26,6 +26,7 @@ import {
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import Kpi from '../components/Kpi';
+import type { KpiTone } from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
 import DismissDialog from '../components/DismissDialog';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -62,6 +63,19 @@ function voiceColorClass(score: number): string {
   if (score >= 90) return 'wa-score-label__value--good';
   if (score >= 75) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
+}
+
+// Score → Kpi tone. SEO uses success/caution/warning. Voice uses brand
+// (matches the Figma frame's blue for high-match voice) / caution / warning.
+function seoToneBand(score: number): KpiTone {
+  if (score >= 80) return 'success';
+  if (score >= 70) return 'caution';
+  return 'warning';
+}
+function voiceToneBand(score: number): KpiTone {
+  if (score >= 90) return 'brand';
+  if (score >= 75) return 'caution';
+  return 'warning';
 }
 
 const CURRENCY_SYMBOL: Record<string, string> = {
@@ -384,12 +398,14 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             label="Brand voice match"
             value={`${activeVariant?.voice ?? 0}%`}
             score={activeVariant?.voice ?? 0}
+            tone={voiceToneBand(activeVariant?.voice ?? 0)}
             hint="vs. your voice model"
           />
           <Kpi
             label="SEO score"
             value={String(activeVariant?.seo ?? 0)}
             score={activeVariant?.seo ?? 0}
+            tone={seoToneBand(activeVariant?.seo ?? 0)}
             hint="Yoast · out of 100"
           />
           <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
