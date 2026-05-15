@@ -496,6 +496,7 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		Ability: dispatch.ability,
 		Args:    params,
 		Intent:  pep.IntentApply,
+		Source:  pep.SourceOperator,
 		IssueID: issueID,
 		BatchID: batchIDStr,
 	})
@@ -593,6 +594,8 @@ func writePEPDenial(w http.ResponseWriter, reason pep.ReasonCode) {
 		writeError(w, http.StatusUnprocessableEntity, string(reason), pepDenialMessage(reason))
 	case pep.ReasonBudgetExceeded:
 		writeError(w, http.StatusTooManyRequests, string(reason), pepDenialMessage(reason))
+	case pep.ReasonSchemaCompileError:
+		writeError(w, http.StatusInternalServerError, string(reason), pepDenialMessage(reason))
 	default:
 		writeError(w, http.StatusForbidden, "permission_denied", "PEP denied the call")
 	}
@@ -612,6 +615,8 @@ func pepDenialMessage(reason pep.ReasonCode) string {
 		return "arguments tripped an operator-configured policy"
 	case pep.ReasonBudgetExceeded:
 		return "persona is over its daily budget"
+	case pep.ReasonSchemaCompileError:
+		return "the local schema cache for this ability is invalid — try re-discovering abilities for this store"
 	default:
 		return "PEP denied the call"
 	}

@@ -100,7 +100,9 @@ const abilitiesDDL = `
 CREATE TABLE abilities (
     name        TEXT PRIMARY KEY,
     trust_state TEXT NOT NULL DEFAULT 'new',
-    revoked_at  TEXT
+    revoked_at  TEXT,
+    schema_json TEXT,
+    schema_hash TEXT
 );`
 
 // auditRow is a thin read helper so tests can assert on the row that was
@@ -125,6 +127,7 @@ func TestInvoke_AllowedSuccess(t *testing.T) {
 		Ability: "wooagent-products/update",
 		Args:    map[string]any{"id": 819, "description": "x"},
 		Intent:  IntentApply,
+		Source:  SourceOperator,
 		IssueID: "abc",
 	})
 	if err != nil {
@@ -212,6 +215,7 @@ func TestInvoke_OperatorTrustedBypassesTrustCheck(t *testing.T) {
 		Persona: manifest.PersonaMarketing,
 		Ability: "custom-plugin/weird-ability",
 		Intent:  IntentApply,
+		Source:  SourceOperator,
 	})
 	if err != nil {
 		t.Fatalf("invoke: %v", err)
@@ -228,6 +232,7 @@ func TestInvoke_MCPCallError(t *testing.T) {
 		Persona: manifest.PersonaMarketing,
 		Ability: "wooagent-products/update",
 		Intent:  IntentApply,
+		Source:  SourceOperator,
 	})
 	if err == nil {
 		t.Fatal("expected error from mcp call")
@@ -255,6 +260,7 @@ func TestInvoke_NoMCPClient(t *testing.T) {
 		Persona: manifest.PersonaMarketing,
 		Ability: "wooagent-products/update",
 		Intent:  IntentApply,
+		Source:  SourceOperator,
 	})
 	if !errors.Is(err, ErrMCPNotConfigured) {
 		t.Fatalf("expected ErrMCPNotConfigured, got %v", err)

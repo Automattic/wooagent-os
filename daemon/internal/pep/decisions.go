@@ -3,11 +3,12 @@
 // Every store-mutating MCP call routes through pep.Invoke; the rule "no
 // orchestrator → MCP shortcut" is enforced by making this the only path.
 //
-// V1 ships two of the six checks plus the chain-of-identity audit log. The
-// other four checks (schema validation, policy predicates, budgets, scope
-// sufficiency) are stubbed pass-through with TODO links to the post-V1 phase
-// that lights them up. Defining the full surface in V1 means each later phase
-// is additive, not refactor-y.
+// Phase 2 ships checks 1–3 and 6 (trust state, persona scope, schema, scope
+// sufficiency) plus the chain-of-identity audit log. The remaining two —
+// policy predicates (4) and budgets (5) — are still stubbed pass-through
+// with TODO(phase-2) markers; each needs its own design surface (operator
+// policy admin UI; per-persona counter store). Defining the full check
+// surface up front means each later phase is additive, not refactor-y.
 package pep
 
 import (
@@ -24,6 +25,20 @@ const (
 	IntentRead    Intent = "read"
 	IntentPropose Intent = "propose"
 	IntentApply   Intent = "apply"
+)
+
+// Source declares who originated the call. Operator-mediated calls (the
+// Approve button) bypass strict scope sufficiency because the operator IS
+// the apply step the persona proposed. Agent-mediated calls enforce
+// Intent <= Scope strictly. The zero value Source("") and any unrecognized
+// value are denied outright — callers must set Source explicitly to either
+// SourceOperator or SourceAgent, so a future caller that forgets cannot
+// quietly bypass the gate.
+type Source string
+
+const (
+	SourceOperator Source = "operator"
+	SourceAgent    Source = "agent"
 )
 
 // Request is the input to Invoke. Fields cluster into three groups:
@@ -55,6 +70,13 @@ type Request struct {
 	// LLM provenance. Empty when the call is operator-driven.
 	Model      string
 	PromptHash string
+
+	// Source declares whether this invocation originated from an operator
+	// action (Approve button) or an autonomous agent path.
+	// checkScopeSufficiency uses Source to allow operator-mediated calls to
+	// apply against propose-scoped abilities while keeping the gate strict
+	// for agent paths. An empty or unrecognized Source is denied outright.
+	Source Source
 }
 
 // Decision is the result of a check pipeline. When Allowed is true, AuditID
@@ -103,6 +125,12 @@ const (
 	// privileged than the ability's manifest Scope (e.g. propose) allows.
 	// Check 6 — Phase 2.
 	ReasonScopeInsufficient ReasonCode = "scope_insufficient"
+
+	// ReasonSchemaCompileError means the ability's cached input_schema
+	// could not be compiled by the JSON Schema validator, or the underlying
+	// lookup failed. Distinct from ReasonInvalidArguments so operators can
+	// tell cache rot / infra failure from caller mistakes. Check 3.
+	ReasonSchemaCompileError ReasonCode = "schema_compile_error"
 )
 
 // Outcome is recorded on every audit row. Final state when Invoke returns.

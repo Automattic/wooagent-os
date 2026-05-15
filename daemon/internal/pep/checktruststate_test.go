@@ -127,7 +127,7 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			if err != nil {
 				t.Fatalf("manifest lookup: %v", err)
 			}
-			p := &PEP{manifest: lookup, db: db}
+			p := &PEP{manifest: lookup, db: db, schemas: &schemaCache{}}
 			got := p.checkTrustState(context.Background(), Request{Ability: tc.ability})
 			if got != tc.wantReason {
 				t.Fatalf("checkTrustState(%q) = %q; want %q", tc.ability, got, tc.wantReason)
