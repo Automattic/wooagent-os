@@ -26,6 +26,19 @@ const (
 	IntentApply   Intent = "apply"
 )
 
+// Source declares who originated the call. Operator-mediated calls (the
+// Approve button) bypass strict scope sufficiency because the operator IS
+// the apply step the persona proposed. Agent-mediated calls enforce
+// Intent <= Scope strictly. The zero value Source("") is treated as
+// SourceAgent in checks — deny-by-default for any caller that forgets to
+// set Source.
+type Source string
+
+const (
+	SourceOperator Source = "operator"
+	SourceAgent    Source = "agent"
+)
+
 // Request is the input to Invoke. Fields cluster into three groups:
 //   - what to do: Persona, Ability, Args, Intent
 //   - where it came from (chain-of-identity): PlanID, TaskID, StepID, IssueID
@@ -55,6 +68,13 @@ type Request struct {
 	// LLM provenance. Empty when the call is operator-driven.
 	Model      string
 	PromptHash string
+
+	// Source declares whether this invocation originated from an operator
+	// action (Approve button) or an autonomous agent path. checkScope
+	// Sufficiency uses Source to allow operator-mediated calls to apply
+	// against propose-scoped abilities while keeping the gate strict for
+	// agent paths. Empty Source is treated as SourceAgent.
+	Source Source
 }
 
 // Decision is the result of a check pipeline. When Allowed is true, AuditID
@@ -103,6 +123,12 @@ const (
 	// privileged than the ability's manifest Scope (e.g. propose) allows.
 	// Check 6 — Phase 2.
 	ReasonScopeInsufficient ReasonCode = "scope_insufficient"
+
+	// ReasonSchemaCompileError means the ability's cached input_schema
+	// could not be compiled by the JSON Schema validator, or the underlying
+	// lookup failed. Distinct from ReasonInvalidArguments so operators can
+	// tell cache rot / infra failure from caller mistakes. Check 3.
+	ReasonSchemaCompileError ReasonCode = "schema_compile_error"
 )
 
 // Outcome is recorded on every audit row. Final state when Invoke returns.
