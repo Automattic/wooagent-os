@@ -614,7 +614,7 @@ func pepDenialMessage(reason pep.ReasonCode) string {
 	case pep.ReasonPolicyViolation:
 		return "arguments tripped an operator-configured policy"
 	case pep.ReasonBudgetExceeded:
-		return "persona is over its daily budget"
+		return "persona is over its daily budget — counters reset at local midnight"
 	case pep.ReasonSchemaCompileError:
 		return "the local schema cache for this ability is invalid — try re-discovering abilities for this store"
 	default:
