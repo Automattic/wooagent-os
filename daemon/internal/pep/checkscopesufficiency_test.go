@@ -15,7 +15,7 @@ func pepWithManifest(t *testing.T, entries []manifest.Entry) *PEP {
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	return &PEP{manifest: lookup}
+	return &PEP{manifest: lookup, schemas: &schemaCache{}}
 }
 
 func TestCheckScopeSufficiency_Table(t *testing.T) {
