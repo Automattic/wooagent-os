@@ -16,6 +16,7 @@ import { KindBadge } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 interface Props {
   connection: Connection;
@@ -222,31 +223,41 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     };
   }, [data]);
 
+  const batchLabel = id ? `BATCH·${id.slice(0, 6).toUpperCase()}` : 'Batch';
+
   if (error) {
     return (
       <Page
-        title="Batch review"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: batchLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Notice.Root intent="error">
-          <Notice.Description>
-            Failed to load batch: {error} <Link to="/">Back to board</Link>
-          </Notice.Description>
-        </Notice.Root>
+        <div className="wa-subpage-content">
+          <Notice.Root intent="error">
+            <Notice.Description>
+              Failed to load batch: {error} <Link to="/">Back to board</Link>
+            </Notice.Description>
+          </Notice.Root>
+        </div>
       </Page>
     );
   }
   if (!data) {
     return (
       <Page
-        title="Batch review"
+        breadcrumbs={
+          <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: batchLabel }]} />
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
-        <Stack direction="row" gap="sm" align="center">
-          <Spinner /> <Text variant="body-sm">Loading batch…</Text>
-        </Stack>
+        <div className="wa-subpage-content">
+          <Stack direction="row" gap="sm" align="center">
+            <Spinner /> <Text variant="body-sm">Loading batch…</Text>
+          </Stack>
+        </div>
       </Page>
     );
   }
@@ -260,48 +271,37 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   return (
     <div className="wa-detail-shell">
       <Page
-        title="Batch review"
+        breadcrumbs={
+          <Breadcrumbs
+            items={[
+              { label: 'Board', to: '/' },
+              { label: `BATCH·${batch.id.slice(0, 6).toUpperCase()}` },
+            ]}
+          />
+        }
+        badges={
+          <>
+            {batch.intent && (
+              <span
+                style={{
+                  fontSize: 'var(--wpds-typography-font-size-xs)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--wpds-border-radius-sm)',
+                  background: 'var(--wpds-color-bg-surface-info-weak)',
+                  color: 'var(--wpds-color-fg-interactive-brand)',
+                }}
+              >
+                {batch.intent}
+              </span>
+            )}
+            <KindBadge kind="content" />
+          </>
+        }
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
         className="wa-detail-shell-page"
       >
-        {/* Breadcrumb */}
-        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
-          <Link
-            to="/"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-            }}
-          >
-            ← Board
-          </Link>
-          <span
-            className="wa-mono"
-            style={{
-              fontSize: 'var(--wpds-typography-font-size-sm)',
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-            }}
-          >
-            BATCH·{batch.id.slice(0, 6).toUpperCase()}
-          </span>
-          {batch.intent && (
-            <span
-              style={{
-                fontSize: 'var(--wpds-typography-font-size-xs)',
-                padding: '2px 8px',
-                borderRadius: 'var(--wpds-border-radius-sm)',
-                background: 'var(--wpds-color-bg-surface-info-weak)',
-                color: 'var(--wpds-color-fg-interactive-brand)',
-              }}
-            >
-              {batch.intent}
-            </span>
-          )}
-          {/* Marketing-content kind pill — phase-1 default. */}
-          <KindBadge kind="content" />
-        </Stack>
-
+        <div className="wa-subpage-content">
         {/* Persona eyebrow */}
         <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
           <PersonaAvatar persona={personaKey} size="md" />
@@ -317,7 +317,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         {/* Title + subhead */}
         <Text
           variant="heading-2xl"
-          render={<h1 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
         >
           {batch.title}
         </Text>
@@ -661,6 +661,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             </Notice.Root>
           </div>
         )}
+        </div>
       </Page>
 
       {/* Sticky bottom action bar — top-level Approve all / Reject all. */}
