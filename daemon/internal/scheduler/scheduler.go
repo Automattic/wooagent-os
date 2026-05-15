@@ -8,6 +8,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
@@ -27,6 +28,9 @@ type Scheduler struct {
 	Backoff     []time.Duration
 	MaxAttempts int
 	Out         io.Writer
+	// Budget is passed through to the Worker so it can skip over-budget
+	// personas before invoking the LLM. Nil disables the pre-tick gate.
+	Budget *pep.BudgetGate
 
 	queue  *Queue
 	loop   *Loop
@@ -79,6 +83,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		Now:         s.Now,
 		Backoff:     s.Backoff,
 		MaxAttempts: s.MaxAttempts,
+		Budget:      s.Budget,
 	}
 	s.loop = &Loop{
 		DB:        s.Store.DB,

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -130,7 +132,14 @@ func newRunCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("index manifest: %w", err)
 			}
-			budgetGate := pep.NewBudgetGate(st.DB, pep.DefaultThresholds())
+			thresholds := pep.DefaultThresholds()
+			overlayPath := filepath.Join(paths.Root, "budgets.json")
+			if loaded, err := pep.LoadBudgetOverlay(overlayPath, thresholds, slog.Default()); err != nil {
+				slog.Default().Warn("budget overlay failed to load; using defaults", "path", overlayPath, "err", err)
+			} else {
+				thresholds = loaded
+			}
+			budgetGate := pep.NewBudgetGate(st.DB, thresholds)
 			var pepInstance *pep.PEP
 			if mcpClient != nil {
 				pepInstance = pep.New(lookup, mcpClient, st.DB, budgetGate)
@@ -180,7 +189,8 @@ func newRunCmd() *cobra.Command {
 						Env:      env,
 						Recorder: telemetry.NewSQLiteRecorder(st.DB, budgetGate),
 					},
-					Out: out,
+					Out:    out,
+					Budget: budgetGate,
 				}
 				if err := sch.Start(ctx); err != nil {
 					return fmt.Errorf("start scheduler: %w", err)
