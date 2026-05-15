@@ -56,11 +56,12 @@ func (w *Worker) RunOnce(ctx context.Context) (ran bool, err error) {
 	// existing skip path in executeAndRecord — terminal status=Skipped,
 	// reason describes the budget block.
 	if w.Budget != nil {
-		reason, _ := w.Budget.Check(ctx, manifest.Persona(r.Persona))
-		if reason != "" {
+		reason, checkErr := w.Budget.Check(ctx, manifest.Persona(r.Persona))
+		if checkErr != nil || reason != "" {
 			slog.Info("scheduler skipped tick over budget",
 				"persona", r.Persona,
 				"reason", string(reason),
+				"err", checkErr,
 			)
 			end := w.Now()
 			_ = w.Queue.MarkTerminal(ctx, MarkTerminalParams{
