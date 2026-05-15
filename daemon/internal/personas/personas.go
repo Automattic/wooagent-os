@@ -141,10 +141,13 @@ type Drafted struct {
 }
 
 // Result is what RunAndPersist returns. IssueID is empty when Skipped or
-// when an error was returned.
+// when an error was returned. BatchID is set instead of IssueID when the
+// persona emitted a batch (BatchSiblings non-nil) — N+1 child issues were
+// inserted, so a single IssueID would not be meaningful.
 type Result struct {
 	Persona    string
 	IssueID    string
+	BatchID    string
 	Skipped    bool
 	SkipReason string
 }
@@ -338,6 +341,30 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		return res, nil
 	}
 
+	// Batch branch: if the persona returned BatchSiblings, persist a single
+	// batches row + N+1 child issues atomically. The primary Drafted becomes
+	// the first child; each sibling becomes one of the remaining N. All
+	// children share the new batch_id. Used by personas that group related
+	// proposals (e.g. Pricing emitting a category run when N>=3 products are
+	// flagged) so the operator can review them as one unit.
+	if len(d.BatchSiblings) > 0 {
+		if d.BatchTitle == "" || d.BatchIntent == "" {
+			recordTurn(ctx, deps.Recorder, tracker, "", d)
+			return res, fmt.Errorf("BatchSiblings set but BatchTitle or BatchIntent empty")
+		}
+		batchID, err := insertBatch(ctx, deps.Store, slug, d)
+		if err != nil {
+			recordTurn(ctx, deps.Recorder, tracker, "", d)
+			return res, fmt.Errorf("insert batch: %w", err)
+		}
+		// Record the turn against the *primary* child's content, mirroring
+		// the single-issue path. The batch itself doesn't carry proposal
+		// content; the children do.
+		recordTurn(ctx, deps.Recorder, tracker, "", d)
+		res.BatchID = batchID
+		return res, nil
+	}
+
 	id, err := insertIssue(ctx, deps.Store, slug, d)
 	if err != nil {
 		recordTurn(ctx, deps.Recorder, tracker, "", d)
@@ -399,6 +426,76 @@ func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted
 		return "", err
 	}
 	return id, nil
+}
+
+// insertBatch creates one batches row and N+1 child issues in a single
+// transaction. The primary Drafted becomes the first child; each entry of
+// d.BatchSiblings becomes another. All children share the returned batch
+// id. Atomicity matters here — a partially-inserted batch (some children
+// but not others) would surface in the UI as an undercount, so we wrap the
+// whole thing in BEGIN/COMMIT and let the deferred Rollback unwind on any
+// failure.
+func insertBatch(ctx context.Context, st *store.Store, persona string, d Drafted) (string, error) {
+	batchID := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	tx, err := st.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO batches(id, title, persona, intent, source_run_id, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		batchID, d.BatchTitle, persona, d.BatchIntent, "", now, now,
+	); err != nil {
+		return "", fmt.Errorf("insert batches: %w", err)
+	}
+
+	// Primary Drafted is the first child; siblings follow.
+	children := make([]Drafted, 0, 1+len(d.BatchSiblings))
+	children = append(children, d)
+	children = append(children, d.BatchSiblings...)
+
+	for i, child := range children {
+		if err := insertChildIssue(ctx, tx, batchID, persona, child, now); err != nil {
+			return "", fmt.Errorf("insert child %d/%d: %w", i+1, len(children), err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit tx: %w", err)
+	}
+	return batchID, nil
+}
+
+// insertChildIssue inserts a single issue row tagged with batch_id. Mirrors
+// insertIssue's column shape (priority defaults to "medium", target is
+// nil-safe via sql.NullString) so unbatched and batched children look
+// identical to downstream readers — the only difference is the batch_id
+// column.
+func insertChildIssue(ctx context.Context, tx *sql.Tx, batchID string, persona string, d Drafted, now string) error {
+	id := uuid.NewString()
+	priority := d.Priority
+	if priority == "" {
+		priority = "medium"
+	}
+
+	var targetJSON sql.NullString
+	if d.Target != nil {
+		b, err := json.Marshal(d.Target)
+		if err != nil {
+			return fmt.Errorf("marshal target: %w", err)
+		}
+		targetJSON = sql.NullString{String: string(b), Valid: true}
+	}
+
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, d.Title, d.Description, persona, "in_review", priority, now, now,
+		d.ProposalType, d.ProposalContent, targetJSON, batchID,
+	)
+	return err
 }
 
 // ---- Within-run iteration ----
