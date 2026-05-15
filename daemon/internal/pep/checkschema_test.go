@@ -74,6 +74,27 @@ func TestCheckSchema_PassThroughWhenSchemaJSONEmpty(t *testing.T) {
 	}
 }
 
+func TestCheckSchema_PassThroughWhenEnvelopeLacksInputSchema(t *testing.T) {
+	mcpc := &fakeMCP{result: mcp.ToolCallResult{Content: []mcp.ContentPart{{Type: "text", Text: `{"ok":true}`}}}}
+	p, db := newTestPEP(t, mcpc)
+	// Envelope present but contains no "input_schema" key — compileOrGet
+	// returns (nil, nil) and the check should pass through.
+	insertAbility(t, db, "wooagent-products/update", "trusted", `{"name":"wooagent-products/update"}`, "h1")
+	dec, _, err := p.Invoke(context.Background(), Request{
+		Persona: manifest.PersonaMarketing,
+		Ability: "wooagent-products/update",
+		Args:    map[string]any{"id": 1},
+		Intent:  IntentApply,
+		Source:  SourceOperator,
+	})
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if !dec.Allowed {
+		t.Errorf("expected allowed (envelope without input_schema passes through), got: %s", dec.Reason)
+	}
+}
+
 func TestCheckSchema_AllowsValidArgs(t *testing.T) {
 	mcpc := &fakeMCP{result: mcp.ToolCallResult{Content: []mcp.ContentPart{{Type: "text", Text: `{"ok":true}`}}}}
 	p, db := newTestPEP(t, mcpc)
