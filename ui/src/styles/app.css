@@ -106,9 +106,6 @@ a {
   text-transform: uppercase;
   color: var(--wpds-color-fg-content-neutral-weak);
 }
-.wa-eyebrow--persona {
-  color: var(--wa-persona-mk-ink);
-}
 
 .wa-tabular {
   font-variant-numeric: tabular-nums;
