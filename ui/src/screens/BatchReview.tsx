@@ -602,8 +602,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
               {personaLabel}
             </strong>{' '}
-            proposes content · {relativeTime(batch.updated_at)} ·{' '}
-            <span className="wa-mono">Claude Sonnet 4.6</span>
+            {isPricingBatch ? 'proposes a pricing run' : 'proposes content'} ·{' '}
+            {relativeTime(batch.updated_at)} ·{' '}
+            <span className="wa-mono">
+              {isPricingBatch ? 'Claude Haiku 4.5 · web_search' : 'Claude Sonnet 4.6'}
+            </span>
           </Text>
         </Stack>
 
@@ -622,9 +625,9 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             marginBottom: 'var(--wpds-dimension-gap-xl)',
           }}
         >
-          Three voice variants per product. Pick one, approve, and the agent
-          writes it straight to WooCommerce. The previous copy is snapshotted
-          — reversible from the Done column.
+          {isPricingBatch
+            ? 'Review every product in this run. Approve to apply all proposed price changes to your store; the previous prices are snapshotted — reversible from the Done column.'
+            : 'Three voice variants per product. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
         </Text>
 
         {/* Counter strip */}
