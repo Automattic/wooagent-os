@@ -742,7 +742,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               onClick={rejectAll}
               disabled={pendingCount === 0 || busy !== null}
             >
-              {busy === 'reject-all' ? 'Rejecting…' : 'Reject all'}
+              {busy === 'reject-all'
+                ? 'Rejecting…'
+                : isPricingBatch
+                  ? 'Dismiss batch'
+                  : 'Reject all'}
             </Button>
             <Button variant="tertiary" __next40pxDefaultSize onClick={() => nav('/')}>
               Cancel
@@ -753,7 +757,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               onClick={approveAll}
               disabled={pendingCount === 0 || busy !== null}
             >
-              {busy === 'approve-all' ? 'Applying to store…' : 'Approve & apply to store'}
+              {busy === 'approve-all'
+                ? 'Applying to store…'
+                : isPricingBatch
+                  ? `Approve & apply ${data.issues.length} prices to store`
+                  : 'Approve & apply to store'}
             </Button>
           </div>
         </div>
