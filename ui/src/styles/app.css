@@ -136,25 +136,9 @@ a {
   height: auto;
 }
 
-/* Marketing detail title row — 86×86 product thumbnail slot. Placeholder
-   fill + icon for v1; the daemon will plumb a real image URL in a follow-up.
-   Hides at <480px so the title gets the full width on phone. */
-.wa-detail-thumbnail {
-  flex: none;
-  width: 86px;
-  height: 86px;
-  border-radius: var(--wpds-border-radius-md);
-  background: var(--wpds-color-bg-surface-neutral-weak);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--wpds-color-fg-content-neutral-weak);
-}
-@media (max-width: 480px) {
-  .wa-detail-thumbnail {
-    display: none;
-  }
-}
+/* Marketing / Pricing detail title row — thumbnail slot on the left, title
+   and breadcrumb on the right. Thumbnail visual + sizing live in
+   ProductThumbnail (.wa-product-thumb*); this rule only owns the row layout. */
 .wa-detail-title-row {
   display: flex;
   flex-direction: row;
