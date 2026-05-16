@@ -285,7 +285,14 @@ export interface Variant {
 export interface Proposal {
   type: string;
   content: string;
-  target?: Record<string, unknown>;
+  /** Open-ended proposal-specific payload. We narrow a few well-known
+   *  keys as optionals for UI ergonomics; the runtime shape remains
+   *  Record<string, unknown> and all other keys are accessed via
+   *  string-indexing. */
+  target?: Record<string, unknown> & {
+    image_url?: string;
+    image_alt?: string;
+  };
 }
 
 // Pull a typed variants list out of proposal.target.variants. Returns null
