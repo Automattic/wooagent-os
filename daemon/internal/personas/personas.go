@@ -93,6 +93,14 @@ type Deps struct {
 	// Recorder persists the per-turn telemetry. May be nil in tests; the
 	// tracker helpers are nil-safe. DSGWOO-1236.
 	Recorder telemetry.Recorder
+	// MaxEmits caps how many proposals a single RunAndPersist call should
+	// produce. Zero (the default) is treated as 1 — the historical
+	// single-emit-per-run behavior. The scheduler sets this to 2 on
+	// TriggerBootstrap so the operator's queue is non-empty right after
+	// onboarding completes. Subsequent emits within the same run rely on
+	// the just-inserted issue showing up in RecentlyTouchedTargets so
+	// each persona picks a *different* target each loop.
+	MaxEmits int
 }
 
 // Env is the env-var surface area a persona is allowed to consult. We
@@ -140,15 +148,19 @@ type Drafted struct {
 	BatchIntent string
 }
 
-// Result is what RunAndPersist returns. IssueID is empty when Skipped or
-// when an error was returned. BatchID is set instead of IssueID when the
-// persona emitted a batch (BatchSiblings non-nil) — N+1 child issues were
-// inserted, so a single IssueID would not be meaningful.
+// Result is what RunAndPersist returns. With MaxEmits>1, a single run may
+// produce multiple issues and/or batches. IssueID/BatchID retain the
+// *first* such ID for back-compat with the scheduler runs.issue_id column
+// (which still stores a single value); IssueIDs and BatchIDs hold the
+// full set in emission order. IssueID is empty when Skipped or when an
+// error was returned before any successful emit.
 type Result struct {
-	Persona    string
-	IssueID    string
-	BatchID    string
-	Skipped    bool
+	Persona  string
+	IssueID  string
+	BatchID  string
+	IssueIDs []string
+	BatchIDs []string
+	Skipped  bool
 	SkipReason string
 }
 
@@ -299,6 +311,14 @@ func RecentlyTouchedTargets(
 // guards against duplicate seeding, calls Draft, and inserts the issue.
 // All persistence happens here so child packages stay focused on the
 // MCP+LLM work.
+//
+// When deps.MaxEmits > 1, RunAndPersist loops over p.Draft repeatedly,
+// inserting after each successful emit. Subsequent iterations naturally
+// pick a *different* target because the just-inserted issue ends up in
+// RecentlyTouchedTargets' cooldown set (in_review counts as "open"). A
+// hard error or skip after the first successful emit ends the loop
+// best-effort: prior emits are kept; the unsuccessful tail is logged but
+// doesn't fail the run.
 func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 	slug := p.Slug()
 	res := Result{Persona: slug}
@@ -322,57 +342,96 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		return res, nil
 	}
 
-	// Start a turn-event tracker. Helpers inside Draft (callAbility,
-	// draftRewrite*) read it from context and append model + skill calls.
-	// Recorder is nil-safe (tests pass nil; the persona still works), so
-	// we always wrap the context — the cost is a context.WithValue alloc.
-	tracker := telemetry.NewTracker(uuid.NewString(), slug)
-	tctx := telemetry.WithTracker(ctx, tracker)
-
-	d, err := p.Draft(tctx, deps)
-	if err != nil {
-		recordTurn(ctx, deps.Recorder, tracker, "", d)
-		return res, err
-	}
-	if d.Skipped {
-		recordTurn(ctx, deps.Recorder, tracker, "", d)
-		res.Skipped = true
-		res.SkipReason = d.SkipReason
-		return res, nil
+	emitTarget := deps.MaxEmits
+	if emitTarget < 1 {
+		emitTarget = 1
 	}
 
-	// Batch branch: if the persona returned BatchSiblings, persist a single
-	// batches row + N+1 child issues atomically. The primary Drafted becomes
-	// the first child; each sibling becomes one of the remaining N. All
-	// children share the new batch_id. Used by personas that group related
-	// proposals (e.g. Pricing emitting a category run when N>=3 products are
-	// flagged) so the operator can review them as one unit.
-	if len(d.BatchSiblings) > 0 {
-		if d.BatchTitle == "" || d.BatchIntent == "" {
-			recordTurn(ctx, deps.Recorder, tracker, "", d)
-			return res, fmt.Errorf("BatchSiblings set but BatchTitle or BatchIntent empty")
-		}
-		batchID, err := insertBatch(ctx, deps.Store, slug, d)
+	for i := 0; i < emitTarget; i++ {
+		// One tracker per Draft call so each emitted issue gets its own
+		// turn_event row in the GEPA pipeline.
+		tracker := telemetry.NewTracker(uuid.NewString(), slug)
+		tctx := telemetry.WithTracker(ctx, tracker)
+
+		d, err := p.Draft(tctx, deps)
 		if err != nil {
 			recordTurn(ctx, deps.Recorder, tracker, "", d)
-			return res, fmt.Errorf("insert batch: %w", err)
+			if i == 0 {
+				return res, err
+			}
+			// Best-effort: keep prior emits, surface the partial failure on
+			// the run row.
+			if res.SkipReason == "" {
+				res.SkipReason = fmt.Sprintf("emit %d/%d failed: %v", i+1, emitTarget, err)
+			}
+			break
 		}
-		// Telemetry: record the turn using the *primary* child's
-		// ProposalContent. issueID is intentionally empty here — recordTurn
-		// tolerates that (see its body); the run isn't tied to a single
-		// issue row when a batch is produced.
-		recordTurn(ctx, deps.Recorder, tracker, "", d)
-		res.BatchID = batchID
-		return res, nil
+		if d.Skipped {
+			recordTurn(ctx, deps.Recorder, tracker, "", d)
+			if i == 0 {
+				res.Skipped = true
+				res.SkipReason = d.SkipReason
+				return res, nil
+			}
+			// Best-effort: prior emits stand.
+			if res.SkipReason == "" {
+				res.SkipReason = fmt.Sprintf("emit %d/%d skipped: %s", i+1, emitTarget, d.SkipReason)
+			}
+			break
+		}
+
+		// Batch branch: if the persona returned BatchSiblings, persist a
+		// single batches row + N+1 child issues atomically. Each child
+		// shares the new batch_id and lands as its own in_review issue, so
+		// the next loop iteration's RecentlyTouchedTargets correctly
+		// excludes every product/order in the batch.
+		if len(d.BatchSiblings) > 0 {
+			if d.BatchTitle == "" || d.BatchIntent == "" {
+				recordTurn(ctx, deps.Recorder, tracker, "", d)
+				if i == 0 {
+					return res, fmt.Errorf("BatchSiblings set but BatchTitle or BatchIntent empty")
+				}
+				break
+			}
+			batchID, err := insertBatch(ctx, deps.Store, slug, d)
+			if err != nil {
+				recordTurn(ctx, deps.Recorder, tracker, "", d)
+				if i == 0 {
+					return res, fmt.Errorf("insert batch: %w", err)
+				}
+				if res.SkipReason == "" {
+					res.SkipReason = fmt.Sprintf("emit %d/%d batch insert failed: %v", i+1, emitTarget, err)
+				}
+				break
+			}
+			// Telemetry: issueID stays empty for batch turns — the run
+			// isn't tied to a single issue row when a batch is produced.
+			recordTurn(ctx, deps.Recorder, tracker, "", d)
+			res.BatchIDs = append(res.BatchIDs, batchID)
+			if res.BatchID == "" {
+				res.BatchID = batchID
+			}
+			continue
+		}
+
+		id, err := insertIssue(ctx, deps.Store, slug, d)
+		if err != nil {
+			recordTurn(ctx, deps.Recorder, tracker, "", d)
+			if i == 0 {
+				return res, fmt.Errorf("insert issue: %w", err)
+			}
+			if res.SkipReason == "" {
+				res.SkipReason = fmt.Sprintf("emit %d/%d issue insert failed: %v", i+1, emitTarget, err)
+			}
+			break
+		}
+		recordTurn(ctx, deps.Recorder, tracker, id, d)
+		res.IssueIDs = append(res.IssueIDs, id)
+		if res.IssueID == "" {
+			res.IssueID = id
+		}
 	}
 
-	id, err := insertIssue(ctx, deps.Store, slug, d)
-	if err != nil {
-		recordTurn(ctx, deps.Recorder, tracker, "", d)
-		return res, fmt.Errorf("insert issue: %w", err)
-	}
-	recordTurn(ctx, deps.Recorder, tracker, id, d)
-	res.IssueID = id
 	return res, nil
 }
 
