@@ -1460,3 +1460,23 @@ a {
   flex: none;
 }
 
+/* Product thumbnail — shared component used on queue cards (DataViews
+   mediaField slot), Marketing/Pricing detail pages, and BatchReview
+   child rows. Renders <img> when src is set, persona-derived placeholder
+   when not. See docs/specs/2026-05-16-product-images-design.md. */
+.wa-product-thumb {
+  display: block;
+  object-fit: cover;
+  border-radius: var(--wpds-border-radius-md);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+}
+.wa-product-thumb--sm { width: 40px; height: 40px; }
+.wa-product-thumb--md { width: 72px; height: 72px; }
+.wa-product-thumb--lg { width: 86px; height: 86px; }
+.wa-product-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+
