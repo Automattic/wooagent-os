@@ -692,19 +692,22 @@ func draftProposal(
 
 	body, _ := json.Marshal(anthropicReq{
 		Model: model,
-		// Pricing's response is a small structured JSON (proposed_price,
-		// reason, ~3-5 source URLs). 4096 was 4× oversized — cap at 1024
-		// to stop the model from spending output tokens on filler. If a
-		// future skill needs more, bump per-call rather than the default.
-		MaxTokens: 1024,
+		// max_tokens counts EVERY output token: the model's thinking text
+		// between web_search calls, the tool_use blocks themselves, and the
+		// final JSON. A 1024 cap proved too tight in practice — the model
+		// often spent its budget on inter-search reasoning ("I'll try X,
+		// then Y…") and got cut off before producing the structured JSON,
+		// which the parser rejected with "no JSON object found in model
+		// output". 2048 is the new floor: still half of the original 4096,
+		// but with enough headroom for 3-4 search rounds + the final JSON.
+		MaxTokens: 2048,
 		System:    system,
 		Messages:  []anthropicMsg{{Role: "user", Content: user}},
 		// MaxUses caps how many web_search calls the model can issue. The
-		// skill requires ≥3 sources in the response, and each search use
-		// typically returns 5+ URLs — 3 uses is plenty to clear the floor
-		// while keeping input-token cost low (each fetched page lands in
-		// the model's context).
-		Tools: []anthropicTool{{Type: "web_search_20250305", Name: "web_search", MaxUses: 3}},
+		// skill requires ≥3 sources in the response. We give the model 4
+		// uses so one search can fail or come back thin without forcing a
+		// no_proposal skip — gives the planner some breathing room.
+		Tools: []anthropicTool{{Type: "web_search_20250305", Name: "web_search", MaxUses: 4}},
 	})
 
 	cctx, cancel := context.WithTimeout(ctx, 180*time.Second)
