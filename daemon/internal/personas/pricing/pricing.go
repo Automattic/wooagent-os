@@ -249,6 +249,8 @@ func draftForProduct(
 			"product_id":      p.ID,
 			"product_name":    p.Name,
 			"product_sku":     p.SKU,
+			"image_url":       p.ImageURL,
+			"image_alt":       p.ImageAlt,
 			"currency":        currency,
 			"previous_price":  out.PreviousPrice,
 			"proposed_price":  out.ProposedPrice,
