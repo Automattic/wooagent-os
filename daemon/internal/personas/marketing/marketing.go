@@ -227,6 +227,8 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int) (pe
 		"product_name": p.Name,
 		"product_sku":  p.SKU,
 		"previous":     p.Description,
+		"image_url":    p.ImageURL,
+		"image_alt":    p.ImageAlt,
 	}
 	var content string
 	if parseErr == nil {
