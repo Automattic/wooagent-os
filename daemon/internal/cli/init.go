@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -17,12 +18,20 @@ import (
 // defaultPersonas is the Phase 1 fleet. Seeded into the agents table on init so
 // issues can FK to a persona row. Real persona management (deploy/disable)
 // lands in Phase 2.
+//
+// CadenceSeconds is per-persona because Pricing's web_search runs are the
+// most expensive in the fleet (~20-30s + heavy input tokens per call).
+// Running it 4× per day instead of 4× per 6h cuts daily LLM cost without
+// any meaningful change to the operator experience — competitor prices
+// don't move that fast. 0 lets the SQLite column default (21600 / 6h)
+// take over.
 var defaultPersonas = []struct {
 	Persona, Name, ModelPreference string
+	CadenceSeconds                 int
 }{
-	{"marketing", "Marketing & SEO", "anthropic/claude-sonnet-4-6"},
-	{"pricing", "Pricing", "anthropic/claude-haiku-4-5-20251001"},
-	{"sales-support", "Sales Support", "anthropic/claude-haiku-4-5-20251001"},
+	{"marketing", "Marketing & SEO", "anthropic/claude-sonnet-4-6", 0},
+	{"pricing", "Pricing", "anthropic/claude-haiku-4-5-20251001", 86400},
+	{"sales-support", "Sales Support", "anthropic/claude-haiku-4-5-20251001", 0},
 }
 
 func newInitCmd() *cobra.Command {
@@ -66,10 +75,22 @@ func newInitCmd() *cobra.Command {
 			seeded := 0
 			now := time.Now().UTC().Format(time.RFC3339)
 			for _, p := range defaultPersonas {
-				res, err := st.DB.ExecContext(ctx,
-					`INSERT OR IGNORE INTO agents(persona, name, model_preference, enabled, created_at, updated_at) VALUES(?, ?, ?, 1, ?, ?)`,
-					p.Persona, p.Name, p.ModelPreference, now, now,
-				)
+				// Cadence omitted from the INSERT when 0 so the SQLite
+				// column default (21600 / 6h) wins; Pricing explicitly
+				// overrides to 86400 (24h).
+				var res sql.Result
+				var err error
+				if p.CadenceSeconds > 0 {
+					res, err = st.DB.ExecContext(ctx,
+						`INSERT OR IGNORE INTO agents(persona, name, model_preference, cadence_seconds, enabled, created_at, updated_at) VALUES(?, ?, ?, ?, 1, ?, ?)`,
+						p.Persona, p.Name, p.ModelPreference, p.CadenceSeconds, now, now,
+					)
+				} else {
+					res, err = st.DB.ExecContext(ctx,
+						`INSERT OR IGNORE INTO agents(persona, name, model_preference, enabled, created_at, updated_at) VALUES(?, ?, ?, 1, ?, ?)`,
+						p.Persona, p.Name, p.ModelPreference, now, now,
+					)
+				}
 				if err != nil {
 					return fmt.Errorf("seed persona %s: %w", p.Persona, err)
 				}
