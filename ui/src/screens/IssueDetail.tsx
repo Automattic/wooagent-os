@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
-import { Icon, rotateRight, check, box } from '@wordpress/icons';
+import { Icon, rotateRight, check } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -29,6 +29,7 @@ import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import SectionHeader from '../components/SectionHeader';
 import SourceRow from '../components/SourceRow';
+import ProductThumbnail from '../components/ProductThumbnail';
 
 interface Props {
   connection: Connection;
@@ -354,12 +355,12 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
 
         {/* Title row — 86×86 thumbnail placeholder + title + subhead */}
         <div className="wa-detail-title-row">
-          {/* CUSTOM: 86×86 thumbnail placeholder. WPDS has no thumbnail/avatar
-               component at this size; box icon stands in until daemon plumbs a real
-               product image_url (follow-up tracked in Linear DSGWOO). */}
-          <div className="wa-detail-thumbnail" aria-hidden="true">
-            <Icon icon={box} size={32} />
-          </div>
+          <ProductThumbnail
+            src={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
+            alt={typeof data.proposal?.target?.image_alt === 'string' ? data.proposal.target.image_alt : undefined}
+            persona={data.issue.persona}
+            size="lg"
+          />
           <div className="wa-detail-title-text">
             <Text
               variant="heading-2xl"
