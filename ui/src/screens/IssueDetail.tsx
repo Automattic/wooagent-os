@@ -18,11 +18,7 @@ import {
   type Run,
   type Variant,
 } from '../api/client';
-import {
-  KindBadge,
-  StatusBadge,
-  kindFromProposalType,
-} from '../components/StatusBadge';
+import { StatusBadge } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import Kpi from '../components/Kpi';
@@ -208,7 +204,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: idLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -227,7 +223,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: idLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -240,7 +236,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   }
 
   const { issue, proposal } = data;
-  const kind = kindFromProposalType(proposal?.type, issue);
   const personaKey = personaKeyFrom(issue.persona);
   const personaLabel = personaLabelFrom(issue.persona);
   const reviewable = issue.status === 'in_review';
@@ -269,7 +264,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           issue={issue}
           proposal={priceProposal}
           rationale={proposal?.content ?? ''}
-          kind={kind}
           personaKey={personaKey}
           personaLabel={personaLabel}
           actionMsg={actionMsg}
@@ -296,7 +290,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         <MessageIssueView
           issue={issue}
           proposal={messageProposal}
-          kind={kind}
           personaKey={personaKey}
           personaLabel={personaLabel}
           actionMsg={actionMsg}
@@ -341,13 +334,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             ]}
           />
         }
-        badges={
-          <>
-            <StatusBadge status={issue.status} />
-            <KindBadge kind={kind} />
-          </>
-        }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        badges={<StatusBadge status={issue.status} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
         className="wa-detail-shell-page"
       >
@@ -740,7 +728,6 @@ interface PriceViewProps {
   issue: IssueDetailPayload['issue'];
   proposal: PriceProposal;
   rationale: string;
-  kind: ReturnType<typeof kindFromProposalType>;
   personaKey: ReturnType<typeof personaKeyFrom>;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
@@ -758,7 +745,7 @@ interface PriceViewProps {
 
 function PriceIssueView(props: PriceViewProps) {
   const { onAskAgent } = props;
-  const { issue, proposal, rationale, kind, personaKey, personaLabel } = props;
+  const { issue, proposal, rationale, personaKey, personaLabel } = props;
   const productBound = typeof proposal.productId === 'number';
   const scope = proposal.productName ?? proposal.productSku ?? '—';
   const currency = proposal.currency;
@@ -801,13 +788,8 @@ function PriceIssueView(props: PriceViewProps) {
             ]}
           />
         }
-        badges={
-          <>
-            <StatusBadge status={issue.status} />
-            <KindBadge kind={kind} />
-          </>
-        }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        badges={<StatusBadge status={issue.status} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
         className="wa-detail-shell-page"
       >
@@ -1183,7 +1165,6 @@ function ObservedRange({ low, median, high, proposed, currency }: ObservedRangeP
 interface MessageViewProps {
   issue: IssueDetailPayload['issue'];
   proposal: MessageProposal;
-  kind: ReturnType<typeof kindFromProposalType>;
   personaKey: ReturnType<typeof personaKeyFrom>;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
@@ -1201,7 +1182,7 @@ interface MessageViewProps {
 
 function MessageIssueView(props: MessageViewProps) {
   const { onAskAgent } = props;
-  const { issue, proposal, kind, personaKey, personaLabel } = props;
+  const { issue, proposal, personaKey, personaLabel } = props;
   const isInternal = proposal.noteType === 'internal';
   const customerName = proposal.customerName ?? 'the customer';
   const recipientLabel = proposal.customerEmail
@@ -1232,7 +1213,6 @@ function MessageIssueView(props: MessageViewProps) {
         badges={
           <>
             <StatusBadge status={issue.status} />
-            <KindBadge kind={kind} />
             <span
               style={{
                 fontSize: 'var(--wpds-typography-font-size-xs)',
@@ -1250,7 +1230,7 @@ function MessageIssueView(props: MessageViewProps) {
             </span>
           </>
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
         className="wa-detail-shell-page"
       >
