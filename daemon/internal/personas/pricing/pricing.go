@@ -413,6 +413,8 @@ type product struct {
 	Permalink    string `json:"permalink"`
 	RegularPrice string `json:"regular_price"`
 	SalePrice    string `json:"sale_price"`
+	ImageURL     string `json:"image_url"`
+	ImageAlt     string `json:"image_alt"`
 	Categories   []struct {
 		Name string `json:"name"`
 	} `json:"categories"`
