@@ -222,7 +222,7 @@ More than a sentence or two of customer-facing copy (empty-state body, onboardin
 
 ## Out of scope (skip without flagging)
 
-- Files in: `daemon/`, `cmd/`, `internal/`, `prompts/`, `skills/`, `spike-adk/`, `marketing-prototype/`, `node_modules/`, `dist/`, `build/`.
+- Files in: `daemon/`, `cmd/`, `internal/`, `prompts/`, `skills/`, `spike-adk/`, `node_modules/`, `dist/`, `build/`.
 - Test files: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `fixtures/`.
 - Storybook stories: `*.stories.*`.
 - Design system definition packages (`@wordpress/ui`, `@wordpress/components`, `@wordpress/admin-ui` source) — never flag.

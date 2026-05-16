@@ -29,7 +29,7 @@ Mechanical, rule-based review of `ui/` code against `DESIGN.md` and `CLAUDE.md` 
 ## Scope
 
 - **Files in scope:** `.tsx`, `.ts`, `.jsx`, `.js`, `.css`, `.scss` under `ui/`.
-- **Skip:** `daemon/`, `cmd/`, `internal/`, `prompts/`, `skills/`, `spike-adk/`, `marketing-prototype/`, `node_modules`, `dist/`, `build/`, tests (`*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `fixtures/`), Storybook stories, `DESIGN.md` itself.
+- **Skip:** `daemon/`, `cmd/`, `internal/`, `prompts/`, `skills/`, `spike-adk/`, `node_modules`, `dist/`, `build/`, tests (`*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `fixtures/`), Storybook stories, `DESIGN.md` itself.
 - **Not in scope:** rendered visuals or screenshots — that's a designer's job (see DESIGN.md's "When to loop in a designer").
 
 ## Dynamic context
@@ -113,7 +113,7 @@ After presenting the report, ask the user:
 - **Read-only.** This skill never edits files, creates commits, or pushes.
 - **Never post review comments to GitHub without explicit user confirmation.**
 - **No false positives on fallbacks.** Hex inside `var(--token, #...)` is standard practice — don't flag.
-- **The skip list is non-negotiable.** Don't scan daemon/, marketing-prototype/, test files, build output. Definition vs consumption — files inside design system source packages are canonical; never flag them.
+- **The skip list is non-negotiable.** Don't scan daemon/, test files, build output. Definition vs consumption — files inside design system source packages are canonical; never flag them.
 - **MCP for live truth.** Component status and token names can drift. When `RULES.md` and `@wordpress/design-system-mcp` disagree, follow the MCP and note that `RULES.md` needs updating in the report.
 
 ## Sources

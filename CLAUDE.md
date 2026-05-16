@@ -9,8 +9,6 @@ This file is loaded into every Claude Code session in this repo. It captures con
 - `prompts/`, `skills/` — agent prompts and ability templates.
 - `spike-adk/` — exploratory Python (kept for now; new work goes in Go).
 
-`marketing-prototype/` exists in the tree as a frozen design-reference app from earlier in Phase 1. **Don't touch it for current work** — it's paused and may diverge from the live `ui/` design direction.
-
 ## UI stack — WordPress Design System (WPDS)
 
 **Before doing any UI work in `ui/`, read [`DESIGN.md`](./DESIGN.md) first.** It captures the canonical components in use across the app (the **Component inventory** section), the layout frame (sidebar + `Page` header + content), the persona-color exception, and the Do's/Don'ts that go beyond CLAUDE.md. Reach for one of the listed components before writing custom UI. If you find yourself adding a new dependency or a new bespoke component, that's the cue to call it out as a decision to be made and update DESIGN.md alongside the change.
