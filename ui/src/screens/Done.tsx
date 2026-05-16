@@ -7,6 +7,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { type Batch, type Issue } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import ProductThumbnail from '../components/ProductThumbnail';
 import PageGlobalActions from '../components/PageGlobalActions';
 import {
   buildBoardItems,
@@ -34,6 +35,8 @@ interface Row {
   /** Most-recent activity timestamp. For Done items, this is when the
    *  operator approved (or when the daemon flipped the issue to done). */
   completedAt: string;
+  imageUrl?: string;
+  imageAlt?: string;
 }
 
 function rowFor(item: BoardItem): Row {
@@ -48,6 +51,11 @@ function rowFor(item: BoardItem): Row {
       itemId: `BATCH · ${b.id.slice(0, 6).toUpperCase()}`,
       batchCount: b.total,
       completedAt: b.updated_at,
+      // Batch rows don't carry target yet — Batch type lacks `target` on the
+      // wire. Cards show the persona-derived placeholder. Revisit when
+      // /v1/batches surfaces target.
+      imageUrl: undefined,
+      imageAlt: undefined,
     };
   }
   const issue = item.issue;
@@ -59,6 +67,8 @@ function rowFor(item: BoardItem): Row {
     agentLabel: personaDisplayName(issue.persona),
     itemId: issue.id.slice(0, 8).toUpperCase(),
     completedAt: issue.updated_at,
+    imageUrl: typeof issue.target?.image_url === 'string' ? issue.target.image_url : undefined,
+    imageAlt: typeof issue.target?.image_alt === 'string' ? issue.target.image_alt : undefined,
   };
 }
 
@@ -68,6 +78,7 @@ const DEFAULT_VIEW: View = {
   page: 1,
   perPage: 25,
   titleField: 'title',
+  mediaField: 'image',
   fields: ['agent', 'completed'],
   layout: {
     density: 'comfortable',
@@ -90,6 +101,21 @@ export default function Done({ issues, batches, error, onAskAgent }: Props) {
 
   const fields = useMemo<Field<Row>[]>(
     () => [
+      {
+        id: 'image',
+        label: 'Image',
+        enableHiding: false,
+        enableSorting: false,
+        getValue: ({ item }) => item.imageUrl ?? '',
+        render: ({ item }) => (
+          <ProductThumbnail
+            src={item.imageUrl}
+            alt={item.imageAlt}
+            persona={item.personaSlug}
+            size="md"
+          />
+        ),
+      },
       {
         id: 'title',
         label: 'Proposal',

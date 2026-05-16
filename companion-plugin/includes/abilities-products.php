@@ -130,6 +130,8 @@ function wooagent_companion_register_product_abilities(): void {
 					'meta_description'  => array( 'type' => 'string' ),
 					'featured'          => array( 'type' => 'boolean' ),
 					'date_modified'     => array( 'type' => 'string' ),
+					'image_url'         => array( 'type' => 'string' ),
+					'image_alt'         => array( 'type' => 'string' ),
 				),
 				'required'   => array( 'id', 'name', 'status' ),
 			),
@@ -249,6 +251,19 @@ function wooagent_products_get_execute( array $args ) {
 		}
 	}
 
+	$image_id  = (int) $product->get_image_id();
+	$image_url = '';
+	$image_alt = '';
+	if ( $image_id > 0 ) {
+		// 'medium' (max 300×300) keeps payload small; WP falls back to the
+		// original upload if the size isn't registered on the site.
+		$src = wp_get_attachment_image_src( $image_id, 'medium' );
+		if ( is_array( $src ) && ! empty( $src[0] ) ) {
+			$image_url = (string) $src[0];
+			$image_alt = (string) get_post_meta( $image_id, '_wp_attachment_image_alt', true );
+		}
+	}
+
 	return array(
 		'id'                => $product->get_id(),
 		'name'              => $product->get_name(),
@@ -266,6 +281,8 @@ function wooagent_products_get_execute( array $args ) {
 		'meta_description'  => (string) get_post_meta( $product->get_id(), '_yoast_wpseo_metadesc', true ),
 		'featured'          => $product->is_featured(),
 		'date_modified'     => $product->get_date_modified() ? $product->get_date_modified()->date( 'c' ) : '',
+		'image_url'         => $image_url,
+		'image_alt'         => $image_alt,
 	);
 }
 

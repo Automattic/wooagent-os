@@ -294,3 +294,26 @@ func TestPackAsBatch_FillsBatchFields(t *testing.T) {
 		t.Errorf("primary should be the first draft; got product_sku=%v", got)
 	}
 }
+
+func TestProductJSON_ImageFields(t *testing.T) {
+	payload := []byte(`{
+		"id": 7,
+		"name": "Indigo Pillow",
+		"sku": "IND-7",
+		"status": "publish",
+		"type": "simple",
+		"regular_price": "48.00",
+		"image_url": "https://store.example.com/wp-content/uploads/2024/01/pillow.jpg",
+		"image_alt": "Indigo throw pillow"
+	}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.ImageURL != "https://store.example.com/wp-content/uploads/2024/01/pillow.jpg" {
+		t.Errorf("ImageURL = %q", p.ImageURL)
+	}
+	if p.ImageAlt != "Indigo throw pillow" {
+		t.Errorf("ImageAlt = %q", p.ImageAlt)
+	}
+}

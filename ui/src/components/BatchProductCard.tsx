@@ -3,12 +3,15 @@ import { Card, Stack, Text } from '@wordpress/ui';
 import { Icon, chevronDown, chevronUp } from '@wordpress/icons';
 import SectionHeader from './SectionHeader';
 import SourceRow from './SourceRow';
+import ProductThumbnail from './ProductThumbnail';
 import type { PriceSource } from '../api/client';
 
 export interface BatchProduct {
   productId: number;
   sku: string;
   name: string;
+  imageUrl?: string;
+  imageAlt?: string;
   categoryPath?: string;
   previousPrice: number;
   proposedPrice: number;
@@ -62,6 +65,14 @@ export default function BatchProductCard({ product, defaultExpanded = false }: P
         className="wa-batch-product-card__header"
         aria-expanded={expanded}
       >
+        <Stack direction="row" gap="md" align="center" style={{ width: '100%' }}>
+          <ProductThumbnail
+            src={product.imageUrl}
+            alt={product.imageAlt}
+            persona="pricing"
+            size="sm"
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
         <SectionHeader
           eyebrow={product.sku}
           title={
@@ -115,6 +126,8 @@ export default function BatchProductCard({ product, defaultExpanded = false }: P
             </Stack>
           }
         />
+          </div>
+        </Stack>
       </button>
 
       {expanded && (

@@ -56,7 +56,7 @@ When choosing a component, layout, or interaction for a customer-facing change, 
 2. **`@wordpress/ui`** — primary surfaces, layout, typography, status. `Card.Root` / `Stack` / `Text` / `Badge` / `Notice.Root` (compound). The default first stop for new UI.
 3. **`@wordpress/components`** — gap-fillers (`Button`, `Modal`, `Spinner`, `TextControl` / `SearchControl` / `SelectControl`, `FormToggle`). Always verify the component's **Status** in Storybook is `stable` — query the WPDS MCP server (`mcp__wordpress-design-system__get_component_details`) if uncertain. Pass `__next40pxDefaultSize` to every `Button`. **For outbound text links, use `Button variant="link" target="_blank" rel="noreferrer noopener"` with a 16px `arrowUpRight` icon in children** — not `ExternalLink` (superseded), and not the `external` box-with-arrow icon (wrong shape).
 4. **`@wordpress/dataviews`** — when the shape is tabular. The agent roster and abilities screens are the references.
-5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `LeftNav`, `ActionBar`, `BatchProductCard`, `Kpi`, `SectionHeader`, `SourceRow`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
+5. **WooAgent composites** in `ui/src/components/` — `PersonaAvatar`, `ProductThumbnail`, `LeftNav`, `ActionBar`, `BatchProductCard`, `Kpi`, `SectionHeader`, `SourceRow`, `StatusBadge`, `AskAgentDrawer`, `EditPersonaModal`, `PageGlobalActions`. Reach for these before re-implementing a similar shape.
 6. **Bespoke with a `// CUSTOM:` comment** — last resort. The comment must explain (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers reject custom UI that isn't called out.
 
 Query the WPDS MCP (`mcp__wordpress-design-system__get_components`, `…__get_design_tokens`) before guessing whether a tier 2 / 3 component or token exists. The principle: **don't shout against the WPDS** — a screen built from bespoke divs inside a WPDS app reads as the one wrong note on the page.
@@ -185,6 +185,10 @@ These are the canonical WooAgent components. When a screen needs one, use the ex
 
 Square swatch with the persona's `bg` and `ink` colors and the persona's initials. Sizes: `xs` (14px), `sm` (18px, default), `md` (24px). Appears in three places: the sidebar header tile, queue card corners, and page eyebrows. Identity element. Never used decoratively.
 
+### `ProductThumbnail` (`ui/src/components/ProductThumbnail.tsx`)
+
+Image-or-placeholder primitive used wherever a proposal references a product. Renders an `<img>` (lazy-loaded, `object-fit: cover`) when `src` is set and loads successfully; falls back to a neutral gray placeholder with a persona-derived icon (`marketing` → `pencil`, `pricing` → `currencyDollar`, `sales-support` → `comment`, etc.) when there's no image or `<img>` errors. Sizes: `sm` (40px), `md` (72px), `lg` (86px). Used on Needs review + Done grid cards (DataViews `mediaField`), Marketing + Pricing detail page title rows, and per-row inside `BatchReview`'s pricing-batch product cards. The placeholder is deliberately neutral — identity stays on `PersonaAvatar`; the thumbnail is content. See `docs/specs/2026-05-16-product-images-design.md`.
+
 ### `LeftNav` (`ui/src/components/LeftNav.tsx`)
 
 Dark vertical sidebar. WooAgent wordmark at top, nav items below. Persistent across screens. The only place `PersonaAvatar` appears in the chrome.
@@ -218,10 +222,6 @@ Right-side drawer triggered from the "Ask agent" button in `PageGlobalActions` (
 ### `EditPersonaModal` (`ui/src/components/EditPersonaModal.tsx`)
 
 WPDS `Modal`. Form for editing an agent's name, role description, and persona-specific settings. The `PersonaAvatar` (`md`) anchors the top.
-
-### Kind pill
-
-Small full-radius pill on queue cards: `CONTENT` / `CAMPAIGN` / `EMAIL`, colored by the owning persona's `bg` + `ink`. The second of the two persona-color exception sites.
 
 ### Onboarding card (`ui/src/onboarding/`)
 
