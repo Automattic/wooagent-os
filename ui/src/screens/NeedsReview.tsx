@@ -6,6 +6,7 @@ import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { type Batch, type Issue } from '../api/client';
+import ProductThumbnail from '../components/ProductThumbnail';
 import { kindFromIssue, kindFromPersonaSlug } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -46,6 +47,8 @@ interface Row {
   /** Meta line shown under the title in grid view ("3 variants",
    *  "5 of 11 price changes pending", etc.). */
   meta: string;
+  imageUrl?: string;
+  imageAlt?: string;
 }
 
 function metaForBoardItem(item: BoardItem): string {
@@ -100,6 +103,9 @@ function rowFor(item: BoardItem): Row {
       batchCount: b.total,
       updatedAt: b.updated_at,
       meta: metaForBoardItem(item),
+      // Batch.target is not surfaced by /v1/batches yet — B2 known limitation.
+      imageUrl: undefined,
+      imageAlt: undefined,
     };
   }
   const issue = item.issue;
@@ -112,6 +118,8 @@ function rowFor(item: BoardItem): Row {
     itemId: issue.id.slice(0, 8).toUpperCase(),
     updatedAt: issue.updated_at,
     meta: metaForBoardItem(item),
+    imageUrl: typeof issue.target?.image_url === 'string' ? issue.target.image_url : undefined,
+    imageAlt: typeof issue.target?.image_alt === 'string' ? issue.target.image_alt : undefined,
   };
 }
 
@@ -126,7 +134,8 @@ function buildDefaultView(initialPersona: string | null): View {
     perPage: 24,
     titleField: 'title',
     descriptionField: 'meta',
-    fields: ['agent', 'age'],
+    mediaField: 'image',
+    fields: ['agent', 'age', 'image'],
     filters: initialPersona
       ? [{ field: 'agent', operator: 'isAny', value: [initialPersona] }]
       : [],
@@ -265,6 +274,21 @@ export default function NeedsReview({
           >
             {relativeTime(item.updatedAt)}
           </Text>
+        ),
+      },
+      {
+        id: 'image',
+        label: 'Image',
+        enableHiding: false,
+        enableSorting: false,
+        getValue: ({ item }) => item.imageUrl ?? '',
+        render: ({ item }) => (
+          <ProductThumbnail
+            src={item.imageUrl}
+            alt={item.imageAlt}
+            persona={item.personaSlug}
+            size="md"
+          />
         ),
       },
     ],
