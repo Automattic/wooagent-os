@@ -6,6 +6,7 @@ import {
   inbox,
   columns,
   archive,
+  published,
   people,
   category,
   box,
@@ -28,7 +29,9 @@ interface NavItem {
 }
 
 interface Props {
-  marketingInReview: number;
+  /** Count of issues currently awaiting operator review, across all
+      personas. Drives the badge on the Needs review nav entry. */
+  inReviewCount: number;
   /** Active daemon connection — drives the footer popover's URL + token
       preview. The hostname shown in the footer chip is derived from
       connection.daemonUrl. */
@@ -53,7 +56,7 @@ const FOOTER_MUTED = {
 } as const;
 
 export default function LeftNav({
-  marketingInReview,
+  inReviewCount,
   connection,
   embedded,
   onForgetConnection,
@@ -69,17 +72,23 @@ export default function LeftNav({
   })();
   const tokenPreview = `${connection.token.slice(0, 12)}…`;
   const loc = useLocation();
-  // Board is the "active" route while on the kanban or any issue detail.
-  const onBoard = loc.pathname === '/' || loc.pathname.startsWith('/issues/');
+  // Needs review is the "active" route while on the queue itself, an issue
+  // detail, or a batch detail — those drill in from a queue card.
+  const onNeedsReview =
+    loc.pathname === '/' ||
+    loc.pathname === '/needs-review' ||
+    loc.pathname.startsWith('/issues/') ||
+    loc.pathname.startsWith('/batches/');
 
   const inbox_items: NavItem[] = [
     { to: '/my-issues', label: 'My issues', icon: inbox, paused: true },
     {
-      to: '/',
-      label: 'Board',
+      to: '/needs-review',
+      label: 'Needs review',
       icon: columns,
-      badge: marketingInReview > 0 ? marketingInReview : undefined,
+      badge: inReviewCount > 0 ? inReviewCount : undefined,
     },
+    { to: '/done', label: 'Done', icon: published },
     { to: '/archived', label: 'Archived', icon: archive },
   ];
   const fleet_items: NavItem[] = [
@@ -140,7 +149,7 @@ export default function LeftNav({
             '0 var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-md)',
         }}
       >
-        <NavGroup label="Inbox" items={inbox_items} active={onBoard ? '/' : loc.pathname} onItemClick={onItemClick} />
+        <NavGroup label="Inbox" items={inbox_items} active={onNeedsReview ? '/needs-review' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Fleet" items={fleet_items} active={loc.pathname.startsWith('/agents') ? '/agents' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Activity" items={activity_items} active={loc.pathname.startsWith('/runs') ? '/runs' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Settings" items={settings_items} active={loc.pathname} onItemClick={onItemClick} />

@@ -538,7 +538,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         label: 'View issues',
         callback: (items) => {
           const p = items[0];
-          if (p) navigate(`/?persona=${encodeURIComponent(p.persona)}`);
+          if (p) navigate(`/needs-review?persona=${encodeURIComponent(p.persona)}`);
         },
       },
     ],
