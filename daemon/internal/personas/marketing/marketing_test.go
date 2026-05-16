@@ -1,6 +1,7 @@
 package marketing
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -62,5 +63,43 @@ func TestParseVariants_RejectsNonJSON(t *testing.T) {
 	raw := "Sorry, I cannot complete this task."
 	if _, err := parseVariants(raw); err == nil {
 		t.Errorf("expected error on non-JSON output, got nil")
+	}
+}
+
+func TestProductJSON_ImageFields(t *testing.T) {
+	payload := []byte(`{
+		"id": 42,
+		"name": "Test Product",
+		"sku": "SKU-42",
+		"status": "publish",
+		"description": "",
+		"short_description": "",
+		"permalink": "",
+		"image_url": "https://store.example.com/wp-content/uploads/2024/01/test.jpg",
+		"image_alt": "Test product alt text"
+	}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.ImageURL != "https://store.example.com/wp-content/uploads/2024/01/test.jpg" {
+		t.Errorf("ImageURL = %q, want full URL", p.ImageURL)
+	}
+	if p.ImageAlt != "Test product alt text" {
+		t.Errorf("ImageAlt = %q, want full alt", p.ImageAlt)
+	}
+}
+
+func TestProductJSON_ImageFieldsAbsent_DefaultsEmpty(t *testing.T) {
+	payload := []byte(`{"id":1,"name":"x","sku":"","status":"publish","description":"","short_description":"","permalink":""}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.ImageURL != "" {
+		t.Errorf("ImageURL = %q, want empty string", p.ImageURL)
+	}
+	if p.ImageAlt != "" {
+		t.Errorf("ImageAlt = %q, want empty string", p.ImageAlt)
 	}
 }
