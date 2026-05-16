@@ -32,11 +32,72 @@ func (p *stubPersona) Draft(ctx context.Context, _ personas.Deps) (personas.Draf
 
 // stubRunner replaces personas.RunAndPersist for unit tests.
 type stubRunner struct {
-	onRun func(ctx context.Context, p personas.Persona) (personas.Result, error)
+	onRun func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error)
 }
 
-func (s *stubRunner) Run(ctx context.Context, p personas.Persona) (personas.Result, error) {
-	return s.onRun(ctx, p)
+func (s *stubRunner) Run(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
+	return s.onRun(ctx, p, opts)
+}
+
+func TestWorker_BootstrapTriggerPassesEmitCount2(t *testing.T) {
+	db := openTestDB(t)
+	fixed := time.Unix(1700000000, 0).UTC()
+	q := &Queue{DB: db, Now: func() time.Time { return fixed }}
+	sp := &stubPersona{slug: "marketing"}
+	_, _ = q.Enqueue(context.Background(), EnqueueParams{
+		Persona: "marketing", Trigger: TriggerBootstrap, ScheduledAt: fixed,
+	})
+
+	var seenOpts RunOpts
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
+		seenOpts = opts
+		return personas.Result{Persona: "marketing"}, nil
+	}}
+	w := &Worker{
+		Queue: q, Runner: runner,
+		Personas: map[string]personas.Persona{"marketing": sp},
+		Now:      func() time.Time { return fixed.Add(time.Second) },
+		Backoff:  DefaultBackoff,
+	}
+	if _, err := w.RunOnce(context.Background()); err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	if seenOpts.EmitCount != bootstrapEmitCount {
+		t.Errorf("bootstrap EmitCount = %d, want %d", seenOpts.EmitCount, bootstrapEmitCount)
+	}
+}
+
+func TestWorker_NonBootstrapTriggersPassEmitCount1(t *testing.T) {
+	cases := []Trigger{TriggerTick, TriggerManual, TriggerRetry}
+	for _, trig := range cases {
+		t.Run(string(trig), func(t *testing.T) {
+			db := openTestDB(t)
+			fixed := time.Unix(1700000000, 0).UTC()
+			q := &Queue{DB: db, Now: func() time.Time { return fixed }}
+			sp := &stubPersona{slug: "marketing"}
+			_, _ = q.Enqueue(context.Background(), EnqueueParams{
+				Persona: "marketing", Trigger: trig, ScheduledAt: fixed,
+			})
+
+			var seenOpts RunOpts
+			runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
+				seenOpts = opts
+				return personas.Result{Persona: "marketing"}, nil
+			}}
+			w := &Worker{
+				Queue: q, Runner: runner,
+				Personas: map[string]personas.Persona{"marketing": sp},
+				Now:      func() time.Time { return fixed.Add(time.Second) },
+				Backoff:  DefaultBackoff,
+			}
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatalf("run once: %v", err)
+			}
+			if seenOpts.EmitCount != 1 {
+				t.Errorf("%s EmitCount = %d, want 1", trig, seenOpts.EmitCount)
+			}
+		})
+	}
 }
 
 func TestWorker_SuccessPath(t *testing.T) {
@@ -49,7 +110,7 @@ func TestWorker_SuccessPath(t *testing.T) {
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
 
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{Persona: "marketing", IssueID: ""}, nil
 	}}
 	w := &Worker{
@@ -87,7 +148,7 @@ func TestWorker_TransientFailure_EnqueuesRetry(t *testing.T) {
 	parent, _ := q.Enqueue(context.Background(), EnqueueParams{
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{}, mcp.ErrSessionLost
 	}}
 	w := &Worker{
@@ -138,7 +199,7 @@ func TestWorker_ExhaustedRetries_MarksPermanent(t *testing.T) {
 	_, _ = q.Enqueue(context.Background(), EnqueueParams{
 		Persona: "marketing", Trigger: TriggerRetry, ScheduledAt: fixed, Attempt: 3,
 	})
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{}, mcp.ErrSessionLost
 	}}
 	w := &Worker{
@@ -172,7 +233,7 @@ func TestWorker_PermanentError_NoRetry(t *testing.T) {
 	_, _ = q.Enqueue(context.Background(), EnqueueParams{
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{}, errors.New("anthropic http 401 invalid api key")
 	}}
 	w := &Worker{
@@ -203,7 +264,7 @@ func TestWorker_Skip_RecordsSkipReason(t *testing.T) {
 	_, _ = q.Enqueue(context.Background(), EnqueueParams{
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{Skipped: true, SkipReason: "missing api key"}, nil
 	}}
 	w := &Worker{
@@ -234,7 +295,7 @@ func TestWorker_TransientFailure_EmptyBackoff_NoPanic(t *testing.T) {
 	_, _ = q.Enqueue(context.Background(), EnqueueParams{
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		return personas.Result{}, mcp.ErrSessionLost
 	}}
 	w := &Worker{
@@ -286,7 +347,7 @@ func TestWorker_SkipsRunWhenPersonaOverBudget(t *testing.T) {
 
 	// Track whether the runner was called.
 	runnerCalled := false
-	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona) (personas.Result, error) {
+	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 		runnerCalled = true
 		return personas.Result{}, nil
 	}}
