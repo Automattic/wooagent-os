@@ -24,6 +24,7 @@ import "strings"
 // the rule-lock test (sales_support_redaction_test.go) will fail.
 type promptContext struct {
 	OrderNumber string
+	OrderID     int // numeric fallback when Number is empty
 	Status      string
 	Total       string
 	Currency    string
@@ -38,6 +39,7 @@ type promptContext struct {
 func redactOrderForPrompt(o order) promptContext {
 	return promptContext{
 		OrderNumber: o.Number,
+		OrderID:     o.ID,
 		Status:      o.Status,
 		Total:       o.Total,
 		Currency:    o.Currency,
