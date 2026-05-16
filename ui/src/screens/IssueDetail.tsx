@@ -15,6 +15,7 @@ import {
   type IssueDetail as IssueDetailPayload,
   type MessageProposal,
   type PriceProposal,
+  type Proposal,
   type Run,
   type Variant,
 } from '../api/client';
@@ -264,6 +265,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         <PriceIssueView
           issue={issue}
           proposal={priceProposal}
+          rawProposal={proposal}
           rationale={proposal?.content ?? ''}
           personaKey={personaKey}
           personaLabel={personaLabel}
@@ -728,6 +730,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
 interface PriceViewProps {
   issue: IssueDetailPayload['issue'];
   proposal: PriceProposal;
+  rawProposal?: Proposal | null;
   rationale: string;
   personaKey: ReturnType<typeof personaKeyFrom>;
   personaLabel: string;
@@ -746,7 +749,7 @@ interface PriceViewProps {
 
 function PriceIssueView(props: PriceViewProps) {
   const { onAskAgent } = props;
-  const { issue, proposal, rationale, personaKey, personaLabel } = props;
+  const { issue, proposal, rawProposal, rationale, personaKey, personaLabel } = props;
   const productBound = typeof proposal.productId === 'number';
   const scope = proposal.productName ?? proposal.productSku ?? '—';
   const currency = proposal.currency;
@@ -815,24 +818,34 @@ function PriceIssueView(props: PriceViewProps) {
           </Text>
         </Stack>
 
-        {/* Title + subhead */}
-        <Text
-          variant="heading-2xl"
-          render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
-        >
-          {issue.title}
-        </Text>
-        <Text
-          variant="body-md"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            maxWidth: 760,
-            marginBottom: 'var(--wpds-dimension-gap-xl)',
-          }}
-        >
-          {issue.description ??
-            `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce; the previous price is snapshotted and reversible from the Done column.`}
-        </Text>
+        {/* Title row — 86×86 thumbnail + title + subhead */}
+        <div className="wa-detail-title-row">
+          <ProductThumbnail
+            src={typeof rawProposal?.target?.image_url === 'string' ? rawProposal.target.image_url : undefined}
+            alt={typeof rawProposal?.target?.image_alt === 'string' ? rawProposal.target.image_alt : undefined}
+            persona="pricing"
+            size="lg"
+          />
+          <div className="wa-detail-title-text">
+            <Text
+              variant="heading-2xl"
+              render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
+            >
+              {issue.title}
+            </Text>
+            <Text
+              variant="body-md"
+              style={{
+                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                maxWidth: 760,
+                marginBottom: 'var(--wpds-dimension-gap-xl)',
+              }}
+            >
+              {issue.description ??
+                `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce; the previous price is snapshotted and reversible from the Done column.`}
+            </Text>
+          </div>
+        </div>
 
         {/* KPI row — price tiles */}
         <div
