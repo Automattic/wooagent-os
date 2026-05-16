@@ -122,7 +122,7 @@ export default function LeftNav({
               i3.2 Figma. Was previously the marketing-persona pink as part
               of the persona-color exception, but moved to brand indigo so
               the persona-color exception stays scoped to identity surfaces
-              (PersonaAvatar + KindBadge) only. */}
+              (PersonaAvatar) only. */}
           <div
             className="wa-persona-avatar wa-persona-avatar--md"
             style={{

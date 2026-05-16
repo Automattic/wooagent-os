@@ -6,13 +6,13 @@ import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { api, type Connection, type Issue } from '../api/client';
-import {
-  KindBadge,
-  kindFromIssue,
-} from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
-import { personaDisplayName, relativeTime } from '../lib/boardItems';
+import {
+  personaDisplayName,
+  personaElementsFrom,
+  relativeTime,
+} from '../lib/boardItems';
 
 interface Props {
   connection: Connection;
@@ -26,7 +26,6 @@ interface Row {
   itemId: string;
   personaSlug: string;
   agentLabel: string;
-  kindLabel: string;
   dismissedAt: string;
   reason: string;
   reasonLabel: string;
@@ -41,26 +40,10 @@ function rowFor(issue: Issue): Row {
     itemId: issue.id.slice(0, 8).toUpperCase(),
     personaSlug: issue.persona ?? '',
     agentLabel: personaDisplayName(issue.persona),
-    kindLabel: humanKindLabel(kindFromIssue(issue)),
     dismissedAt,
     reason: issue.dismiss_reason ?? '',
     reasonLabel: issue.dismiss_reason ? formatReason(issue.dismiss_reason) : '',
   };
-}
-
-function humanKindLabel(kind: ReturnType<typeof kindFromIssue>): string {
-  switch (kind) {
-    case 'content':
-      return 'Content';
-    case 'campaign':
-      return 'Campaign';
-    case 'email':
-      return 'Email';
-    case 'price':
-      return 'Price';
-    case 'message':
-      return 'Message';
-  }
 }
 
 function formatReason(reason: string): string {
@@ -87,7 +70,7 @@ const DEFAULT_VIEW: View = {
   page: 1,
   perPage: 25,
   titleField: 'title',
-  fields: ['kind', 'agent', 'dismissed', 'reason'],
+  fields: ['agent', 'dismissed', 'reason'],
   layout: {
     density: 'comfortable',
   },
@@ -129,6 +112,11 @@ export default function Archived({ connection, onAskAgent }: Props) {
       .map(rowFor);
   }, [issues]);
 
+  const agentElements = useMemo(
+    () => personaElementsFrom(rows.map((r) => r.personaSlug)),
+    [rows],
+  );
+
   const fields = useMemo<Field<Row>[]>(
     () => [
       {
@@ -160,19 +148,11 @@ export default function Archived({ connection, onAskAgent }: Props) {
         ),
       },
       {
-        id: 'kind',
-        label: 'Kind',
-        enableSorting: false,
-        getValue: ({ item }) => item.kindLabel,
-        render: ({ item }) => (
-          <KindBadge kind={kindFromIssue(item.issue)} />
-        ),
-      },
-      {
         id: 'agent',
         label: 'Agent',
-        enableGlobalSearch: true,
-        getValue: ({ item }) => item.agentLabel,
+        getValue: ({ item }) => item.personaSlug,
+        elements: agentElements,
+        filterBy: { operators: ['isAny'] },
         render: ({ item }) => (
           <Stack direction="row" gap="xs" align="center">
             <PersonaAvatar persona={personaKeyFrom(item.personaSlug)} size="sm" />
@@ -215,7 +195,7 @@ export default function Archived({ connection, onAskAgent }: Props) {
           ),
       },
     ],
-    [],
+    [agentElements],
   );
 
   const actions = useMemo<Action<Row>[]>(() => [], []);
@@ -230,7 +210,7 @@ export default function Archived({ connection, onAskAgent }: Props) {
       <Page
         title="Archived"
         subTitle="Proposals you dismissed. Kept for 30 days."
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <Notice.Root intent="error">
@@ -244,7 +224,7 @@ export default function Archived({ connection, onAskAgent }: Props) {
       <Page
         title="Archived"
         subTitle="Proposals you dismissed. Kept for 30 days."
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <Stack direction="row" gap="sm" align="center">
@@ -280,7 +260,7 @@ export default function Archived({ connection, onAskAgent }: Props) {
     <Page
       title="Archived"
       subTitle="Proposals you dismissed. Kept for 30 days."
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
       hasPadding
     >
       <DataViews<Row>

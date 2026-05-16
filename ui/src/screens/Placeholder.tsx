@@ -30,7 +30,7 @@ export default function Placeholder({
           ? 'Out of scope for phase 1.'
           : 'Reference area.'
       }
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
       hasPadding
     >
       <Card.Root
