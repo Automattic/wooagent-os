@@ -255,11 +255,13 @@ function wooagent_products_get_execute( array $args ) {
 	$image_url = '';
 	$image_alt = '';
 	if ( $image_id > 0 ) {
+		// 'medium' (max 300×300) keeps payload small; WP falls back to the
+		// original upload if the size isn't registered on the site.
 		$src = wp_get_attachment_image_src( $image_id, 'medium' );
 		if ( is_array( $src ) && ! empty( $src[0] ) ) {
 			$image_url = (string) $src[0];
+			$image_alt = (string) get_post_meta( $image_id, '_wp_attachment_image_alt', true );
 		}
-		$image_alt = (string) get_post_meta( $image_id, '_wp_attachment_image_alt', true );
 	}
 
 	return array(
