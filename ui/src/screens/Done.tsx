@@ -1,50 +1,71 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { api, type Connection, type Issue } from '../api/client';
+import { type Batch, type Issue } from '../api/client';
 import {
   KindBadge,
   kindFromIssue,
+  kindFromPersonaSlug,
 } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
-import { personaDisplayName, relativeTime } from '../lib/boardItems';
+import {
+  buildBoardItems,
+  personaDisplayName,
+  relativeTime,
+  type BoardItem,
+} from '../lib/boardItems';
 
 interface Props {
-  connection: Connection;
+  issues: Issue[] | null;
+  batches: Batch[];
+  error: string | null;
   onAskAgent: () => void;
 }
 
 interface Row {
   rowId: string;
-  issue: Issue;
+  origin: BoardItem;
   title: string;
-  itemId: string;
   personaSlug: string;
   agentLabel: string;
   kindLabel: string;
-  dismissedAt: string;
-  reason: string;
-  reasonLabel: string;
+  itemId: string;
+  batchCount?: number;
+  /** Most-recent activity timestamp. For Done items, this is when the
+   *  operator approved (or when the daemon flipped the issue to done). */
+  completedAt: string;
 }
 
-function rowFor(issue: Issue): Row {
-  const dismissedAt = issue.dismissed_at ?? issue.updated_at;
+function rowFor(item: BoardItem): Row {
+  if (item.kind === 'batch') {
+    const b = item.batch;
+    return {
+      rowId: `batch:${b.id}`,
+      origin: item,
+      title: b.title,
+      personaSlug: b.persona ?? '',
+      agentLabel: personaDisplayName(b.persona),
+      kindLabel: humanKindLabel(kindFromPersonaSlug(b.persona)),
+      itemId: `BATCH · ${b.id.slice(0, 6).toUpperCase()}`,
+      batchCount: b.total,
+      completedAt: b.updated_at,
+    };
+  }
+  const issue = item.issue;
   return {
-    rowId: issue.id,
-    issue,
+    rowId: `issue:${issue.id}`,
+    origin: item,
     title: issue.title,
-    itemId: issue.id.slice(0, 8).toUpperCase(),
     personaSlug: issue.persona ?? '',
     agentLabel: personaDisplayName(issue.persona),
     kindLabel: humanKindLabel(kindFromIssue(issue)),
-    dismissedAt,
-    reason: issue.dismiss_reason ?? '',
-    reasonLabel: issue.dismiss_reason ? formatReason(issue.dismiss_reason) : '',
+    itemId: issue.id.slice(0, 8).toUpperCase(),
+    completedAt: issue.updated_at,
   };
 }
 
@@ -63,71 +84,26 @@ function humanKindLabel(kind: ReturnType<typeof kindFromIssue>): string {
   }
 }
 
-function formatReason(reason: string): string {
-  // Mirrors the Dismiss-dialog chip labels. Keep in sync with
-  // DismissReason in api/client.ts.
-  const map: Record<string, string> = {
-    tone_off: 'Tone is off',
-    wrong_product_focus: 'Wrong product focus',
-    not_needed_now: 'Not needed now',
-    write_myself: "I'll write this myself",
-    wrong_timing: 'Wrong timing',
-    out_of_stock: 'Out of stock',
-    price_too_aggressive: 'Price too aggressive',
-    needs_brand_review: 'Needs brand review',
-    will_handle_myself: 'Will handle myself',
-    other: 'Other',
-  };
-  return map[reason] ?? reason;
-}
-
 const DEFAULT_VIEW: View = {
   type: 'table',
   search: '',
   page: 1,
   perPage: 25,
   titleField: 'title',
-  fields: ['kind', 'agent', 'dismissed', 'reason'],
+  fields: ['kind', 'agent', 'completed'],
   layout: {
     density: 'comfortable',
   },
 };
 
-export default function Archived({ connection, onAskAgent }: Props) {
+export default function Done({ issues, batches, error, onAskAgent }: Props) {
   const nav = useNavigate();
-  const [issues, setIssues] = useState<Issue[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>(DEFAULT_VIEW);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.issues(connection);
-        if (cancelled) return;
-        setIssues(res.issues);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : String(e));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [connection]);
 
   const rows = useMemo<Row[]>(() => {
     if (!issues) return [];
-    return issues
-      .filter((i) => i.status === 'dismissed' || i.status === 'rejected')
-      .sort((a, b) => {
-        const aT = a.dismissed_at ?? a.updated_at;
-        const bT = b.dismissed_at ?? b.updated_at;
-        return bT.localeCompare(aT);
-      })
-      .map(rowFor);
-  }, [issues]);
+    return buildBoardItems(issues, batches, 'done').map(rowFor);
+  }, [issues, batches]);
 
   const fields = useMemo<Field<Row>[]>(
     () => [
@@ -164,9 +140,22 @@ export default function Archived({ connection, onAskAgent }: Props) {
         label: 'Kind',
         enableSorting: false,
         getValue: ({ item }) => item.kindLabel,
-        render: ({ item }) => (
-          <KindBadge kind={kindFromIssue(item.issue)} />
-        ),
+        render: ({ item }) => {
+          const kind =
+            item.origin.kind === 'batch'
+              ? kindFromPersonaSlug(item.origin.batch.persona)
+              : kindFromIssue(item.origin.issue);
+          return (
+            <Stack direction="row" gap="xs" align="center">
+              <KindBadge kind={kind} />
+              {item.batchCount !== undefined && (
+                <Badge intent="informational">
+                  {`${item.batchCount} products`}
+                </Badge>
+              )}
+            </Stack>
+          );
+        },
       },
       {
         id: 'agent',
@@ -181,38 +170,18 @@ export default function Archived({ connection, onAskAgent }: Props) {
         ),
       },
       {
-        id: 'dismissed',
-        label: 'Dismissed',
+        id: 'completed',
+        label: 'Completed',
         enableSorting: true,
-        getValue: ({ item }) => item.dismissedAt,
+        getValue: ({ item }) => item.completedAt,
         render: ({ item }) => (
           <Text
             variant="body-sm"
             style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
           >
-            {relativeTime(item.dismissedAt)}
+            {relativeTime(item.completedAt)}
           </Text>
         ),
-      },
-      {
-        id: 'reason',
-        label: 'Reason',
-        enableSorting: false,
-        getValue: ({ item }) => item.reasonLabel,
-        render: ({ item }) =>
-          item.reasonLabel ? (
-            <Badge intent="none">{item.reasonLabel}</Badge>
-          ) : (
-            <Text
-              variant="body-sm"
-              style={{
-                color: 'var(--wpds-color-fg-content-neutral-weak)',
-                fontStyle: 'italic',
-              }}
-            >
-              No reason given
-            </Text>
-          ),
       },
     ],
     [],
@@ -228,8 +197,8 @@ export default function Archived({ connection, onAskAgent }: Props) {
   if (error) {
     return (
       <Page
-        title="Archived"
-        subTitle="Proposals you dismissed. Kept for 30 days."
+        title="Done"
+        subTitle="Proposals you've approved or that have shipped."
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
@@ -242,8 +211,8 @@ export default function Archived({ connection, onAskAgent }: Props) {
   if (issues === null) {
     return (
       <Page
-        title="Archived"
-        subTitle="Proposals you dismissed. Kept for 30 days."
+        title="Done"
+        subTitle="Proposals you've approved or that have shipped."
         actions={<PageGlobalActions onAskAgent={onAskAgent} />}
         hasPadding
       >
@@ -259,9 +228,9 @@ export default function Archived({ connection, onAskAgent }: Props) {
       direction="column"
       gap="sm"
       align="center"
-      style={{ padding: 'var(--wpds-dimension-padding-3xl) 0' }}
+      style={{ padding: 'var(--wpds-dimension-padding-2xl)' }}
     >
-      <Text variant="heading-md">No dismissed proposals yet</Text>
+      <Text variant="heading-md">Nothing shipped yet.</Text>
       <Text
         variant="body-sm"
         style={{
@@ -270,16 +239,16 @@ export default function Archived({ connection, onAskAgent }: Props) {
           maxWidth: '420px',
         }}
       >
-        When you dismiss a proposal, it lands here. Dismissed proposals are
-        kept for 30 days before they're permanently deleted.
+        Approved proposals will land here. Approvals stay reversible for a window
+        — open one to undo.
       </Text>
     </Stack>
   );
 
   return (
     <Page
-      title="Archived"
-      subTitle="Proposals you dismissed. Kept for 30 days."
+      title="Done"
+      subTitle="Proposals you've approved or that have shipped."
       actions={<PageGlobalActions onAskAgent={onAskAgent} />}
       hasPadding
     >
@@ -291,8 +260,19 @@ export default function Archived({ connection, onAskAgent }: Props) {
         data={shaped}
         getItemId={(r) => r.rowId}
         paginationInfo={paginationInfo}
-        defaultLayouts={{ table: {} }}
-        onClickItem={(r) => nav(`/issues/${r.issue.id}`)}
+        defaultLayouts={{ table: {}, grid: {} }}
+        onClickItem={(r) => {
+          if (r.origin.kind === 'batch') {
+            nav(`/batches/${r.origin.batch.id}`);
+            return;
+          }
+          const issue = r.origin.issue;
+          if (issue.batch_id) {
+            nav(`/batches/${issue.batch_id}`);
+          } else {
+            nav(`/issues/${issue.id}`);
+          }
+        }}
         empty={empty}
       />
     </Page>
