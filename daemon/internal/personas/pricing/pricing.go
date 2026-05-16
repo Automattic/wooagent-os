@@ -249,6 +249,8 @@ func draftForProduct(
 			"product_id":      p.ID,
 			"product_name":    p.Name,
 			"product_sku":     p.SKU,
+			"image_url":       p.ImageURL,
+			"image_alt":       p.ImageAlt,
 			"currency":        currency,
 			"previous_price":  out.PreviousPrice,
 			"proposed_price":  out.ProposedPrice,
@@ -413,6 +415,8 @@ type product struct {
 	Permalink    string `json:"permalink"`
 	RegularPrice string `json:"regular_price"`
 	SalePrice    string `json:"sale_price"`
+	ImageURL     string `json:"image_url"`
+	ImageAlt     string `json:"image_alt"`
 	Categories   []struct {
 		Name string `json:"name"`
 	} `json:"categories"`

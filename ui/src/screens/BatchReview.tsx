@@ -18,6 +18,7 @@ import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
+import ProductThumbnail from '../components/ProductThumbnail';
 
 interface Props {
   connection: Connection;
@@ -338,6 +339,12 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                   {idx + 1} / {issues.length}
                 </span>
                 <PersonaAvatar persona={personaKey} size="md" />
+                <ProductThumbnail
+                  src={typeof target.image_url === 'string' ? target.image_url : undefined}
+                  alt={typeof target.image_alt === 'string' ? target.image_alt : undefined}
+                  persona={issue.persona}
+                  size="sm"
+                />
                 <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
                   <Text
                     variant="body-md"
@@ -851,6 +858,8 @@ function renderPricingBody(data: BatchDetail) {
       productId: typeof t.product_id === 'number' ? t.product_id : 0,
       sku: typeof t.product_sku === 'string' ? t.product_sku : '',
       name: typeof t.product_name === 'string' ? t.product_name : iwp.issue.title,
+      imageUrl: typeof t.image_url === 'string' ? t.image_url : undefined,
+      imageAlt: typeof t.image_alt === 'string' ? t.image_alt : undefined,
       categoryPath:
         typeof t.product_category === 'string' ? t.product_category : undefined,
       previousPrice: typeof t.previous_price === 'number' ? t.previous_price : 0,

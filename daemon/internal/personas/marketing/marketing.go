@@ -227,6 +227,8 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int) (pe
 		"product_name": p.Name,
 		"product_sku":  p.SKU,
 		"previous":     p.Description,
+		"image_url":    p.ImageURL,
+		"image_alt":    p.ImageAlt,
 	}
 	var content string
 	if parseErr == nil {
@@ -352,6 +354,8 @@ type product struct {
 	Description string `json:"description"`
 	ShortDesc   string `json:"short_description"`
 	Permalink   string `json:"permalink"`
+	ImageURL    string `json:"image_url"`
+	ImageAlt    string `json:"image_alt"`
 }
 
 func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
