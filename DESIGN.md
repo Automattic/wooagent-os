@@ -154,7 +154,7 @@ Every WooAgent screen lives in the same frame:
 
 ### Queues, not dashboards
 
-WooAgent's primary work surface is a **queue** — table or kanban — not a KPI dashboard. "Today's queue" is the canonical pattern: page heading → optional 1–2 metric strip → list of work items. Operators scan; they don't stare at six tiles of mixed data.
+WooAgent's primary work surface is a **review queue** — not a KPI dashboard. "Today's queue" is the canonical pattern: page heading → optional 1–2 metric strip → list of work items. Operators scan; they don't stare at six tiles of mixed data.
 
 The board is **cross-agent** — it holds work staged by every agent in the fleet, not just marketing. Persona-filtered views (`?persona=…`) get per-agent copy; the default board copy stays plural ("Everything your agents have staged for you…"). Don't slip back into marketing-specific phrasing on the default view.
 
