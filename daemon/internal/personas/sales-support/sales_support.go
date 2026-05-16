@@ -36,9 +36,12 @@ import (
 
 const (
 	defaultAnthropicModel = "claude-haiku-4-5-20251001"
-	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
 	anthropicVersion      = "2023-06-01"
 )
+
+// anthropicAPIURL is a var (not a const) so the rule-lock test can
+// swap it for a httptest server. See sales_support_redaction_test.go.
+var anthropicAPIURL = "https://api.anthropic.com/v1/messages"
 
 func init() {
 	personas.Register(&SalesSupport{})
@@ -170,7 +173,8 @@ func draftForOrder(
 		status = o.Status
 	}
 
-	out, raw, err := draftMessage(ctx, deps.Env.AnthropicAPIKey, model, o)
+	pc := redactOrderForPrompt(o)
+	out, raw, err := draftMessage(ctx, deps.Env.AnthropicAPIKey, model, pc)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft message: %w (raw=%s)", err, truncate(raw, 400))
 	}
@@ -413,9 +417,8 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func draftMessage(ctx context.Context, apiKey, model string, o order) (messageOut, string, error) {
-	customerName := firstNonEmpty(o.BillingName, o.ShippingName, "the customer")
-	itemsText := formatLineItemsForPrompt(o.LineItems)
+func draftMessage(ctx context.Context, apiKey, model string, pc promptContext) (messageOut, string, error) {
+	itemsText := formatLineItemsForPrompt(pc.LineItems)
 	user := fmt.Sprintf(
 		`Order to write a note for:
 
@@ -423,15 +426,14 @@ func draftMessage(ctx context.Context, apiKey, model string, o order) (messageOu
 - status: %s
 - total: %s %s
 - date_created: %s
-- customer_name: %s
-- customer_email: %s
+- customer_first_name: %s
 - line_items:
 %s
 
 Write a customer-facing note matching the tone in the system prompt. Output the JSON object only.`,
-		firstNonEmpty(o.Number, fmt.Sprintf("%d", o.ID)),
-		o.Status, o.Total, o.Currency, o.DateCreated,
-		customerName, o.CustomerEmail, itemsText,
+		firstNonEmpty(pc.OrderNumber, ""),
+		pc.Status, pc.Total, pc.Currency, pc.DateCreated,
+		pc.FirstName, itemsText,
 	)
 
 	body, _ := json.Marshal(anthropicReq{
