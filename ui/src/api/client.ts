@@ -226,6 +226,14 @@ export interface Issue {
   /** Set when this issue is part of a batch. Cards in the kanban that
    *  carry a batch_id route to /batches/:id instead of /issues/:id. */
   batch_id?: string;
+  /** The proposal's per-target payload (product_id, image_url, etc.).
+   *  Surfaced on list responses so queue card UIs can read fields without
+   *  fetching the full IssueDetail. Optional because not every issue has
+   *  proposal context. Mirrors Proposal.target's shape. */
+  target?: Record<string, unknown> & {
+    image_url?: string;
+    image_alt?: string;
+  };
   created_at: string;
   updated_at: string;
 }
