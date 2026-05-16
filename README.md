@@ -12,6 +12,22 @@ A fleet of opinionated AI agents — Marketing, Pricing, Inventory, Accounting, 
 - **Pre-signed, policy-enforced abilities.** The agent doesn't get to invent what it can call. WooAgent OS ships a curated manifest of trusted plugin abilities with canonical schema hashes and per-persona scope. A deterministic non-LLM middleware verifies every invocation before it reaches the store. Prompt-injected or hallucinated tool calls are denied, not executed. Plugin updates that silently change a schema auto-demote the affected ability to unapproved until the operator reviews.
 - **Propose / approve.** On top of trust enforcement, agents never apply changes directly by default. Every write lands as an issue with a diff the operator reviews. A run log captures every model call, every ability call, and every state change.
 
+## Data handling
+
+WooAgent OS runs on your machine and talks to your store directly. The daemon, the SQLite store, the run log, and the Companion Plugin all stay on your host. The only data that leaves is the prompt the agent sends to whichever LLM provider you've configured — so what travels depends on which agent is running and which provider you've pointed it at.
+
+What each persona sends in a prompt:
+
+- **Marketing** — current product copy (title, description, attributes). No customer data.
+- **Pricing** — product attributes plus the agent's `web_search` queries to retailer sites. No customer data.
+- **Inventory** — SKU, current stock, sales velocity. No customer data.
+- **Sales Support** — full order context for one recent order: customer name, email, shipping address, line items, and any prior order notes. **This is the persona to think hardest about.** If your store handles orders you wouldn't want appearing in your LLM provider's chat history, screenshots, or upstream client logs, point Sales Support at a local model (Ollama, LM Studio, llama.cpp) — same propose-approve loop, zero egress.
+- **Chief of Staff (v0.1)** — only metadata about other agents' open issues (persona, status, summary). Does not see store data.
+
+Reporting and Accounting ship in v0.2 and will get their own data-handling line when they land.
+
+A v0.2 follow-up tracks pseudonymizing Sales Support PII before the LLM call ([DSGWOO-1320](https://linear.app/a8c/issue/DSGWOO-1320/sales-support-pseudonymize-customer-pii-before-sending-to-llm-wc-for); the pattern from [WooCommerce for Claude](https://developer.woocommerce.com/2026/05/07/woocommerce-for-claude/)). Until that lands, the local-model option is your zero-egress path.
+
 ## Architecture
 
 - **Go daemon** (`daemon/`) — headless single binary. Owns the agent fleet, MCP client, issue queue, auth, local storage (SQLite), and the REST API the UI and CLI consume. Cross-platform, no external runtime dependencies.
