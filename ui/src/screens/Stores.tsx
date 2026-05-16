@@ -73,7 +73,7 @@ export default function Stores({
     <Page
       title="Stores"
       subTitle="WooCommerce stores paired with WooAgent."
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
       hasPadding
     >
       <Stack direction="column" gap="xl">

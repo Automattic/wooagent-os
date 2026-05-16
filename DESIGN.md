@@ -90,7 +90,7 @@ Don't block on review, but tell the user the change is worth a designer's eye be
 - Information architecture changes — moving items between the sidebar, the page header, settings groups, or modal tabs.
 - A primary CTA for a flow — the button that completes the operator's job (approve, send, publish, run).
 - Anything touching onboarding, the persona system, or the approve / review surface — the highest-trust moments in the product.
-- Persona-color usage beyond the two pre-approved sites (`PersonaAvatar` + kind pill).
+- Persona-color usage beyond the single pre-approved site (`PersonaAvatar`).
 
 ## Colors
 
@@ -108,14 +108,16 @@ Don't block on review, but tell the user the change is worth a designer's eye be
 
 The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variables `--wa-persona-{xx}-bg` / `--wa-persona-{xx}-ink`. Keys: `mk` (Marketing), `pr` (Pricing), `in` (Inventory), `ac` (Accounting), `rp` (Reporting), `ss` (Sales Support), `cs` (Chief of Staff).
 
-**Used in two places only:**
+**Used in one place only:**
 
-1. The `PersonaAvatar` component — sidebar header, queue card corners, page eyebrows. The persona's identity tile.
-2. The kind pill on cards (CONTENT / CAMPAIGN / EMAIL) — colored by the owning persona. The canonical wrapper is `KindBadge` in `StatusBadge.tsx`; the supporting CSS lives in `app.css`.
+1. The `PersonaAvatar` component — sidebar header, page eyebrows, agent-identity row of detail screens. The persona's identity tile.
 
-The brand-header "W" tile in `LeftNav` previously sat in this exception list (using the marketing persona color), but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. The persona-color exception is now scoped to identity surfaces only.
+Two previous sites have been retired:
 
-**Don't expand this exception further.** A third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
+- The brand-header "W" tile in `LeftNav` previously used the marketing persona color but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma.
+- The persona-colored `KindBadge` "kind pill" on board cards (CONTENT / CAMPAIGN / EMAIL) was removed entirely when the queue moved to DataViews (2026-05-16). Agent identity via `PersonaAvatar` is the canonical visual signal — Kind was redundant on top of it.
+
+**Don't expand this exception further.** A second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
 
 ### Sidebar surface color (WooAgent-owned)
 
@@ -241,7 +243,7 @@ The canonical WPDS + library components in use across `ui/`. **Reach for one of 
 
 ### `@wordpress/ui` — primary surfaces, layout, type, status
 
-- **`Badge`** — status/identity pill. Allowed intents: `high`, `medium`, `low`, `none`, `stable`, `informational`, `draft`. (Used: status column on the agent roster, kind pill via `StatusBadge`, the in-review counter on the sidebar's "Board" item.)
+- **`Badge`** — status/identity pill. Allowed intents: `high`, `medium`, `low`, `none`, `stable`, `informational`, `draft`. (Used: status column on the agent roster, the "N products" batch indicator inline with proposal titles on the queue, the in-review counter on the sidebar's "Needs review" item.)
 - **`Card.Root`** / **`Card.Header`** / **`Card.Content`** — bordered surface for grouped content. Wraps form sections (Settings) and proposal panels (IssueDetail).
 - **`Notice.Root`** + **`Notice.Description`** + **`Notice.Actions`** + **`Notice.ActionButton`** + **`Notice.CloseIcon`** — compound notice component (intents: `neutral`, `info`, `warning`, `success`, `error`). The legacy `Notice` from `@wordpress/components` is **not** used; all notices are the compound form.
 - **`Stack`** — default layout primitive (flex with token-based gaps). Reach for this before plain CSS flex.
@@ -281,7 +283,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 ### Don't expand the persona-color exception
 
-Persona color appears in `PersonaAvatar` and the kind pill on cards (`KindBadge` + supporting `app.css` rules). **That's it.** The `LeftNav` brand "W" tile used to sit here but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma. The `.wa-eyebrow--persona` modifier (pink eyebrows on "Proposed", "Rationale", "Price change", "Customer-facing message") used to be a third de-facto site; it was removed when aligning the Marketing detail to the 2.0/Single Product Figma frame (2026-05-15). A future need for a third persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
+Persona color appears in `PersonaAvatar` only. **That's it.** Three previous sites have been retired: the `LeftNav` brand "W" tile (moved to WPDS brand indigo `--wpds-color-bg-interactive-brand-strong` per the i3.2 Figma); the `.wa-eyebrow--persona` modifier (pink eyebrows on "Proposed", "Rationale", "Price change", "Customer-facing message" — removed 2026-05-15 when aligning the Marketing detail to the 2.0/Single Product Figma frame); and the persona-colored `KindBadge` "kind pill" on board cards (removed 2026-05-16 when the queue moved to DataViews and agent identity via `PersonaAvatar` became the canonical visual signal). A future need for a second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
 ### No monospace fonts (one exception)
 
@@ -307,7 +309,7 @@ Every shell, control, surface, and form element MUST be a WPDS component (`@word
 
 Before drawing anything custom: check WPDS via the MCP server (`mcp__wordpress-design-system__get_components`), then check `@wordpress/ui` and `@wordpress/components` Storybook. If nothing fits, raise it in #design-systems before forking.
 
-**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The same `CUSTOM:` marker pattern is the escape hatch for any rule with a genuine WPDS gap — including raw HTML interactive elements (no WPDS wrapper fits) and bespoke font-sizes (no WPDS token matches). The persona avatars and the kind pill are the two pre-approved persona-color customs (see Colors); anything else is new territory and needs a flag.
+**If something must be custom, the code MUST include a `// CUSTOM:` comment immediately above it** explaining: (a) why no WPDS component fits, (b) what's custom about it, (c) where it's documented (DESIGN.md, a P2, an issue). Reviewers should reject custom UI that isn't called out this way. The same `CUSTOM:` marker pattern is the escape hatch for any rule with a genuine WPDS gap — including raw HTML interactive elements (no WPDS wrapper fits) and bespoke font-sizes (no WPDS token matches). The persona avatars are the single pre-approved persona-color custom (see Colors); anything else is new territory and needs a flag.
 
 ### Sticky action bar for batch actions
 

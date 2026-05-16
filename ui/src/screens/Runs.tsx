@@ -90,7 +90,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
       <Page
         title="Runs"
         subTitle="Fleet-wide run history"
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <Notice.Root intent="error">
@@ -107,7 +107,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
       <Page
         title="Runs"
         subTitle="Fleet-wide run history"
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <Stack direction="row" gap="sm" align="center">
@@ -121,7 +121,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
     <Page
       title="Runs"
       subTitle={`Fleet-wide run history · ${runs.length} recent`}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
       hasPadding
     >
       {runs.length === 0 ? (

@@ -226,7 +226,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Runs', to: '/runs' }, { label: runLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -247,7 +247,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Runs', to: '/runs' }, { label: runLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -273,7 +273,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
         />
       }
       badges={<RunStatusBadge status={run.status} />}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
       hasPadding
     >
       <div className="wa-subpage-content">
