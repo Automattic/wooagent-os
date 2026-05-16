@@ -13,7 +13,6 @@ import {
   type Connection,
   type PriceSource,
 } from '../api/client';
-import { KindBadge } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -233,7 +232,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: batchLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -252,7 +251,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         breadcrumbs={
           <Breadcrumbs items={[{ label: 'Board', to: '/' }, { label: batchLabel }]} />
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
         <div className="wa-subpage-content">
@@ -587,10 +586,9 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                 {batch.intent}
               </span>
             )}
-            <KindBadge kind="content" />
           </>
         }
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
         className="wa-detail-shell-page"
       >

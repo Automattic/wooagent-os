@@ -91,3 +91,19 @@ export function personaDisplayName(slug: string | undefined): string {
   if (slug === 'chief') return 'Chief of staff';
   return slug.charAt(0).toUpperCase() + slug.slice(1);
 }
+
+// Build a DataViews-shaped `elements` list for the agent filter from the
+// personas present in a row set. Computed from the data (not hardcoded)
+// so the filter dropdown only offers agents the operator can actually
+// match on this page. Sorted alphabetically by label for stable ordering.
+export function personaElementsFrom(
+  slugs: Iterable<string | undefined>,
+): Array<{ value: string; label: string }> {
+  const unique = new Set<string>();
+  for (const s of slugs) {
+    if (s) unique.add(s);
+  }
+  return Array.from(unique)
+    .map((value) => ({ value, label: personaDisplayName(value) }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}

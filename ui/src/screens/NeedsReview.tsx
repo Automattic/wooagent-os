@@ -6,16 +6,13 @@ import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { type Batch, type Issue } from '../api/client';
-import {
-  KindBadge,
-  kindFromIssue,
-  kindFromPersonaSlug,
-} from '../components/StatusBadge';
+import { kindFromIssue, kindFromPersonaSlug } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
 import {
   buildBoardItems,
   personaDisplayName,
+  personaElementsFrom,
   relativeTime,
   type BoardItem,
 } from '../lib/boardItems';
@@ -39,7 +36,6 @@ interface Row {
   title: string;
   personaSlug: string;
   agentLabel: string;
-  kindLabel: string;
   /** Item identifier shown in the eyebrow. WOO-IDs for issues, "BATCH · …"
    *  for batches. Kept as a separate column so the table layout can show it. */
   itemId: string;
@@ -100,7 +96,6 @@ function rowFor(item: BoardItem): Row {
       title: b.title,
       personaSlug: b.persona ?? '',
       agentLabel: personaDisplayName(b.persona),
-      kindLabel: humanKindLabel(kindFromPersonaSlug(b.persona)),
       itemId: `BATCH · ${b.id.slice(0, 6).toUpperCase()}`,
       batchCount: b.total,
       updatedAt: b.updated_at,
@@ -114,45 +109,33 @@ function rowFor(item: BoardItem): Row {
     title: issue.title,
     personaSlug: issue.persona ?? '',
     agentLabel: personaDisplayName(issue.persona),
-    kindLabel: humanKindLabel(kindFromIssue(issue)),
     itemId: issue.id.slice(0, 8).toUpperCase(),
     updatedAt: issue.updated_at,
     meta: metaForBoardItem(item),
   };
 }
 
-function humanKindLabel(kind: ReturnType<typeof kindFromIssue>): string {
-  switch (kind) {
-    case 'content':
-      return 'Content';
-    case 'campaign':
-      return 'Campaign';
-    case 'email':
-      return 'Email';
-    case 'price':
-      return 'Price';
-    case 'message':
-      return 'Message';
-  }
-}
-
 // DataViews default view. Grid is the canonical layout for the queue —
 // operators scan agent proposals visually by persona color. Table is
 // available via the layout toggle for high-volume sessions.
-const DEFAULT_VIEW: View = {
-  type: 'grid',
-  search: '',
-  page: 1,
-  perPage: 24,
-  titleField: 'title',
-  descriptionField: 'meta',
-  mediaField: 'kind',
-  fields: ['agent', 'age'],
-  layout: {
-    badgeFields: ['itemId'],
-    density: 'comfortable',
-  },
-};
+function buildDefaultView(initialPersona: string | null): View {
+  return {
+    type: 'grid',
+    search: '',
+    page: 1,
+    perPage: 24,
+    titleField: 'title',
+    descriptionField: 'meta',
+    fields: ['agent', 'age'],
+    filters: initialPersona
+      ? [{ field: 'agent', operator: 'isAny', value: [initialPersona] }]
+      : [],
+    layout: {
+      badgeFields: ['itemId'],
+      density: 'comfortable',
+    },
+  };
+}
 
 export default function NeedsReview({
   issues,
@@ -163,9 +146,12 @@ export default function NeedsReview({
   const nav = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const personaFilter = searchParams.get('persona');
+  const initialPersona = searchParams.get('persona');
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [view, setView] = useState<View>(DEFAULT_VIEW);
+  // `?persona=X` deep-links from Agents → "View issues" seed the agent
+  // filter on first mount. Subsequent user changes to the filter live
+  // in DataViews state and don't write back to the URL.
+  const [view, setView] = useState<View>(() => buildDefaultView(initialPersona));
 
   // Toast handoff from IssueDetail / BatchReview (same pattern as the old
   // Kanban): read once, then clear history state so refresh doesn't repeat.
@@ -180,19 +166,19 @@ export default function NeedsReview({
     }
   }, [location, nav]);
 
-  const title = personaFilter
-    ? `${personaDisplayName(personaFilter)} queue`
-    : "Today's queue";
-  const subTitle = personaFilter
-    ? `What the ${personaDisplayName(personaFilter).toLowerCase()} agent has staged for you. Approve, adjust, or let it work.`
-    : "Everything your agents have staged for you. Approve, adjust, or let them work.";
+  const title = "Today's queue";
+  const subTitle =
+    "Everything your agents have staged for you. Approve, adjust, or let them work.";
 
   const rows = useMemo<Row[]>(() => {
     if (!issues) return [];
-    return buildBoardItems(issues, batches, 'in_review', {
-      persona: personaFilter,
-    }).map(rowFor);
-  }, [issues, batches, personaFilter]);
+    return buildBoardItems(issues, batches, 'in_review').map(rowFor);
+  }, [issues, batches]);
+
+  const agentElements = useMemo(
+    () => personaElementsFrom(rows.map((r) => r.personaSlug)),
+    [rows],
+  );
 
   const fields = useMemo<Field<Row>[]>(
     () => [
@@ -203,37 +189,22 @@ export default function NeedsReview({
         enableGlobalSearch: true,
         getValue: ({ item }) => item.title,
         render: ({ item }) => (
-          <Text
-            variant="body-sm"
-            style={{
-              fontWeight: 'var(--wpds-typography-font-weight-medium)',
-            }}
-          >
-            {item.title}
-          </Text>
+          <Stack direction="row" gap="xs" align="center">
+            <Text
+              variant="body-sm"
+              style={{
+                fontWeight: 'var(--wpds-typography-font-weight-medium)',
+              }}
+            >
+              {item.title}
+            </Text>
+            {item.batchCount !== undefined && (
+              <Badge intent="informational">
+                {`${item.batchCount} products`}
+              </Badge>
+            )}
+          </Stack>
         ),
-      },
-      {
-        id: 'kind',
-        label: 'Kind',
-        enableSorting: false,
-        getValue: ({ item }) => item.kindLabel,
-        render: ({ item }) => {
-          const kind =
-            item.origin.kind === 'batch'
-              ? kindFromPersonaSlug(item.origin.batch.persona)
-              : kindFromIssue(item.origin.issue);
-          return (
-            <Stack direction="row" gap="xs" align="center">
-              <KindBadge kind={kind} />
-              {item.batchCount !== undefined && (
-                <Badge intent="informational">
-                  {`${item.batchCount} products`}
-                </Badge>
-              )}
-            </Stack>
-          );
-        },
       },
       {
         id: 'itemId',
@@ -270,8 +241,11 @@ export default function NeedsReview({
       {
         id: 'agent',
         label: 'Agent',
-        enableGlobalSearch: true,
-        getValue: ({ item }) => item.agentLabel,
+        // Slug, not display name — the filter compares the field value
+        // against `elements.value` (slug) on each row.
+        getValue: ({ item }) => item.personaSlug,
+        elements: agentElements,
+        filterBy: { operators: ['isAny'] },
         render: ({ item }) => (
           <Stack direction="row" gap="xs" align="center">
             <PersonaAvatar persona={personaKeyFrom(item.personaSlug)} size="sm" />
@@ -294,7 +268,7 @@ export default function NeedsReview({
         ),
       },
     ],
-    [],
+    [agentElements],
   );
 
   const actions = useMemo<Action<Row>[]>(() => [], []);
@@ -316,7 +290,7 @@ export default function NeedsReview({
         <Page
           title={title}
           subTitle={subTitle}
-          actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+          actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
           hasPadding
         >
           <Notice.Root intent="error">
@@ -335,7 +309,7 @@ export default function NeedsReview({
         <Page
           title={title}
           subTitle={subTitle}
-          actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+          actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
           hasPadding
         >
           <Stack direction="row" gap="sm" align="center">
@@ -373,24 +347,9 @@ export default function NeedsReview({
       <Page
         title={title}
         subTitle={subTitle}
-        actions={<PageGlobalActions onAskAgent={onAskAgent} />}
+        actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
       >
-        {personaFilter && (
-          <div style={{ marginBottom: 'var(--wpds-dimension-gap-md)' }}>
-            <Notice.Root intent="info">
-              <Notice.Description>
-                Filtering by <strong>{personaDisplayName(personaFilter)}</strong>.
-                Dismiss to see the full queue.
-              </Notice.Description>
-              <Notice.CloseIcon
-                label="Clear filter"
-                onClick={() => nav('/needs-review')}
-              />
-            </Notice.Root>
-          </div>
-        )}
-
         <DataViews<Row>
           view={view}
           onChangeView={setView}
