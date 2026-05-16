@@ -36,16 +36,19 @@ const PERSONA_ICON: Record<string, typeof box> = {
   chief: people,
 };
 
-const PIXEL: Record<ProductThumbnailSize, { box: number; icon: number }> = {
-  sm: { box: 40, icon: 18 },
-  md: { box: 72, icon: 32 },
-  lg: { box: 86, icon: 40 },
+// Pixel size of the placeholder icon at each thumbnail size. The box
+// dimensions (40 / 72 / 86) are owned by CSS (.wa-product-thumb--sm/md/lg)
+// — the icon size is the one knob the component sets at render time.
+const ICON_PX: Record<ProductThumbnailSize, number> = {
+  sm: 18,
+  md: 32,
+  lg: 40,
 };
 
 export default function ProductThumbnail({ src, alt, persona, size }: Props) {
   const [failed, setFailed] = useState(false);
   const showImage = !!src && !failed;
-  const dims = PIXEL[size];
+  const iconSize = ICON_PX[size];
   const icon = (persona && PERSONA_ICON[persona]) || box;
 
   if (showImage) {
@@ -64,7 +67,7 @@ export default function ProductThumbnail({ src, alt, persona, size }: Props) {
       className={`wa-product-thumb wa-product-thumb--${size} wa-product-thumb--placeholder`}
       aria-hidden="true"
     >
-      <Icon icon={icon} size={dims.icon} />
+      <Icon icon={icon} size={iconSize} />
     </div>
   );
 }
