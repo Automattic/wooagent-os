@@ -124,12 +124,15 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 		}, nil
 	}
 
-	// Batch pre-check: do we have a category with >= 3 eligible products?
-	// If yes, run the expensive web_search loop on the full bucket. This
-	// path bypasses maxDraftAttempts — when a batch is forming, we want
-	// to process every product in the bucket, not stop at the first 3
-	// tries. Cost: ~1 Claude+web_search call per product (~20-30s each).
-	const batchThreshold = 3
+	// Batch pre-check: do we have a category with >= batchThreshold
+	// eligible products? If yes, run the expensive web_search loop on
+	// the bucket, capped at maxBatchSize. Cost: ~1 Claude+web_search
+	// call per product (~20-30s each), so the cap is what keeps a giant
+	// catalog from running 11+ LLM calls in a single bootstrap tick.
+	// Leftovers (bucket size - maxBatchSize) get picked up on the next
+	// Pricing run once cooldown rotates.
+	const batchThreshold = 5
+	const maxBatchSize = 8
 	eligible, eligErr := listEligibleProducts(ctx, deps.MCP, skip)
 	if eligErr != nil {
 		// Pre-check failed; fall through to single-product path
@@ -139,6 +142,9 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 	} else if bucket := findLargestEligibleBucket(eligible, batchThreshold); bucket != nil {
 		var drafts []personas.Drafted
 		for _, prod := range bucket.Products {
+			if len(drafts) >= maxBatchSize {
+				break
+			}
 			d, err := draftForProduct(ctx, deps, prod.ID, skill.Description, model, currency)
 			if err != nil {
 				// Per-product error: log via continue and move on;
@@ -681,11 +687,20 @@ func draftProposal(
 	)
 
 	body, _ := json.Marshal(anthropicReq{
-		Model:     model,
-		MaxTokens: 4096,
+		Model: model,
+		// Pricing's response is a small structured JSON (proposed_price,
+		// reason, ~3-5 source URLs). 4096 was 4× oversized — cap at 1024
+		// to stop the model from spending output tokens on filler. If a
+		// future skill needs more, bump per-call rather than the default.
+		MaxTokens: 1024,
 		System:    system,
 		Messages:  []anthropicMsg{{Role: "user", Content: user}},
-		Tools:     []anthropicTool{{Type: "web_search_20250305", Name: "web_search", MaxUses: 6}},
+		// MaxUses caps how many web_search calls the model can issue. The
+		// skill requires ≥3 sources in the response, and each search use
+		// typically returns 5+ URLs — 3 uses is plenty to clear the floor
+		// while keeping input-token cost low (each fetched page lands in
+		// the model's context).
+		Tools: []anthropicTool{{Type: "web_search_20250305", Name: "web_search", MaxUses: 3}},
 	})
 
 	cctx, cancel := context.WithTimeout(ctx, 180*time.Second)
