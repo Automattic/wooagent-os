@@ -858,6 +858,8 @@ function renderPricingBody(data: BatchDetail) {
       productId: typeof t.product_id === 'number' ? t.product_id : 0,
       sku: typeof t.product_sku === 'string' ? t.product_sku : '',
       name: typeof t.product_name === 'string' ? t.product_name : iwp.issue.title,
+      imageUrl: typeof t.image_url === 'string' ? t.image_url : undefined,
+      imageAlt: typeof t.image_alt === 'string' ? t.image_alt : undefined,
       categoryPath:
         typeof t.product_category === 'string' ? t.product_category : undefined,
       previousPrice: typeof t.previous_price === 'number' ? t.previous_price : 0,

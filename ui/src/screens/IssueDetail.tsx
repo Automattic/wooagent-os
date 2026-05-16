@@ -355,7 +355,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           </Text>
         </Stack>
 
-        {/* Title row — 86×86 thumbnail placeholder + title + subhead */}
+        {/* Title row — 86×86 product thumbnail + title + subhead */}
         <div className="wa-detail-title-row">
           <ProductThumbnail
             src={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
