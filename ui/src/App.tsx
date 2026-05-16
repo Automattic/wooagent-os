@@ -5,7 +5,8 @@ import OnboardingShell from './onboarding/OnboardingShell';
 import LeftNav from './components/LeftNav';
 import AskAgentDrawer from './components/AskAgentDrawer';
 import AuthExpiredModal from './components/AuthExpiredModal';
-import Kanban from './screens/Kanban';
+import NeedsReview from './screens/NeedsReview';
+import Done from './screens/Done';
 import IssueDetail from './screens/IssueDetail';
 import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
@@ -197,7 +198,7 @@ export default function App() {
   }
 
   const inReview = (issues ?? []).filter((i) => i.status === 'in_review').length;
-  const askAgentContext = `Board · Today's marketing queue · ${(issues ?? []).length} items`;
+  const askAgentContext = `Needs review · ${inReview} item${inReview === 1 ? '' : 's'}`;
 
   return (
     <>
@@ -206,7 +207,7 @@ export default function App() {
       {(drawer) => (
         <>
           <LeftNav
-            marketingInReview={inReview}
+            inReviewCount={inReview}
             connection={connection}
             embedded={isEmbedded()}
             onForgetConnection={() => {
@@ -250,10 +251,22 @@ export default function App() {
               contextLabel={askAgentContext}
             />
         <Routes>
+          <Route path="/" element={<Navigate to="/needs-review" replace />} />
           <Route
-            path="/"
+            path="/needs-review"
             element={
-              <Kanban
+              <NeedsReview
+                issues={issues}
+                batches={batches}
+                error={issuesError}
+                onAskAgent={() => setAskAgentOpen(true)}
+              />
+            }
+          />
+          <Route
+            path="/done"
+            element={
+              <Done
                 issues={issues}
                 batches={batches}
                 error={issuesError}
@@ -405,7 +418,7 @@ export default function App() {
               />
             }
           />
-          <Route path="/agents/marketing" element={<Navigate to="/" replace />} />
+          <Route path="/agents/marketing" element={<Navigate to="/needs-review" replace />} />
           <Route
             path="/agents/chief"
             element={

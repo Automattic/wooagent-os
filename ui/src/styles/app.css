@@ -283,23 +283,6 @@ a {
   margin-bottom: var(--wpds-dimension-gap-sm);
 }
 
-/* Bottom subline of a kanban card — see globals.css commentary in
-   marketing-prototype for the why. */
-.wa-card-meta {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--wpds-dimension-gap-xs);
-  font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
-}
-.wa-card-meta > * {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 /* Brand-voice / Yoast checklist row — see globals.css commentary in
    marketing-prototype for the why. */
 .wa-check-row {
@@ -443,65 +426,6 @@ a {
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
   z-index: 40;
-}
-
-/* Kanban columns row. Columns lost their card chrome — each column is now
-   a header (label + hint + count) with a neutral accent line beneath, then
-   stacked cards. */
-.wa-kanban-row {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: var(--wpds-dimension-gap-lg);
-}
-.wa-kanban-col {
-  flex: 1;
-  min-width: 0;
-  min-height: 60vh;
-  display: flex;
-  flex-direction: column;
-}
-.wa-kanban-col__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--wpds-dimension-gap-sm);
-  padding-bottom: var(--wpds-dimension-padding-xs);
-}
-.wa-kanban-col__count {
-  font-variant-numeric: tabular-nums;
-  font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
-}
-.wa-kanban-col__accent {
-  height: 2px;
-  border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-stroke-surface-neutral);
-  margin-bottom: var(--wpds-dimension-gap-md);
-}
-.wa-kanban-col__cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wpds-dimension-gap-sm);
-}
-
-/* Tinted timestamp/state on the right side of card meta — color tracks the
-   column. Used in the "drafting now" yellow and the "shipped X days ago"
-   green treatments. */
-.wa-card-meta--drafting { color: var(--wpds-color-fg-content-warning); }
-.wa-card-meta--success { color: var(--wpds-color-fg-content-success); }
-
-.wa-card-meta-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-xs);
-}
-.wa-card-meta-dot {
-  height: 6px;
-  width: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  display: inline-block;
 }
 
 /* Persona avatar — used in the page eyebrow, card bottom-right, and any
@@ -1483,22 +1407,6 @@ a {
     display: block;
   }
 
-  .wa-kanban-row {
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    padding-bottom: var(--wpds-dimension-padding-sm);
-    margin-left: calc(-1 * var(--wpds-dimension-padding-md));
-    margin-right: calc(-1 * var(--wpds-dimension-padding-md));
-    padding-left: var(--wpds-dimension-padding-md);
-    padding-right: var(--wpds-dimension-padding-md);
-  }
-  .wa-kanban-col {
-    flex: 0 0 auto;
-    min-width: 280px;
-    width: 280px;
-    scroll-snap-align: start;
-  }
-
   .wa-kpi-row {
     flex-wrap: wrap;
   }
@@ -1552,63 +1460,3 @@ a {
   flex: none;
 }
 
-/* ---------- Archive screen (CUSTOM: table-style list) ----------
-   Pre-DataViews scaffold. Header row + bordered row cards in a 5-column
-   grid matching the Figma columns: Proposal · Type · Agent · Dismissed ·
-   Reason. To be replaced when the Archive moves onto DataViews to align
-   with Agents and Abilities. */
-.wa-archive-table {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wpds-dimension-gap-sm);
-}
-.wa-archive-table__head {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) 88px 140px 140px minmax(140px, 1fr);
-  gap: var(--wpds-dimension-gap-md);
-  padding:
-    0
-    var(--wpds-dimension-padding-md);
-  font-size: var(--wpds-typography-font-size-xs);
-  font-weight: var(--wpds-typography-font-weight-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--wpds-color-fg-content-neutral-weak);
-}
-.wa-archive-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) 88px 140px 140px minmax(140px, 1fr);
-  align-items: center;
-  gap: var(--wpds-dimension-gap-md);
-  padding: var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral-strong);
-  border:
-    var(--wpds-border-width-xs)
-    solid var(--wpds-color-stroke-surface-neutral-weak);
-  border-radius: var(--wpds-border-radius-md);
-  cursor: var(--wpds-cursor-control);
-  text-align: left;
-  font: inherit;
-  color: inherit;
-  transition: border-color 0.1s, background-color 0.1s;
-}
-.wa-archive-row:hover {
-  border-color: var(--wpds-color-stroke-surface-neutral);
-  background: var(--wpds-color-bg-surface-neutral-weak);
-}
-.wa-archive-row:focus-visible {
-  outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus-brand);
-  outline-offset: 2px;
-}
-.wa-archive-row__title {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wpds-dimension-gap-xs);
-  min-width: 0;
-}
-.wa-archive-row__agent {
-  display: flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-sm);
-  min-width: 0;
-}
