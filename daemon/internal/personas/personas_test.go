@@ -560,6 +560,175 @@ func TestRunAndPersist_EmitsBatchWhenSiblingsSet(t *testing.T) {
 	}
 }
 
+// queuePersona returns a queued sequence of Drafted/error pairs across
+// successive Draft calls. Used by the multi-emit tests below to simulate
+// a persona that picks a different target on each iteration (in reality
+// driven by RecentlyTouchedTargets, but the fake doesn't need to consult
+// it — RunAndPersist itself is what we're testing).
+type queuePersona struct {
+	slug     string
+	drafted  []Drafted
+	errs     []error
+	calls    int
+}
+
+func (q *queuePersona) Slug() string        { return q.slug }
+func (q *queuePersona) DisplayName() string { return "queue " + q.slug }
+func (q *queuePersona) Cooldown() CooldownPolicy {
+	return CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+	}
+}
+func (q *queuePersona) Draft(_ context.Context, _ Deps) (Drafted, error) {
+	i := q.calls
+	q.calls++
+	var d Drafted
+	if i < len(q.drafted) {
+		d = q.drafted[i]
+	}
+	var err error
+	if i < len(q.errs) {
+		err = q.errs[i]
+	}
+	return d, err
+}
+
+func TestRunAndPersist_MultiEmit_InsertsN(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "fake-multi", 1)
+	p := &queuePersona{
+		slug: "fake-multi",
+		drafted: []Drafted{
+			{
+				Title: "first proposal", Priority: "medium",
+				ProposalType: "x", ProposalContent: "a",
+				Target: map[string]any{"product_id": 1},
+			},
+			{
+				Title: "second proposal", Priority: "medium",
+				ProposalType: "x", ProposalContent: "b",
+				Target: map[string]any{"product_id": 2},
+			},
+		},
+	}
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st, MaxEmits: 2})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if res.Skipped {
+		t.Errorf("expected not skipped; got %+v", res)
+	}
+	if got := len(res.IssueIDs); got != 2 {
+		t.Errorf("len(IssueIDs) = %d, want 2", got)
+	}
+	if res.IssueID == "" || res.IssueID != res.IssueIDs[0] {
+		t.Errorf("IssueID (%q) should match IssueIDs[0] (%v)", res.IssueID, res.IssueIDs)
+	}
+	if p.calls != 2 {
+		t.Errorf("Draft call count = %d, want 2", p.calls)
+	}
+	var n int
+	if err := st.DB.QueryRowContext(context.Background(),
+		`SELECT count(*) FROM issues WHERE persona = ?`, "fake-multi",
+	).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 issues inserted, got %d", n)
+	}
+}
+
+func TestRunAndPersist_MultiEmit_BestEffortOnSecondError(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "fake-multi-err", 1)
+	p := &queuePersona{
+		slug: "fake-multi-err",
+		drafted: []Drafted{
+			{
+				Title: "first", Priority: "medium",
+				ProposalType: "x", ProposalContent: "a",
+				Target: map[string]any{"product_id": 1},
+			},
+			{}, // second drafted ignored — err is non-nil
+		},
+		errs: []error{nil, errors.New("LLM timeout")},
+	}
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st, MaxEmits: 2})
+	if err != nil {
+		t.Fatalf("expected nil err (best-effort), got: %v", err)
+	}
+	if res.Skipped {
+		t.Errorf("expected not Skipped (first emit succeeded); got %+v", res)
+	}
+	if len(res.IssueIDs) != 1 {
+		t.Errorf("len(IssueIDs) = %d, want 1", len(res.IssueIDs))
+	}
+	if !strings.Contains(res.SkipReason, "LLM timeout") {
+		t.Errorf("SkipReason should mention the second-emit failure; got %q", res.SkipReason)
+	}
+}
+
+func TestRunAndPersist_MultiEmit_BestEffortOnSecondSkip(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "fake-multi-skip", 1)
+	p := &queuePersona{
+		slug: "fake-multi-skip",
+		drafted: []Drafted{
+			{
+				Title: "first", Priority: "medium",
+				ProposalType: "x", ProposalContent: "a",
+				Target: map[string]any{"product_id": 1},
+			},
+			{Skipped: true, SkipReason: "no more eligible targets"},
+		},
+	}
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st, MaxEmits: 2})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if res.Skipped {
+		t.Errorf("Result.Skipped should be false (first emit succeeded); got %+v", res)
+	}
+	if len(res.IssueIDs) != 1 {
+		t.Errorf("len(IssueIDs) = %d, want 1", len(res.IssueIDs))
+	}
+	if !strings.Contains(res.SkipReason, "no more eligible targets") {
+		t.Errorf("SkipReason should mention the second-emit skip; got %q", res.SkipReason)
+	}
+}
+
+func TestRunAndPersist_MaxEmitsZeroBehavesAsOne(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "fake-default", 1)
+	p := &queuePersona{
+		slug: "fake-default",
+		drafted: []Drafted{
+			{
+				Title: "single", Priority: "medium",
+				ProposalType: "x", ProposalContent: "a",
+				Target: map[string]any{"product_id": 1},
+			},
+			{
+				Title: "should not be emitted", Priority: "medium",
+				ProposalType: "x", ProposalContent: "b",
+			},
+		},
+	}
+	// MaxEmits left at 0 — should be treated as 1.
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if p.calls != 1 {
+		t.Errorf("Draft call count = %d, want 1 (default MaxEmits)", p.calls)
+	}
+	if len(res.IssueIDs) != 1 {
+		t.Errorf("len(IssueIDs) = %d, want 1", len(res.IssueIDs))
+	}
+}
+
 func TestRunAndPersist_DraftSkipPropagated(t *testing.T) {
 	st := newStore(t)
 	seedAgent(t, st, "fake-skip", 1)

@@ -15,8 +15,25 @@ import (
 // Production wires it to personas.RunAndPersist via personaRunnerAdapter
 // (see scheduler.go in Task 7). Tests inject a stub.
 type PersonaRunner interface {
-	Run(ctx context.Context, p personas.Persona) (personas.Result, error)
+	Run(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error)
 }
+
+// RunOpts carries per-run knobs the worker derives from the Run row before
+// dispatching to the runner. Kept narrow on purpose — anything that lives
+// inside personas.Deps stays out of here.
+type RunOpts struct {
+	// EmitCount is how many proposals this run should produce. 1 by
+	// default; the worker sets 2 for TriggerBootstrap so the operator's
+	// queue isn't empty right after onboarding. The runner translates
+	// this into personas.Deps.MaxEmits.
+	EmitCount int
+}
+
+// bootstrapEmitCount is the number of proposals each persona produces on
+// its very first run after onboarding (TriggerBootstrap). 2 gives the
+// operator something to scan + compare on day one without overwhelming
+// the queue.
+const bootstrapEmitCount = 2
 
 // Worker is the single-goroutine claim-and-run loop. One Worker per
 // Scheduler — MCP session-id forces serial.
@@ -107,7 +124,11 @@ func (w *Worker) Run(ctx context.Context) error {
 
 func (w *Worker) executeAndRecord(ctx context.Context, r *Run, persona personas.Persona) error {
 	start := w.Now()
-	res, runErr := w.Runner.Run(ctx, persona)
+	opts := RunOpts{EmitCount: 1}
+	if r.Trigger == TriggerBootstrap {
+		opts.EmitCount = bootstrapEmitCount
+	}
+	res, runErr := w.Runner.Run(ctx, persona, opts)
 	end := w.Now()
 
 	// Skip path — succeeded with a reason but no issue.
@@ -122,12 +143,18 @@ func (w *Worker) executeAndRecord(ctx context.Context, r *Run, persona personas.
 	}
 	// Success path.
 	if runErr == nil {
+		// A multi-emit run can come back successful overall but with a
+		// best-effort SkipReason describing a partial: e.g. "emit 2/2
+		// skipped: no eligible orders". Surface that on the run row so the
+		// operator sees why the second proposal didn't land. Status stays
+		// `succeeded` — at least one proposal made it.
 		return w.Queue.MarkTerminal(ctx, MarkTerminalParams{
 			ID:          r.ID,
 			Status:      StatusSucceeded,
 			CompletedAt: end,
 			LatencyMS:   end.Sub(start).Milliseconds(),
 			IssueID:     res.IssueID,
+			SkipReason:  res.SkipReason,
 			// TurnID flows through telemetry; left empty here because
 			// personas.RunAndPersist owns the turn_event write. The link is
 			// joined by issue_id in the API layer for V1.

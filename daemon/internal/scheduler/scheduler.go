@@ -165,6 +165,8 @@ type personaRunnerAdapter struct {
 	deps personas.Deps
 }
 
-func (a personaRunnerAdapter) Run(ctx context.Context, p personas.Persona) (personas.Result, error) {
-	return personas.RunAndPersist(ctx, p, a.deps)
+func (a personaRunnerAdapter) Run(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
+	deps := a.deps
+	deps.MaxEmits = opts.EmitCount
+	return personas.RunAndPersist(ctx, p, deps)
 }
