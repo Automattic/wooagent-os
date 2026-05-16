@@ -135,7 +135,7 @@ function buildDefaultView(initialPersona: string | null): View {
     titleField: 'title',
     descriptionField: 'meta',
     mediaField: 'image',
-    fields: ['agent', 'age', 'image'],
+    fields: ['agent', 'age'],
     filters: initialPersona
       ? [{ field: 'agent', operator: 'isAny', value: [initialPersona] }]
       : [],
