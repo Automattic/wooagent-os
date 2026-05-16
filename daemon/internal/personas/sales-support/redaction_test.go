@@ -67,6 +67,9 @@ func TestRedactOrderForPromptCarriesNonPIIFields(t *testing.T) {
 	if pc.OrderNumber != "1042" {
 		t.Errorf("OrderNumber = %q; want %q", pc.OrderNumber, "1042")
 	}
+	if pc.OrderID != 42 {
+		t.Errorf("OrderID = %d; want 42", pc.OrderID)
+	}
 	if pc.Status != "processing" {
 		t.Errorf("Status = %q; want %q", pc.Status, "processing")
 	}
