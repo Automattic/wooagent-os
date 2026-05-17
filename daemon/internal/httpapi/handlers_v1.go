@@ -19,7 +19,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
-// Persona is the v0.1 agent-persona wire shape. Mirrors docs/api-contract-v1.md.
+// Persona is the v0.1 agent-persona wire shape.
 type Persona struct {
 	Persona         string  `json:"persona"`
 	Name            string  `json:"name"`

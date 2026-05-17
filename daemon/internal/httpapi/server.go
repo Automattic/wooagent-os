@@ -217,8 +217,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// writeError emits the canonical error envelope documented in
-// docs/api-contract-v1.md.
+// writeError emits the canonical {"error":{"code","message"}} envelope.
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, map[string]any{
 		"error": map[string]any{
