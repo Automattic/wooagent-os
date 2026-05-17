@@ -7,7 +7,7 @@ import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { type Batch, type Issue } from '../api/client';
 import ProductThumbnail from '../components/ProductThumbnail';
-import { kindFromIssue, kindFromPersonaSlug } from '../components/StatusBadge';
+import { kindFromIssue, kindFromPersonaSlug, type IssueKind } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
 import {
@@ -44,50 +44,118 @@ interface Row {
    *  undefined for single-issue rows. */
   batchCount?: number;
   updatedAt: string;
-  /** Meta line shown under the title in grid view ("3 variants",
-   *  "5 of 11 price changes pending", etc.). */
-  meta: string;
+  /** Human-readable proposal type, shown as a labeled row on the queue
+   *  card ("Price change", "Reply draft", "Bulk price changes", etc.).
+   *  Derived from persona + a small set of title heuristics for sub-types.
+   *  See proposalLabel(). */
+  proposal: string;
   imageUrl?: string;
   imageAlt?: string;
 }
 
-function metaForBoardItem(item: BoardItem): string {
-  if (item.kind === 'batch') {
-    const b = item.batch;
-    const kind = kindFromPersonaSlug(b.persona);
-    const noun = kindNoun(kind, b.total);
-    if (b.pending > 0) {
-      return `${b.pending} of ${b.total} ${noun} pending`;
-    }
-    if (b.approved === b.total) {
-      return `${b.total} ${noun} approved`;
-    }
-    if (b.approved > 0) {
-      return `${b.approved}/${b.total} ${noun} approved`;
-    }
-    return `${b.total} ${noun}`;
+// Coarse single-proposal label per persona. The DataViews "Proposal"
+// column reads this. Sub-typing for Marketing ("Title rewrite" vs the
+// default "Product description rewrite"), Pricing, etc. is a Phase B
+// follow-up that needs the daemon to surface proposal.type on /v1/issues
+// — for now we keep one label per persona since Phase 1 emits only
+// uniform proposal types per agent.
+function proposalLabelForKind(kind: IssueKind): string {
+  switch (kind) {
+    case 'price':
+      return 'Price change';
+    case 'message':
+      return 'Reply draft';
+    case 'inventory':
+      return 'Low-stock alert';
+    case 'accounting':
+      return 'Bookkeeping check';
+    case 'report':
+      return 'Sales digest';
+    case 'summary':
+      return 'Daily summary';
+    case 'campaign':
+      return 'Marketing campaign';
+    case 'email':
+      return 'Email draft';
+    case 'content':
+    default:
+      return 'Product description rewrite';
   }
-  const issue = item.issue;
-  const kind = kindFromIssue(issue);
-  if (kind === 'content') return '3 variants';
-  if (kind === 'price') return 'price change';
-  if (kind === 'message') return 'reply draft';
-  return '1 item';
 }
 
-function kindNoun(kind: ReturnType<typeof kindFromIssue>, count: number): string {
+// Batch variant — same set with "Bulk" prefix or a more natural plural
+// where it reads better. Surfaces in the Proposal field for batch rows.
+function batchProposalLabelForKind(kind: IssueKind): string {
   switch (kind) {
-    case 'content':
-      return count === 1 ? 'rewrite' : 'rewrites';
-    case 'campaign':
-      return count === 1 ? 'campaign' : 'campaigns';
-    case 'email':
-      return count === 1 ? 'email' : 'emails';
     case 'price':
-      return count === 1 ? 'price change' : 'price changes';
+      return 'Bulk price changes';
     case 'message':
-      return count === 1 ? 'reply' : 'replies';
+      return 'Bulk replies';
+    case 'inventory':
+      return 'Bulk restock';
+    case 'accounting':
+      return 'Bulk reconciliation';
+    case 'campaign':
+      return 'Marketing campaigns';
+    case 'email':
+      return 'Email batch';
+    case 'report':
+    case 'summary':
+    case 'content':
+    default:
+      return 'Bulk content rewrites';
   }
+}
+
+function proposalLabel(item: BoardItem): string {
+  if (item.kind === 'batch') {
+    return batchProposalLabelForKind(kindFromPersonaSlug(item.batch.persona));
+  }
+  return proposalLabelForKind(kindFromIssue(item.issue));
+}
+
+// Reporting and Chief proposals don't have a product/order "object" the
+// way Marketing/Pricing/Sales-support do — their cards make more sense
+// titled by the period they cover. Phase B (daemon-side target.object_label)
+// will give us a proper object for the rest; Reporting/Chief will
+// continue to derive their title client-side.
+function titleForRow(item: BoardItem): string {
+  if (item.kind === 'batch') return item.batch.title;
+  const issue = item.issue;
+  const kind = kindFromIssue(issue);
+  if (kind === 'report') return weekTitle(issue.created_at ?? issue.updated_at);
+  if (kind === 'summary') return dayTitle(issue.created_at ?? issue.updated_at);
+  return issue.title;
+}
+
+function weekTitle(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return 'Weekly digest';
+  // Snap to the Monday of the issue's week so cards within the same
+  // weekly cycle group under the same title.
+  const day = d.getDay();
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((day + 6) % 7));
+  return `Week of ${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+}
+
+function dayTitle(iso: string): string {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return 'Daily summary';
+  const today = new Date();
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+  if (sameDay(d, today)) return 'Today';
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (sameDay(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 function rowFor(item: BoardItem): Row {
@@ -96,13 +164,13 @@ function rowFor(item: BoardItem): Row {
     return {
       rowId: `batch:${b.id}`,
       origin: item,
-      title: b.title,
+      title: titleForRow(item),
       personaSlug: b.persona ?? '',
       agentLabel: personaDisplayName(b.persona),
       itemId: `BATCH · ${b.id.slice(0, 6).toUpperCase()}`,
       batchCount: b.total,
       updatedAt: b.updated_at,
-      meta: metaForBoardItem(item),
+      proposal: proposalLabel(item),
       // Batch.target is not surfaced by /v1/batches yet — B2 known limitation.
       imageUrl: undefined,
       imageAlt: undefined,
@@ -112,12 +180,17 @@ function rowFor(item: BoardItem): Row {
   return {
     rowId: `issue:${issue.id}`,
     origin: item,
-    title: issue.title,
+    // TODO(Phase B): once the daemon surfaces target.object_label, prefer
+    // it over issue.title here so the card title shows just the object
+    // (e.g., "Cap") instead of the combined daemon string
+    // ("Cap $16.00 → $20.00 (+16.7%)"). Reporting/Chief already get a
+    // date-derived title via titleForRow.
+    title: titleForRow(item),
     personaSlug: issue.persona ?? '',
     agentLabel: personaDisplayName(issue.persona),
     itemId: issue.id.slice(0, 8).toUpperCase(),
     updatedAt: issue.updated_at,
-    meta: metaForBoardItem(item),
+    proposal: proposalLabel(item),
     imageUrl: typeof issue.target?.image_url === 'string' ? issue.target.image_url : undefined,
     imageAlt: typeof issue.target?.image_alt === 'string' ? issue.target.image_alt : undefined,
   };
@@ -133,9 +206,10 @@ function buildDefaultView(initialPersona: string | null): View {
     page: 1,
     perPage: 24,
     titleField: 'title',
-    descriptionField: 'meta',
+    // No description field — the proposal type now lives in a labeled
+    // "Proposal" row (see fields below), per the i3 Figma card layout.
     mediaField: 'image',
-    fields: ['agent', 'age'],
+    fields: ['proposal', 'agent', 'time'],
     filters: initialPersona
       ? [{ field: 'agent', operator: 'isAny', value: [initialPersona] }]
       : [],
@@ -199,10 +273,19 @@ export default function NeedsReview({
         getValue: ({ item }) => item.title,
         render: ({ item }) => (
           <Stack direction="row" gap="xs" align="center">
+            {/* min-width: 0 + flex: 1 lets the title shrink below its
+                intrinsic width so the ellipsis triplet can kick in. The
+                250px-wide grid tile would otherwise stretch the whole
+                Stack horizontally and leave the title untruncated. */}
             <Text
               variant="body-sm"
               style={{
                 fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                flex: '1 1 auto',
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
               {item.title}
@@ -233,18 +316,18 @@ export default function NeedsReview({
         ),
       },
       {
-        id: 'meta',
-        label: 'Details',
+        // id stays 'proposal' to match Row.proposal / proposalLabel(); only
+        // the display label changes. The title column above is already
+        // labeled "Proposal" in the table view (DataViews uses the
+        // titleField's column header), so this one becomes "Type" to
+        // disambiguate.
+        id: 'proposal',
+        label: 'Type',
         enableSorting: false,
         enableHiding: false,
-        getValue: ({ item }) => item.meta,
+        getValue: ({ item }) => item.proposal,
         render: ({ item }) => (
-          <Text
-            variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-          >
-            {item.meta}
-          </Text>
+          <Text variant="body-sm">{item.proposal}</Text>
         ),
       },
       {
@@ -263,8 +346,8 @@ export default function NeedsReview({
         ),
       },
       {
-        id: 'age',
-        label: 'Age',
+        id: 'time',
+        label: 'Time',
         enableSorting: true,
         getValue: ({ item }) => item.updatedAt,
         render: ({ item }) => (
