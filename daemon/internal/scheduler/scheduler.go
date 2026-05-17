@@ -91,7 +91,8 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		Now:       s.Now,
 		TickEvery: s.TickEvery,
 		HasOpenWorkFn: func(ctx context.Context, persona string) (bool, error) {
-			return personas.HasOpenWork(ctx, s.Store, persona)
+			n, err := personas.CountOpenWork(ctx, s.Store, persona)
+			return n >= personas.OpenProposalSkipThreshold, err
 		},
 	}
 
