@@ -126,7 +126,8 @@ func TestRunAndPersist_DuplicateGuard(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 
-	// Second run should skip — there's already an in_review issue.
+	// One open issue is below the threshold (OpenProposalSkipThreshold=2):
+	// the guard should still let a second proposal through.
 	p2 := fakePersona{slug: "fake-dup", drafted: Drafted{
 		Title: "second", ProposalType: "x", ProposalContent: "2",
 	}}
@@ -134,27 +135,42 @@ func TestRunAndPersist_DuplicateGuard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	if !res.Skipped {
-		t.Errorf("expected duplicate guard to skip; got %+v", res)
+	if res.Skipped {
+		t.Errorf("expected second run to proceed (1 open < threshold); got skip: %s", res.SkipReason)
 	}
-	if res.IssueID != "" {
-		t.Errorf("expected no IssueID on skip; got %q", res.IssueID)
+	if res.IssueID == "" {
+		t.Errorf("expected IssueID on second proposal; got empty")
 	}
 
-	// Move the first issue to done — guard should now allow another seed.
+	// Now there are 2 open issues — guard should skip.
+	p3 := fakePersona{slug: "fake-dup", drafted: Drafted{
+		Title: "third", ProposalType: "x", ProposalContent: "3",
+	}}
+	res2, err := RunAndPersist(context.Background(), p3, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("third run: %v", err)
+	}
+	if !res2.Skipped {
+		t.Errorf("expected duplicate guard to skip at 2 open; got %+v", res2)
+	}
+	if res2.IssueID != "" {
+		t.Errorf("expected no IssueID on skip; got %q", res2.IssueID)
+	}
+
+	// Move both open issues to done — guard should now allow another seed.
 	if _, err := st.DB.ExecContext(context.Background(),
 		`UPDATE issues SET status='done' WHERE persona='fake-dup'`,
 	); err != nil {
 		t.Fatalf("flip status: %v", err)
 	}
-	res2, err := RunAndPersist(context.Background(), p2, Deps{Store: st})
+	res3, err := RunAndPersist(context.Background(), p3, Deps{Store: st})
 	if err != nil {
-		t.Fatalf("third run: %v", err)
+		t.Fatalf("fourth run: %v", err)
 	}
-	if res2.Skipped {
-		t.Errorf("expected new issue after first one done; got skipped: %s", res2.SkipReason)
+	if res3.Skipped {
+		t.Errorf("expected new issue after open ones resolved; got skipped: %s", res3.SkipReason)
 	}
-	if res2.IssueID == "" {
+	if res3.IssueID == "" {
 		t.Errorf("expected new IssueID; got empty")
 	}
 }

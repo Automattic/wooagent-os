@@ -230,20 +230,27 @@ func IsEnabled(ctx context.Context, st *store.Store, slug string) (bool, error) 
 	return enabled == 1, nil
 }
 
-// HasOpenWork returns true when slug already has any issue in todo /
-// in_progress / in_review. Used by RunAndPersist to skip duplicate seeding
-// on every daemon restart. Done and rejected don't count — those are
-// resolved.
-func HasOpenWork(ctx context.Context, st *store.Store, slug string) (bool, error) {
+// OpenProposalSkipThreshold is the inclusive lower bound for "too much
+// open work to enqueue another run." A persona is allowed to keep one
+// proposal pending review while the next cadence tick still produces a
+// fresh draft; the skip only fires when the count reaches this many.
+const OpenProposalSkipThreshold = 2
+
+// CountOpenWork returns how many issues for slug are currently in
+// todo / in_progress / in_review. Done and rejected don't count — those
+// are resolved. Callers compare against OpenProposalSkipThreshold to
+// decide whether to skip seeding (RunAndPersist) or skip a scheduler
+// tick (the Loop's HasOpenWorkFn wiring).
+func CountOpenWork(ctx context.Context, st *store.Store, slug string) (int, error) {
 	var n int
 	err := st.DB.QueryRowContext(ctx,
 		`SELECT count(*) FROM issues WHERE persona = ? AND status IN ('todo','in_progress','in_review')`,
 		slug,
 	).Scan(&n)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return n > 0, nil
+	return n, nil
 }
 
 // RecentlyTouchedTargets returns the set of integer target ids the
@@ -332,13 +339,16 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		res.SkipReason = "persona not enabled in agents table"
 		return res, nil
 	}
-	open, err := HasOpenWork(ctx, deps.Store, slug)
+	openCount, err := CountOpenWork(ctx, deps.Store, slug)
 	if err != nil {
 		return res, fmt.Errorf("check open work: %w", err)
 	}
-	if open {
+	if openCount >= OpenProposalSkipThreshold {
 		res.Skipped = true
-		res.SkipReason = "persona already has open issues; not seeding to avoid duplicates"
+		res.SkipReason = fmt.Sprintf(
+			"persona already has %d open proposals (threshold %d); not seeding to avoid duplicates",
+			openCount, OpenProposalSkipThreshold,
+		)
 		return res, nil
 	}
 
