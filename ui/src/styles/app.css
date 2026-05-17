@@ -74,13 +74,13 @@ a {
 
 /* Sidebar nav items — sized for the WPDS admin-ui dark navigation pattern:
    slightly larger icons (24px, set inline in LeftNav.tsx) and larger label
-   text (md), but tightly stacked vertically so the rhythm matches the
-   reference screenshot (≈6px top/bottom padding rather than the default sm). */
+   text (md), tightly stacked vertically (sm padding = 8px) to match the
+   i3.2 Figma rhythm. */
 .wa-navlink {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
+  gap: var(--wpds-dimension-gap-md);
+  padding: var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-md);
   border-radius: var(--wpds-border-radius-md);
   font-family: var(--wpds-typography-font-family-body);
   font-size: var(--wpds-typography-font-size-md);
@@ -358,6 +358,14 @@ a {
    (b) Native <button> reset + hover/focus parity with the nav links above.
    (c) Follow-up: collapse into a WPDS Button variant when one ships for
    dark surfaces. */
+/* WPDS Dropdown wraps the renderToggle in a .components-dropdown div that
+   defaults to inline-block. In the sidebar footer we want the toggle (and
+   therefore its hover/focus background) to span the full sidebar width,
+   so force the wrapper to block-level. Scoped to .wa-sidebar so other
+   Dropdown usages elsewhere keep their default sizing. */
+.wa-sidebar .components-dropdown {
+  display: block;
+}
 .wa-sidebar-footer-toggle {
   display: block;
   width: 100%;
@@ -1461,7 +1469,45 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  /* CUSTOM: warm-gray icon color from the i3 Figma icon-alternates board
+     (node 797:32604). No WPDS neutral-weak token matches this exact value
+     (#CECBC6 is warmer than --wpds-color-fg-content-neutral-weak), and
+     the designer specified the hex directly for the placeholder treatment.
+     Used by the fallback @wordpress/icons glyph path (un-mapped personas).
+     Documented in docs/specs/2026-05-16-product-images-design.md. */
+  color: #CECBC6;
+}
+/* @wordpress/icons SVGs render with their default fill (black) unless we
+   explicitly bind them to currentColor — same gotcha as the sidebar nav
+   icons above. Without this, the warm-gray `color` set on the placeholder
+   above doesn't reach the SVG. */
+.wa-product-thumb--placeholder svg {
+  fill: currentColor;
+}
+
+/* Per-persona illustration variant. The tile bg is set inline from the
+   --wa-persona-*-bg tokens (in ProductThumbnail.tsx) so each persona's
+   queue cards carry a soft color wash. The illustrations themselves
+   stay in a fixed warm-gray duotone so the queue's color rhythm comes
+   from the tile, not the icon — matches Variant 7 in mockups/placeholder-
+   variants.html.
+
+   CUSTOM: --persona-mid (#D6D3D1) and --persona-ink (#57534E) are warm-
+   gray tones with no WPDS token equivalent. Designer-chosen pair that
+   reads as "duotone illustration" against any of the persona tile washes
+   without competing with them. */
+.wa-product-thumb--illus {
+  --persona-mid: #D6D3D1;
+  --persona-ink: #57534E;
+}
+/* The illustration SVG (inlined via dangerouslySetInnerHTML in the
+   component) defines its own fills via the persona-mid/ink vars above —
+   so the placeholder's `fill: currentColor` rule above is harmless but
+   irrelevant here. What we DO need: size the SVG to fill ~42% of the
+   tile (matching the i3 Figma 284/667 ratio) and center it. */
+.wa-product-thumb--illus > svg {
+  width: 42%;
+  height: 42%;
 }
 
 /* When ProductThumbnail is rendered into a DataViews grid mediaField
@@ -1476,5 +1522,14 @@ a {
   width: 100%;
   height: 100%;
   border-radius: 0;
+}
+/* In the DataViews grid the tile fills its (much larger) slot, so the
+   placeholder icon's fixed px size set via the <Icon size={N}> prop
+   ends up tiny against the tile. Override to ~42% of the tile, matching
+   the i3 Figma icon-alternates board (284/667 ≈ 42.6%). The override
+   targets the SVG directly so it beats Icon's inline width/height. */
+.dataviews-view-grid__media .wa-product-thumb--placeholder svg {
+  width: 42%;
+  height: 42%;
 }
 
