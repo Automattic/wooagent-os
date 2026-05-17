@@ -6,7 +6,7 @@ Loaded by the `user-research` skill. Keep this short (~150 lines); load-bearing 
 
 Verbatim from Linear (pulled 2026-05-11):
 
-> Solo operators and small teams running $250K–$1M+ GMV WooCommerce stores. Multi-channel (DTC + B2B + wholesale), mature operations, often agency-supported, high operational complexity. They are already using AI ad-hoc (ChatGPT, Claude) but without a system around it.
+> Solo operators and small teams running pre-revenue to $1M+ GMV WooCommerce stores. Multi-channel (DTC + B2B + wholesale), mature operations, often agency-supported, high operational complexity. They are already using AI ad-hoc (ChatGPT, Claude) but without a system around it.
 
 ## Hard constraints
 

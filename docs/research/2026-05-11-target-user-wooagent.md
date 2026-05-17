@@ -8,7 +8,7 @@
 
 ## Inputs at-a-glance
 
-- **Stated target:** Solo operators and small teams running $250K-$1M+ GMV WooCommerce stores. Multi-channel (DTC + B2B + wholesale), mature operations, often agency-supported, high operational complexity. Already using AI ad-hoc (ChatGPT, Claude) but without a system around it.
+- **Stated target:** Solo operators and small teams running pre-revenue to $1M+ GMV WooCommerce stores. Multi-channel (DTC + B2B + wholesale), mature operations, often agency-supported, high operational complexity. Already using AI ad-hoc (ChatGPT, Claude) but without a system around it.
 - **Hard constraints:**
   - Runs a WooCommerce store with admin access.
   - Has a local machine they can install software on (Mac/Windows/Linux).
@@ -48,7 +48,7 @@ Segment 4 wins on score; segments 1 and 3 overlap heavily with it (AI-piping is 
 
 ### Bullseye
 
-A solo operator (or 2-3 person team) running a $250K-$1M+ GMV WooCommerce store who, **in the last 30 days, copy-pasted output from ChatGPT or Claude into the Woo admin at least once** — most often when drafting a product description, drafting a customer reply, or asking "what should I price this at / when should I run a sale?" They pay for ≥1 AI subscription, install their own plugins, and feel the friction of the AI-to-Woo handoff every time they do it. They are hiring WooAgent to **replace the copy-paste loop with a system**: drafts and pricing recommendations arrive pre-tied to the right product, order, or campaign, reviewed in one place, approved in one click. The product fits today because Marketing (descriptions), Sales Support (replies), and Pricing (individual + bulk sweeps + strategy advice) are all surfaces where this user is already manually piping AI.
+A solo operator (or 2-3 person team) running a pre-revenue to $1M+ GMV WooCommerce store who, **in the last 30 days, copy-pasted output from ChatGPT or Claude into the Woo admin at least once** — most often when drafting a product description, drafting a customer reply, or asking "what should I price this at / when should I run a sale?" They pay for ≥1 AI subscription, install their own plugins, and feel the friction of the AI-to-Woo handoff every time they do it. They are hiring WooAgent to **replace the copy-paste loop with a system**: drafts and pricing recommendations arrive pre-tied to the right product, order, or campaign, reviewed in one place, approved in one click. The product fits today because Marketing (descriptions), Sales Support (replies), and Pricing (individual + bulk sweeps + strategy advice) are all surfaces where this user is already manually piping AI.
 
 ### Not serving in v1
 
@@ -86,7 +86,7 @@ A solo operator (or 2-3 person team) running a $250K-$1M+ GMV WooCommerce store 
 3. **r/woocommerce on Reddit.** Solo-operator behavior is well-represented; apply size + AI-fluency filters via screener. Free post w/ screener link. ~2 weeks. Bias skews smaller and DIY (matches bullseye).
 
 *Explicitly NOT:*
-- **General "AI for business" Twitter/LinkedIn audiences** — severe selection bias (AI enthusiasts, consultants, influencers — not real $250K+ Woo operators). Screening cost per qualified lead too high.
+- **General "AI for business" Twitter/LinkedIn audiences** — severe selection bias (AI enthusiasts, consultants, influencers — not real practicing Woo operators). Screening cost per qualified lead too high.
 - **r/smallbusiness on Reddit** — too generalist (cafés, freelancers, consultants); Woo + AI intersection too thin to be efficient.
 
 ---
