@@ -110,7 +110,7 @@ func (l *Loop) considerPersona(ctx context.Context, a agentSchedule, now time.Ti
 			return fmt.Errorf("has open work: %w", err)
 		}
 		if openWork {
-			return l.writeSkipRow(ctx, a.Persona, now, "persona already has open proposals; not enqueuing")
+			return l.writeSkipRow(ctx, a.Persona, now, "persona already has 2 or more open proposals; not enqueuing")
 		}
 	}
 	_, err = l.Queue.Enqueue(ctx, EnqueueParams{
