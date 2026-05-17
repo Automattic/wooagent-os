@@ -2,8 +2,7 @@
 // Rendered in three places: the page eyebrow on Kanban, the bottom-right of
 // each kanban card, and the W tile in the sidebar header. Renders the
 // per-persona illustration when one exists in src/assets/avatar/; falls back
-// to the colored-initials monogram for personas without artwork (currently
-// Chief of Staff).
+// to the colored-initials monogram for personas without artwork.
 
 import marketingUrl from '../assets/avatar/marketing.png';
 import pricingUrl from '../assets/avatar/pricing.png';
@@ -11,6 +10,7 @@ import inventoryUrl from '../assets/avatar/inventory.png';
 import accountingUrl from '../assets/avatar/accounting.png';
 import reportingUrl from '../assets/avatar/reporting.png';
 import salesSupportUrl from '../assets/avatar/sales-support.png';
+import chiefUrl from '../assets/avatar/chief.png';
 
 export type PersonaKey = 'mk' | 'pr' | 'in' | 'ac' | 'rp' | 'ss' | 'cs';
 
@@ -21,6 +21,7 @@ const AVATAR_IMAGES: Partial<Record<PersonaKey, string>> = {
   ac: accountingUrl,
   rp: reportingUrl,
   ss: salesSupportUrl,
+  cs: chiefUrl,
 };
 
 export interface PersonaAvatarProps {
