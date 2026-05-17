@@ -15,8 +15,10 @@ import {
   key,
   cog,
   backup,
+  arrowUpRight,
 } from '@wordpress/icons';
-import type { Connection } from '../api/client';
+import type { Connection, Store } from '../api/client';
+import { relativeTime } from '../lib/boardItems';
 
 interface NavItem {
   to: string;
@@ -36,6 +38,10 @@ interface Props {
       preview. The hostname shown in the footer chip is derived from
       connection.daemonUrl. */
   connection: Connection;
+  /** The paired Woo store, if any. Drives the footer chip's status dot,
+      and the popover's "Open in WP-admin" link, skills count, and last-
+      discovered timestamp. Null while still probing or pre-pairing. */
+  store?: Store | null;
   /** True when the UI is served by the local daemon (no browser-stored
       bearer). The footer popover hides the "Forget this connection"
       button in that mode since there's no client state to clear. */
@@ -58,6 +64,7 @@ const FOOTER_MUTED = {
 export default function LeftNav({
   inReviewCount,
   connection,
+  store: pairedStore = null,
   embedded,
   onForgetConnection,
   isOpen = false,
@@ -71,6 +78,30 @@ export default function LeftNav({
     }
   })();
   const tokenPreview = `${connection.token.slice(0, 12)}…`;
+  // Status text for the footer chip. We only have free info from /v1/stores
+  // — no store name yet — so we surface the pairing status itself. The
+  // .mystagingwebsite.com hosting hint stays as a lightweight URL pattern
+  // match (no daemon change required). Add more hosts here as needed.
+  const isPaired = pairedStore?.status === 'paired';
+  const storeStatusLabel = (() => {
+    if (!pairedStore) return 'Not connected';
+    if (pairedStore.status === 'pairing') return 'Pairing…';
+    if (pairedStore.status === 'expired') return 'Pairing expired';
+    if (pairedStore.status === 'failed') return 'Connection failed';
+    // status === 'paired'
+    try {
+      const host = new URL(pairedStore.url).host;
+      if (host.endsWith('.mystagingwebsite.com')) return 'Pressable staging';
+      if (host.endsWith('.wpcomstaging.com')) return 'WordPress.com staging';
+      if (host.endsWith('.wordpress.com')) return 'WordPress.com';
+    } catch {
+      /* fall through */
+    }
+    return 'Connected';
+  })();
+  const wpAdminUrl = pairedStore?.url
+    ? `${pairedStore.url.replace(/\/$/, '')}/wp-admin/`
+    : null;
   const loc = useLocation();
   // Needs review is the "active" route while on the queue itself, an issue
   // detail, or a batch detail — those drill in from a queue card.
@@ -162,7 +193,15 @@ export default function LeftNav({
         }}
       >
         <Dropdown
-          popoverProps={{ placement: 'top-start' }}
+          popoverProps={{
+            placement: 'top-start',
+            // Floating UI's offset middleware accepts {mainAxis, crossAxis};
+            // WPDS's type narrows it to number but passes the value straight
+            // through, so the object form works at runtime. mainAxis = 8px
+            // gap above the toggle, crossAxis = 8px shift inward from the
+            // viewport's left edge.
+            offset: { mainAxis: 8, crossAxis: 8 } as unknown as number,
+          }}
           renderToggle={({ isOpen: ddOpen, onToggle }) => (
             // CUSTOM: footer toggle is a full-width button styled to match
             // the dark sidebar surface. (a) WPDS Button doesn't expose a
@@ -182,7 +221,7 @@ export default function LeftNav({
                 className="wa-eyebrow"
                 style={{ marginBottom: 4 }}
               >
-                Connected store
+                Connection
               </div>
               <div
                 style={{
@@ -199,13 +238,17 @@ export default function LeftNav({
               <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
                 {/* Lighter sage green than --wpds-color-fg-content-success — that
                     token is #002900 (designed for text on light surfaces) and is
-                    effectively invisible against the dark sidebar bg. */}
+                    effectively invisible against the dark sidebar bg. Non-paired
+                    states (pairing/expired/failed) read as a muted amber so the
+                    chip stops over-promising "all good". */}
                 <span
                   style={{
                     height: 6,
                     width: 6,
                     borderRadius: '50%',
-                    background: 'var(--wpds-color-stroke-surface-success)',
+                    background: isPaired
+                      ? 'var(--wpds-color-stroke-surface-success)'
+                      : 'var(--wpds-color-stroke-surface-warning)',
                     display: 'inline-block',
                   }}
                 />
@@ -215,7 +258,7 @@ export default function LeftNav({
                     color: 'rgba(255, 255, 255, 0.6)',
                   }}
                 >
-                  Pressable staging
+                  {storeStatusLabel}
                 </span>
               </Stack>
             </button>
@@ -229,18 +272,68 @@ export default function LeftNav({
             >
               <Stack direction="column" gap="md">
                 <Text variant="heading-sm">Connection</Text>
-                <Stack direction="column" gap="xs">
-                  <Text variant="body-sm" style={FOOTER_MUTED}>WOOAGENT URL</Text>
-                  <Text variant="body-md" className="wa-mono">
-                    {connection.daemonUrl}
-                  </Text>
-                </Stack>
-                <Stack direction="column" gap="xs">
-                  <Text variant="body-sm" style={FOOTER_MUTED}>TOKEN</Text>
-                  <Text variant="body-md" className="wa-mono">
-                    {tokenPreview}
-                  </Text>
-                </Stack>
+                {pairedStore && (
+                  <Stack direction="column" gap="xs">
+                    <Text variant="body-sm" style={FOOTER_MUTED}>STORE</Text>
+                    <Text variant="body-md">{pairedStore.url}</Text>
+                    {wpAdminUrl && (
+                      <span style={{ fontSize: 'var(--wpds-typography-font-size-xs)' }}>
+                        <Button
+                          variant="link"
+                          href={wpAdminUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          Open in WP-admin
+                          <Icon
+                            icon={arrowUpRight}
+                            size={16}
+                            style={{
+                              verticalAlign: 'text-bottom',
+                              marginInlineStart: 'var(--wpds-dimension-padding-xs)',
+                            }}
+                          />
+                        </Button>
+                      </span>
+                    )}
+                    {(pairedStore.ability_count !== undefined ||
+                      pairedStore.last_discovered_at) && (
+                      <Text variant="body-sm" style={FOOTER_MUTED}>
+                        {pairedStore.ability_count !== undefined && (
+                          <>
+                            {pairedStore.ability_count} skill
+                            {pairedStore.ability_count === 1 ? '' : 's'}
+                          </>
+                        )}
+                        {pairedStore.ability_count !== undefined &&
+                          pairedStore.last_discovered_at && <> · </>}
+                        {pairedStore.last_discovered_at && (
+                          <>synced {relativeTime(pairedStore.last_discovered_at)}</>
+                        )}
+                      </Text>
+                    )}
+                  </Stack>
+                )}
+                {/* Dev/standalone-only diagnostics. In embedded mode the
+                    token comes from window.__WOOAGENT_TOKEN__ (no client
+                    state) and the URL is always same-origin — these rows
+                    are unactionable noise for end users. */}
+                {!embedded && (
+                  <>
+                    <Stack direction="column" gap="xs">
+                      <Text variant="body-sm" style={FOOTER_MUTED}>WOOAGENT URL</Text>
+                      <Text variant="body-md" className="wa-mono">
+                        {connection.daemonUrl}
+                      </Text>
+                    </Stack>
+                    <Stack direction="column" gap="xs">
+                      <Text variant="body-sm" style={FOOTER_MUTED}>TOKEN</Text>
+                      <Text variant="body-md" className="wa-mono">
+                        {tokenPreview}
+                      </Text>
+                    </Stack>
+                  </>
+                )}
                 {embedded ? (
                   <Text variant="body-sm" style={FOOTER_MUTED}>
                     This UI is served by the local WooAgent daemon. Stop{' '}

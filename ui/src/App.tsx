@@ -24,6 +24,7 @@ import {
   type Batch,
   type Connection,
   type Issue,
+  type Store,
   api,
 } from './api/client';
 import { useIsMobile } from './lib/useMediaQuery';
@@ -50,6 +51,10 @@ export default function App() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [issuesError, setIssuesError] = useState<string | null>(null);
   const [askAgentOpen, setAskAgentOpen] = useState(false);
+  // The paired store, surfaced in LeftNav's footer popover (skills count,
+  // last-discovered timestamp, Open in WP-admin link). OS is single-store, so
+  // we keep the first paired row; multi-store is a Cloud concern.
+  const [pairedStore, setPairedStore] = useState<Store | null>(null);
 
   // Watch sessionStorage for the auth-expired notice flag. api/client.ts
   // sets it after a second 401 in a session; the modal renders until the
@@ -103,8 +108,10 @@ export default function App() {
           api.stores.list(stored).catch(() => ({ stores: [] })),
           api.modelProviders.list(stored).catch(() => ({ providers: [] })),
         ]);
-        const hasStore = storesRes.stores.some((s) => s.status === 'paired');
+        const paired = storesRes.stores.find((s) => s.status === 'paired') ?? null;
+        const hasStore = paired !== null;
         const hasProvider = providersRes.providers.length > 0;
+        setPairedStore(paired);
         setOnboardingComplete(hasStore && hasProvider);
       } catch {
         setOnboardingComplete(false);
@@ -209,12 +216,14 @@ export default function App() {
           <LeftNav
             inReviewCount={inReview}
             connection={connection}
+            store={pairedStore}
             embedded={isEmbedded()}
             onForgetConnection={() => {
               clearConnection();
               setConnection(null);
               setIssues(null);
               setBatches([]);
+              setPairedStore(null);
             }}
             isOpen={drawer.isOpen}
             onItemClick={drawer.close}
