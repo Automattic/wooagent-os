@@ -37,7 +37,7 @@ Reporting and Accounting ship in v0.2 and will get their own data-handling line 
 - `daemon/` — Go daemon. Entry point `cmd/wooagent`; internals under `internal/`.
 - `ui/` — Standalone React UI (Vite + `@wordpress/components`).
 - `companion-plugin/` — WordPress plugin source.
-- `docs/` — API contracts and shared design notes (`api-contract-v1.md`).
+- `docs/` — engineering specs and shared design notes.
 - `dist/` — Build artifacts (plugin zips, UI bundles). Gitignored.
 
 ## Install
