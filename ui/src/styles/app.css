@@ -1464,3 +1464,17 @@ a {
   color: var(--wpds-color-fg-content-neutral-weak);
 }
 
+/* When ProductThumbnail is rendered into a DataViews grid mediaField
+   slot, fill the slot instead of using the fixed sm/md/lg pixel size.
+   DataViews's .dataviews-view-grid__media is 100% width with aspect-
+   ratio 1/1 and already styles a direct <img> child to fill — but our
+   .wa-product-thumb--md width:72px (etc.) overrides that. Scope these
+   overrides to the DataViews wrapper so other use sites (detail pages,
+   BatchReview row) keep their fixed sizes. The slot owns the border-
+   radius so we drop ours to avoid double-rounding. */
+.dataviews-view-grid__media .wa-product-thumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+
