@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -399,6 +400,97 @@ func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{
 		)
 	}
 	return 0, fmt.Errorf("no published products in store")
+}
+
+// corpusSample is one product-description sample passed into the marketing
+// prompt as a voice reference. Per the design spec, the corpus is the
+// store's existing longest published descriptions (excluding the product
+// currently being rewritten) — those are the closest available proxy for
+// the operator's "good" voice.
+type corpusSample struct {
+	Name string
+	Body string
+}
+
+// mcpLister is the subset of *mcp.Client that fetchVoiceCorpus needs.
+// Existing code stays on *mcp.Client; the interface exists so tests can
+// pass a fake without touching the rest of the package.
+type mcpLister interface {
+	CallTool(ctx context.Context, name string, params map[string]any) (mcp.ToolCallResult, error)
+}
+
+// fetchVoiceCorpus pulls 3–5 of the store's longest published product
+// descriptions for use as voice-match context in the marketing prompt.
+// Excludes excludeProductID so the LLM isn't grading variants against the
+// description it's about to replace. Returns at most 5 samples; fewer is
+// fine (new stores, all-thin descriptions). Soft-fails: a non-nil error
+// is logged but the caller proceeds with whatever was assembled.
+func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([]corpusSample, error) {
+	const want = 5
+	type productListItem struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
+	}
+	var out struct {
+		Products []productListItem `json:"products"`
+	}
+	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
+		"ability_name": "wc/products",
+		"parameters": map[string]any{
+			"per_page": 20,
+			"orderby":  "date_modified",
+			"order":    "desc",
+			"status":   "publish",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetch voice corpus: %w", err)
+	}
+	if len(res.Content) == 0 {
+		return nil, fmt.Errorf("fetch voice corpus: empty content")
+	}
+	var env abilityEnvelope
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &env); err != nil {
+		return nil, fmt.Errorf("decode corpus envelope: %w", err)
+	}
+	if !env.Success {
+		return nil, fmt.Errorf("corpus ability failed: %s", env.Error)
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		return nil, fmt.Errorf("decode corpus data: %w", err)
+	}
+
+	// Filter (status=publish redundant — server already filtered, but the
+	// fake-MCP test data mixes statuses, and defensive filtering costs
+	// nothing) and exclude.
+	filtered := make([]productListItem, 0, len(out.Products))
+	for _, p := range out.Products {
+		if p.Status != "publish" || p.ID == excludeProductID {
+			continue
+		}
+		body := strings.TrimSpace(p.Description)
+		if body == "" {
+			continue
+		}
+		p.Description = body
+		filtered = append(filtered, p)
+	}
+
+	// Sort by description length descending, take top N.
+	sort.Slice(filtered, func(i, j int) bool {
+		return len(filtered[i].Description) > len(filtered[j].Description)
+	})
+	if len(filtered) > want {
+		filtered = filtered[:want]
+	}
+
+	samples := make([]corpusSample, 0, len(filtered))
+	for _, p := range filtered {
+		samples = append(samples, corpusSample{Name: p.Name, Body: p.Description})
+	}
+	return samples, nil
 }
 
 type product struct {
