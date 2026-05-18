@@ -50,14 +50,17 @@ function voiceColorClass(score: number): string {
 
 // Score → Kpi tone. SEO uses success/caution/warning. Voice uses brand
 // (matches the Figma frame's blue for high-match voice) / caution / warning.
+// Voice thresholds relaxed (was 90/75 → 80/65) per the corpus-based scoring
+// design in docs/specs/2026-05-18-marketing-kpi-scoring-design.md — 90%
+// against a small sample is unrealistic.
 function seoToneBand(score: number): KpiTone {
   if (score >= 80) return 'success';
   if (score >= 70) return 'caution';
   return 'warning';
 }
 function voiceToneBand(score: number): KpiTone {
-  if (score >= 90) return 'brand';
-  if (score >= 75) return 'caution';
+  if (score >= 80) return 'brand';
+  if (score >= 65) return 'caution';
   return 'warning';
 }
 
@@ -353,17 +356,49 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           />
           <Kpi
             label="Brand voice match"
-            value={`${activeVariant?.voice ?? 0}%`}
-            score={activeVariant?.voice ?? 0}
-            tone={voiceToneBand(activeVariant?.voice ?? 0)}
-            hint="vs. your voice model"
+            value={
+              typeof activeVariant?.voice === 'number'
+                ? `${activeVariant.voice}%`
+                : undefined
+            }
+            score={
+              typeof activeVariant?.voice === 'number'
+                ? activeVariant.voice
+                : undefined
+            }
+            tone={
+              typeof activeVariant?.voice === 'number'
+                ? voiceToneBand(activeVariant.voice)
+                : 'neutral'
+            }
+            hint={
+              typeof activeVariant?.voice === 'number'
+                ? 'vs. your existing copy'
+                : 'Not yet scored'
+            }
           />
           <Kpi
             label="SEO score"
-            value={String(activeVariant?.seo ?? 0)}
-            score={activeVariant?.seo ?? 0}
-            tone={seoToneBand(activeVariant?.seo ?? 0)}
-            hint="Yoast · out of 100"
+            value={
+              typeof activeVariant?.seo === 'number'
+                ? String(activeVariant.seo)
+                : undefined
+            }
+            score={
+              typeof activeVariant?.seo === 'number'
+                ? activeVariant.seo
+                : undefined
+            }
+            tone={
+              typeof activeVariant?.seo === 'number'
+                ? seoToneBand(activeVariant.seo)
+                : 'neutral'
+            }
+            hint={
+              typeof activeVariant?.seo === 'number'
+                ? 'Product-copy rubric · out of 100'
+                : 'Not yet scored'
+            }
           />
           <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
         </div>
@@ -532,20 +567,24 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                               })()}
                             </div>
                             <div className="wa-variant-header__right">
-                              <span className="wa-score-label">
-                                SEO{' '}
-                                <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
-                                  {v.seo}
+                              {typeof v.seo === 'number' && (
+                                <span className="wa-score-label">
+                                  SEO{' '}
+                                  <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                    {v.seo}
+                                  </span>
                                 </span>
-                              </span>
-                              <span className="wa-score-label">
-                                Voice{' '}
-                                <span
-                                  className={`wa-score-label__value ${voiceColorClass(v.voice)}`}
-                                >
-                                  {v.voice}%
+                              )}
+                              {typeof v.voice === 'number' && (
+                                <span className="wa-score-label">
+                                  Voice{' '}
+                                  <span
+                                    className={`wa-score-label__value ${voiceColorClass(v.voice)}`}
+                                  >
+                                    {v.voice}%
+                                  </span>
                                 </span>
-                              </span>
+                              )}
                               <span className="wa-score-label">
                                 <span className="wa-score-label__value">
                                   {v.charCount} chars
