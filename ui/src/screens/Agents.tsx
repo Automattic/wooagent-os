@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import EditAgentModal from '../components/EditAgentModal';
+import AddAgentModal from '../components/AddAgentModal';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -113,6 +114,7 @@ const IMPLEMENTED_PERSONAS = new Set<string>([
   'marketing',
   'pricing',
   'sales-support',
+  'reporting',
 ]);
 
 function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
@@ -310,6 +312,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Persona | null>(null);
+  const [showAddAgent, setShowAddAgent] = useState(false);
   const [view, setView] = useState<View>(DEFAULT_VIEW);
   // Surfaced after a manual-trigger run lands a succeeded status. The
   // "View board" action navigates to /. Auto-dismisses via the WPDS
@@ -577,27 +580,14 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
       subTitle={subTitle}
       actions={
         <Stack direction="row" align="center" gap="md">
-          <Tooltip text="Out of scope for phase 1">
-            {/* CUSTOM: span wrapper around the disabled button. (a) WPDS
-                Tooltip can't fire on a `<button disabled>` because the
-                browser drops pointer events on disabled buttons. (b) The
-                span gives Ariakit a non-disabled anchor for hover/focus
-                while the inner Button keeps its native disabled styling.
-                (c) Pattern recommended by the WPDS Storybook tooltip
-                examples; follow-up if WPDS ships a first-class
-                disabled-tooltip wrapper. */}
-            <span style={{ display: 'inline-flex' }} tabIndex={0}>
-              <Button
-                variant="primary"
-                icon={plus}
-                __next40pxDefaultSize
-                disabled
-                aria-disabled="true"
-              >
-                Add agent
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            variant="primary"
+            icon={plus}
+            __next40pxDefaultSize
+            onClick={() => setShowAddAgent(true)}
+          >
+            Add agent
+          </Button>
           <PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />
         </Stack>
       }
@@ -641,6 +631,22 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
               mandate={metaFor(editing.persona).mandate}
               systemPrompt={metaFor(editing.persona).systemPrompt}
               onClose={() => setEditing(null)}
+            />
+          )}
+          {showAddAgent && (
+            <AddAgentModal
+              connection={connection}
+              agents={personas ?? []}
+              onAgentAdded={() => {
+                // Refetch the agents list so the new persona appears in
+                // the roster + drops out of the modal's addable set.
+                const signal = { cancelled: false };
+                void fetchAgents(signal);
+                // Surface the enable to App's downstream state too
+                // (board, sidebar counts).
+                onChanged?.();
+              }}
+              onClose={() => setShowAddAgent(false)}
             />
           )}
         </>
