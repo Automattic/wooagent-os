@@ -13,8 +13,8 @@ func TestReporting_SlugAndDisplayName(t *testing.T) {
 	if r.Slug() != "reporting" {
 		t.Errorf("Slug() = %q, want \"reporting\"", r.Slug())
 	}
-	if r.DisplayName() != "Reporting agent" {
-		t.Errorf("DisplayName() = %q, want \"Reporting agent\"", r.DisplayName())
+	if r.DisplayName() != "Reporting" {
+		t.Errorf("DisplayName() = %q, want \"Reporting\"", r.DisplayName())
 	}
 }
 
