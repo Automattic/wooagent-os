@@ -545,8 +545,8 @@ func buildPromptUserMessage(p product, corpus []corpusSample) string {
 		b.WriteString("Voice corpus: (none available — this store has no other long-form published descriptions to compare against. Emit null for `voice` on each variant; score SEO as normal.)\n\n")
 	} else {
 		b.WriteString("Voice corpus (3–5 of this store's existing published descriptions — use these as the reference for the store's voice; do not copy):\n")
-		for _, s := range corpus {
-			fmt.Fprintf(&b, "\n— %s —\n%s\n", s.Name, s.Body)
+		for i, s := range corpus {
+			fmt.Fprintf(&b, "\n[%d] %s\n%s\n", i+1, s.Name, s.Body)
 		}
 		b.WriteString("\n")
 	}
