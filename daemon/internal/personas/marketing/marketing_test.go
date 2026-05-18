@@ -103,3 +103,77 @@ func TestProductJSON_ImageFieldsAbsent_DefaultsEmpty(t *testing.T) {
 		t.Errorf("ImageAlt = %q, want empty string", p.ImageAlt)
 	}
 }
+
+func TestParseVariants_ValidScores(t *testing.T) {
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":80,"voice":75},
+		{"label":"B","angle":"use","body":"world","seo":65,"voice":90},
+		{"label":"C","angle":"story","body":"again","seo":100,"voice":50}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 80 || got[0].Voice != 75 {
+		t.Errorf("variant 0: got seo=%d voice=%d, want 80/75", got[0].Seo, got[0].Voice)
+	}
+	if got[2].Seo != 100 || got[2].Voice != 50 {
+		t.Errorf("variant 2: got seo=%d voice=%d, want 100/50", got[2].Seo, got[2].Voice)
+	}
+}
+
+func TestParseVariants_OutOfRangeScoresClearedToZero(t *testing.T) {
+	// Out-of-range scores → cleared to zero so omitempty drops them from
+	// the persisted JSON. UI then renders `—` instead of a misleading number.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":101,"voice":-5},
+		{"label":"B","angle":"use","body":"world","seo":50,"voice":50},
+		{"label":"C","angle":"story","body":"again","seo":50,"voice":50}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 {
+		t.Errorf("variant 0 out-of-range seo: got %d, want 0", got[0].Seo)
+	}
+	if got[0].Voice != 0 {
+		t.Errorf("variant 0 out-of-range voice: got %d, want 0", got[0].Voice)
+	}
+}
+
+func TestParseVariants_MissingScoresAreZero(t *testing.T) {
+	// Missing seo/voice fields → zero-value, which omitempty drops.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello"},
+		{"label":"B","angle":"use","body":"world"},
+		{"label":"C","angle":"story","body":"again"}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 || got[0].Voice != 0 {
+		t.Errorf("missing scores: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
+	}
+}
+
+func TestParseVariants_BothZeroIsSuspect(t *testing.T) {
+	// Both scores exactly 0 → treated as suspect (the legacy default that
+	// prompted this ticket). Cleared to zero so omitempty drops both fields.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":0,"voice":0},
+		{"label":"B","angle":"use","body":"world","seo":80,"voice":80},
+		{"label":"C","angle":"story","body":"again","seo":80,"voice":80}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 || got[0].Voice != 0 {
+		t.Errorf("both-zero variant 0: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
+	}
+	if got[1].Seo != 80 || got[1].Voice != 80 {
+		t.Errorf("variant 1 should keep its scores: got seo=%d voice=%d", got[1].Seo, got[1].Voice)
+	}
+}
