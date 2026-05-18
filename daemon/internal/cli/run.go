@@ -33,6 +33,7 @@ import (
 	// internal/personas/<slug>/.
 	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/marketing"
 	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/pricing"
+	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/reporting"
 	_ "github.com/wooagent-os/wooagent-os/daemon/internal/personas/sales-support"
 )
 
