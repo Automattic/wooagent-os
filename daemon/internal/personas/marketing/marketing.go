@@ -168,11 +168,12 @@ func (Marketing) Cooldown() personas.CooldownPolicy {
 const skillName = "marketing.description-rewrite"
 
 // maxDraftAttempts caps how many products a single Draft run will try
-// before giving up. Each attempt costs one LLM call (~5-15s). 3 is a
-// pragmatic balance: most catalogs have only a few "undraftable" products
-// at any given time, and bounding latency keeps a run from hogging the
-// worker. The cooldown set is appended to in-memory after each LLM
-// no_proposal so the loop doesn't re-pick the same product.
+// before giving up. Each attempt costs one LLM call (~5-15s) plus one
+// MCP list call for the voice corpus (~1s on staging). 3 is a pragmatic
+// balance: most catalogs have only a few "undraftable" products at any
+// given time, and bounding latency keeps a run from hogging the worker.
+// The cooldown set is appended to in-memory after each LLM no_proposal
+// so the loop doesn't re-pick the same product.
 const maxDraftAttempts = 3
 
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
