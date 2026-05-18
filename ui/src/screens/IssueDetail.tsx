@@ -374,19 +374,28 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             {/* Current description */}
             <Card.Root>
               <Card.Header>
-                <SectionHeader
-                  eyebrow="Current description"
-                  meta={
-                    <span
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      {previous ? `${previous.length} chars` : '0 chars · sample'}
-                    </span>
-                  }
-                />
+                <Stack
+                  direction="row"
+                  gap="md"
+                  align="center"
+                  style={{ width: '100%' }}
+                >
+                  <Text
+                    variant="body-md"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                  >
+                    Current description
+                  </Text>
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      marginLeft: 'auto',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
+                  >
+                    {previous ? `${previous.length} chars` : '0 chars · sample'}
+                  </Text>
+                </Stack>
               </Card.Header>
               <Card.Content>
                 <Text
@@ -802,7 +811,12 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Headline price comparison */}
             <Card.Root>
               <Card.Header>
-                <SectionHeader eyebrow="Price change" />
+                <Text
+                  variant="body-md"
+                  style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                >
+                  Price change
+                </Text>
               </Card.Header>
               <Card.Content>
                 <Stack direction="row" gap="lg" align="center" wrap="wrap">
@@ -866,20 +880,29 @@ function PriceIssueView(props: PriceViewProps) {
             {hasObservedRange && (
               <Card.Root>
                 <Card.Header>
-                  <SectionHeader
-                    eyebrow="Observed market range"
-                    meta={
-                      <span
-                        className="wa-mono"
-                        style={{
-                          fontSize: 'var(--wpds-typography-font-size-xs)',
-                          color: 'var(--wpds-color-fg-content-neutral-weak)',
-                        }}
-                      >
-                        from {proposal.sources.length} comparables
-                      </span>
-                    }
-                  />
+                  <Stack
+                    direction="row"
+                    gap="md"
+                    align="center"
+                    style={{ width: '100%' }}
+                  >
+                    <Text
+                      variant="body-md"
+                      style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                    >
+                      Observed market range
+                    </Text>
+                    <Text
+                      variant="body-sm"
+                      className="wa-tabular"
+                      style={{
+                        marginLeft: 'auto',
+                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      }}
+                    >
+                      from {proposal.sources.length} comparables
+                    </Text>
+                  </Stack>
                 </Card.Header>
                 <Card.Content>
                   <ObservedRange
@@ -894,25 +917,30 @@ function PriceIssueView(props: PriceViewProps) {
             )}
 
             {/* Rationale */}
-            <Card.Root
-              className="wa-variant-card wa-variant-card--selected"
-              style={{ borderWidth: 'var(--wpds-border-width-md)' }}
-            >
+            <Card.Root>
               <Card.Header>
-                <SectionHeader
-                  eyebrow="Rationale"
-                  meta={
-                    <span
-                      className="wa-mono"
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      every numeric claim cited below
-                    </span>
-                  }
-                />
+                <Stack
+                  direction="row"
+                  gap="md"
+                  align="center"
+                  style={{ width: '100%' }}
+                >
+                  <Text
+                    variant="body-md"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                  >
+                    Rationale
+                  </Text>
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      marginLeft: 'auto',
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    }}
+                  >
+                    every numeric claim cited below
+                  </Text>
+                </Stack>
               </Card.Header>
               <Card.Content>
                 <Text
@@ -927,9 +955,17 @@ function PriceIssueView(props: PriceViewProps) {
             {/* Sources */}
             <Card.Root>
               <Card.Header>
-                <SectionHeader
-                  eyebrow={`Sources · ${proposal.sources.length} comparable${proposal.sources.length === 1 ? '' : 's'}`}
-                />
+                <Stack direction="row" gap="md" align="center">
+                  <Text
+                    variant="body-md"
+                    style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+                  >
+                    Sources
+                  </Text>
+                  <Badge intent="none">
+                    {`${proposal.sources.length} comparable${proposal.sources.length === 1 ? '' : 's'}`}
+                  </Badge>
+                </Stack>
               </Card.Header>
               <Card.Content>
                 {proposal.sources.length === 0 ? (
