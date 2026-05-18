@@ -37,7 +37,7 @@ const PERSONA_COPY: Record<string, { name: string; description: string }> = {
   reporting: {
     name: 'Reporting',
     description:
-      'Surfaces products in your catalog that are missing copy your customers rely on — short and long descriptions. Runs as a digest you review on your own cadence.',
+      "Produces digests of catalog issues that need your attention — starting with products missing short or long descriptions. Read it on your own cadence; dismiss what's intentional.",
   },
   inventory: {
     name: 'Inventory',
