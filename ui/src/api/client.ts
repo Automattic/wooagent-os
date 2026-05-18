@@ -283,8 +283,8 @@ export interface Variant {
   id: string;
   label: string;
   body: string;
-  seo: number;
-  voice: number;
+  seo?: number;
+  voice?: number;
   charCount: number;
   recommended?: boolean;
   note?: string;
@@ -323,8 +323,8 @@ export function variantsFromProposal(p: Proposal | null | undefined): Variant[] 
       id: r.id,
       label: typeof r.label === 'string' ? r.label : r.id,
       body: r.body,
-      seo: typeof r.seo === 'number' ? r.seo : 0,
-      voice: typeof r.voice === 'number' ? r.voice : 0,
+      seo: typeof r.seo === 'number' ? r.seo : undefined,
+      voice: typeof r.voice === 'number' ? r.voice : undefined,
       charCount:
         typeof r.charCount === 'number' ? r.charCount : r.body.length,
       recommended: r.recommended === true,
