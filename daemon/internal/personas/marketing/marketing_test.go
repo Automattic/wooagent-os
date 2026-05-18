@@ -243,7 +243,3 @@ func (f *fakeMCP) CallTool(ctx context.Context, name string, args any) (mcp.Tool
 	envelope := fmt.Sprintf(`{"success":true,"data":%s}`, string(f.listProductsResp))
 	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
 }
-
-func (f *fakeMCP) Initialize(ctx context.Context) (mcp.ServerInfo, error) {
-	panic("not used by fetchVoiceCorpus")
-}
