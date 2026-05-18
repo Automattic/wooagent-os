@@ -17,19 +17,19 @@
    tokens allowed in this codebase. Used on agent avatar squares in the sidebar
    and the kind pill on cards. */
 :root {
-  --wa-persona-mk-bg: #fce7f3;
+  --wa-persona-mk-bg: #e3899d;
   --wa-persona-mk-ink: #be185d;
-  --wa-persona-pr-bg: #dbeafe;
+  --wa-persona-pr-bg: #a1e7e3;
   --wa-persona-pr-ink: #1d4ed8;
-  --wa-persona-in-bg: #fef3c7;
+  --wa-persona-in-bg: #ffe4ad;
   --wa-persona-in-ink: #b45309;
-  --wa-persona-ac-bg: #dcfce7;
+  --wa-persona-ac-bg: #9ac3e0;
   --wa-persona-ac-ink: #15803d;
-  --wa-persona-rp-bg: #ede9fe;
+  --wa-persona-rp-bg: #c892bc;
   --wa-persona-rp-ink: #6d28d9;
-  --wa-persona-ss-bg: #ccfbf1;
+  --wa-persona-ss-bg: #f7cfaf;
   --wa-persona-ss-ink: #0f766e;
-  --wa-persona-cs-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --wa-persona-cs-bg: #e5e5e5;
   --wa-persona-cs-ink: #ffffff;
 
   /* @wordpress/ui Dialog/AlertDialog z-index defaults to `initial` (= auto).
