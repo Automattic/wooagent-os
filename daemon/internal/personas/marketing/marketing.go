@@ -440,7 +440,7 @@ func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([
 		Products []productListItem `json:"products"`
 	}
 	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
-		"ability_name": "wc/products",
+		"ability_name": "wooagent-products/list",
 		"parameters": map[string]any{
 			"per_page": 20,
 			"orderby":  "date_modified",
@@ -454,6 +454,10 @@ func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([
 	if len(res.Content) == 0 {
 		return nil, fmt.Errorf("fetch voice corpus: empty content")
 	}
+	// NOTE: mirrors callAbilityInner's envelope decode. The two cannot share
+	// a helper today because callAbilityInner takes *mcp.Client and we take
+	// mcpLister; if a third caller appears, extract a helper that takes
+	// mcp.ToolCallResult instead.
 	var env abilityEnvelope
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &env); err != nil {
 		return nil, fmt.Errorf("decode corpus envelope: %w", err)
@@ -465,9 +469,11 @@ func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([
 		return nil, fmt.Errorf("decode corpus data: %w", err)
 	}
 
-	// Filter (status=publish redundant — server already filtered, but the
-	// fake-MCP test data mixes statuses, and defensive filtering costs
-	// nothing) and exclude.
+	// Belt-and-suspenders: also filter status=publish locally. The server
+	// is asked to filter via the `status` param, but a misconfigured
+	// adapter or older Companion Plugin could return mixed statuses; the
+	// local guard makes the corpus shape robust to that. Then apply the
+	// per-product exclusion.
 	filtered := make([]productListItem, 0, len(out.Products))
 	for _, p := range out.Products {
 		if p.Status != "publish" || p.ID == excludeProductID {
