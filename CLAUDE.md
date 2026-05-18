@@ -61,13 +61,13 @@ The reference site is https://system.automattic.design/. The WPDS MCP server (`@
 
 The seven agent identities (Marketing / Pricing / Inventory / Accounting / Reporting / Sales Support / Chief of Staff) keep their brand colors as a small set of CSS variables:
 
-- `--wa-persona-mk-bg` / `--wa-persona-mk-ink` — Marketing (pink: `#FCE7F3` / `#BE185D`)
-- `--wa-persona-pr-bg` / `--wa-persona-pr-ink` — Pricing (blue: `#DBEAFE` / `#1D4ED8`)
-- `--wa-persona-in-bg` / `--wa-persona-in-ink` — Inventory (amber: `#FEF3C7` / `#B45309`)
-- `--wa-persona-ac-bg` / `--wa-persona-ac-ink` — Accounting (green: `#DCFCE7` / `#15803D`)
-- `--wa-persona-rp-bg` / `--wa-persona-rp-ink` — Reporting (violet: `#EDE9FE` / `#6D28D9`)
-- `--wa-persona-ss-bg` / `--wa-persona-ss-ink` — Sales Support (teal: `#CCFBF1` / `#0F766E`)
-- `--wa-persona-cs-bg` / `--wa-persona-cs-ink` — Chief of Staff (indigo gradient: `#6366F1` → `#8B5CF6` / `#FFFFFF`)
+- `--wa-persona-mk-bg` / `--wa-persona-mk-ink` — Marketing (pink: `#E3899D` / `#BE185D`)
+- `--wa-persona-pr-bg` / `--wa-persona-pr-ink` — Pricing (mint: `#A1E7E3` / `#1D4ED8`)
+- `--wa-persona-in-bg` / `--wa-persona-in-ink` — Inventory (amber: `#FFE4AD` / `#B45309`)
+- `--wa-persona-ac-bg` / `--wa-persona-ac-ink` — Accounting (blue: `#9AC3E0` / `#15803D`)
+- `--wa-persona-rp-bg` / `--wa-persona-rp-ink` — Reporting (mauve: `#C892BC` / `#6D28D9`)
+- `--wa-persona-ss-bg` / `--wa-persona-ss-ink` — Sales Support (peach: `#F7CFAF` / `#0F766E`)
+- `--wa-persona-cs-bg` / `--wa-persona-cs-ink` — Chief of Staff (gray: `#E5E5E5` / `#FFFFFF`)
 
 Used in **one place only**: the agent avatar squares in the sidebar (`PersonaAvatar`). Two previous sites have been retired — the brand-header "W" tile in `LeftNav` moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma, and the persona-colored `KindBadge` "kind pill" on board cards was removed entirely when the queue moved to DataViews (agent identity via `PersonaAvatar` is the canonical visual signal). Everything else (status badges, KPI cards, action buttons, notices) uses native WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). **Don't expand this exception.** Any new color need is a WPDS need.
 

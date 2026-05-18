@@ -2,20 +2,19 @@
 name: WooAgent
 description: Calm, competent AI coworkers inside a WordPress-native shell. Layered on the WordPress Design System (WPDS).
 colors:
-  persona-mk-bg: "#FCE7F3"
+  persona-mk-bg: "#E3899D"
   persona-mk-ink: "#BE185D"
-  persona-pr-bg: "#DBEAFE"
+  persona-pr-bg: "#A1E7E3"
   persona-pr-ink: "#1D4ED8"
-  persona-in-bg: "#FEF3C7"
+  persona-in-bg: "#FFE4AD"
   persona-in-ink: "#B45309"
-  persona-ac-bg: "#DCFCE7"
+  persona-ac-bg: "#9AC3E0"
   persona-ac-ink: "#15803D"
-  persona-rp-bg: "#EDE9FE"
+  persona-rp-bg: "#C892BC"
   persona-rp-ink: "#6D28D9"
-  persona-ss-bg: "#CCFBF1"
+  persona-ss-bg: "#F7CFAF"
   persona-ss-ink: "#0F766E"
-  persona-cs-bg-from: "#6366F1"
-  persona-cs-bg-to: "#8B5CF6"
+  persona-cs-bg: "#E5E5E5"
   persona-cs-ink: "#FFFFFF"
 ---
 
