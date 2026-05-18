@@ -222,12 +222,15 @@ A suggested order. Each phase produces something operators can use.
 
 **Consequence for [DSGWOO-1324](https://linear.app/a8c/issue/DSGWOO-1324):** scope does NOT shrink as the original spec hoped. Pricing variable-product support is still real work — either build a Companion Plugin variation extension (`wooagent-products/variations-list` + `wooagent-products/update-variation`) or wait for WC AI to add variation support upstream.
 
-**Phase 1 — Discovery infrastructure (3-5 days).**
-- New `store_abilities` table + migration.
-- Daily re-discovery loop (extends the scheduler).
-- `personas.Deps.Abilities.Has(name)` API.
-- Tests: a persona declaring it needs `woocommerce/find-products` gets the right `Has` result depending on table state.
-- No persona behavior changes yet (just plumbing).
+**Phase 1 — Discovery infrastructure (3-5 days est, ~0.5 day actual). ✅ DONE 2026-05-18.**
+- ✅ Per-store ability cache table — **pre-existed.** Migration `008_abilities.sql` (May 7-ish, alongside the trust-labeling work) already created the `abilities` table keyed by `(store_id, name)` with `schema_hash`, `trust_state` (new / trusted / schema_changed), `revoked_at`, CASCADE on store delete. The spec's "store_abilities" name was a misnomer for the existing table.
+- ✅ Discovery service — **pre-existed.** `daemon/internal/abilities/abilities.Runner` already runs `DiscoverAbilities` + `GetAbilityInfo` per store via MCP, upserts rows, manages trust transitions.
+- ✅ Periodic re-discovery — **pre-existed.** `Runner.SchedulePeriodic` runs every 6h (more aggressive than the 24h the spec sketched, which is fine). Invoked from `cli/run.go:156-157` at daemon startup.
+- ✅ `personas.Deps.Abilities.Has(name)` API — **new in this phase.** Added the `Abilities` interface + `NilAbilities` sentinel in `daemon/internal/personas/personas.go`; concrete `abilities.Checker` implementation that mirrors PEP's `checkTrustState` exactly (revoked → false; manifest pre-sign → true; trust_state=trusted → true; everything else → false). Wired at daemon startup so every persona's `Deps` carries a checker against the live abilities table + bundled manifest.
+- ✅ Tests for the new API — 9 cases covering the cross-product of (abilities-row state × manifest-presence × revoke).
+- ✅ No persona behavior changes — personas don't yet call `Has`. Phase 2 is where Pricing first branches on it.
+
+**Takeaway:** the trust-labeling work shipped earlier in May had already built ~80% of "Phase 1" before the integration spec was written. The remaining 20% was the persona-facing API surface. Phase 2 is unblocked.
 
 **Phase 2 — Pricing target-picker upgrade (2-3 days).**
 - Pricing's `pickFirstProduct` branches on `Abilities.Has("woocommerce/find-products")`.
