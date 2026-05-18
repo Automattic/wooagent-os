@@ -39,14 +39,18 @@ function relativeTime(iso: string): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+// Choose the score-value color class based on the score band. SEO and Voice
+// use slightly different bands (SEO 80+, Voice 80+ for "good") to match the
+// Yoast/voice-model conventions and the corpus-based voice scoring design
+// (docs/specs/2026-05-18-marketing-kpi-scoring-design.md).
 function seoColorClass(score: number): string {
   if (score >= 80) return 'wa-score-label__value--good';
   if (score >= 70) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
 }
 function voiceColorClass(score: number): string {
-  if (score >= 90) return 'wa-score-label__value--good';
-  if (score >= 75) return 'wa-score-label__value--caution';
+  if (score >= 80) return 'wa-score-label__value--good';
+  if (score >= 65) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
 }
 
