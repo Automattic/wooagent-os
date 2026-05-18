@@ -19,16 +19,18 @@ description: |
 
   SEO rubric (six checks, each contributes ~16 points; round the total):
   1. Focus keyphrase = the product name. The body uses it naturally (not
-     necessarily verbatim — common-noun paraphrases are fine).
-  2. Keyphrase coverage: the product's noun phrase or a close paraphrase
-     appears at least once across the body (in 4 sentences or fewer).
-  3. Length adequacy: 140–220 characters (matches the variant cap above).
-     A variant that is too short or too long fails this check.
+     necessarily verbatim — common-noun paraphrases are fine) and does
+     not repeat it more than twice.
+  2. Natural placement: the keyphrase appears in the first or second
+     sentence, not deferred to the last sentence alone.
+  3. Length adequacy: 140–220 characters (same character cap as the
+     variant constraints below). A variant that is too short or too
+     long fails this check.
   4. Benefit-led opener: first sentence leads with what the product does
      for the customer or its standout property, not the product's name or
      category.
   5. Scannability: short sentences (median ≤ 20 words), 2–4 sentences total
-     (matches the variant cap above).
+     (same sentence-count bound as the variant constraints below).
   6. Specificity: the body names at least two concrete features, materials,
      or measurements (e.g., "wood-fired", "12oz", "two-ply", "stoneware").
 
@@ -109,6 +111,8 @@ schema:
               type:
                 - integer
                 - "null"
+              minimum: 1
+              maximum: 100
               description: |
                 Voice-corpus match score in [1, 100]. `null` is valid when
                 no corpus was provided in the user message (new-store path).
