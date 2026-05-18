@@ -261,6 +261,11 @@ func TestBuildPromptUserMessage_IncludesProductAndCorpus(t *testing.T) {
 			t.Errorf("user message missing corpus marker %q\n---\n%s", want, msg)
 		}
 	}
+	// Negative: with a real corpus, the "Emit null" instruction must NOT
+	// appear — that path is reserved for the empty-corpus case.
+	if strings.Contains(msg, "Emit null") {
+		t.Errorf("non-empty-corpus message should NOT contain 'Emit null'\n---\n%s", msg)
+	}
 }
 
 func TestBuildPromptUserMessage_EmptyCorpus(t *testing.T) {
@@ -270,8 +275,25 @@ func TestBuildPromptUserMessage_EmptyCorpus(t *testing.T) {
 	if !strings.Contains(msg, "Voice corpus: (none available") {
 		t.Errorf("empty-corpus message should mark the gap explicitly\n---\n%s", msg)
 	}
-	if !strings.Contains(msg, "null") {
-		t.Errorf("empty-corpus message should instruct emitting null for voice\n---\n%s", msg)
+	if !strings.Contains(msg, "Emit null for") {
+		t.Errorf("empty-corpus message should explicitly instruct emitting null for voice\n---\n%s", msg)
+	}
+}
+
+func TestBuildPromptUserMessage_EmptyDescription(t *testing.T) {
+	// Empty description still produces a well-formed message — the
+	// "Current description:" label stays, even with an empty value
+	// (signals "no current copy" to the LLM, which is exactly when
+	// marketing's job kicks in).
+	p := product{Name: "Blank Product", SKU: "BLANK-1", Description: ""}
+	corpus := []corpusSample{{Name: "Example", Body: "An existing description."}}
+	msg := buildPromptUserMessage(p, corpus)
+
+	if !strings.Contains(msg, "Current description: \n") {
+		t.Errorf("empty description should still surface the label with an empty value\n---\n%s", msg)
+	}
+	if !strings.Contains(msg, "Blank Product") {
+		t.Errorf("product name still present\n---\n%s", msg)
 	}
 }
 
