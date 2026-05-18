@@ -117,6 +117,9 @@ func TestParseVariants_ValidScores(t *testing.T) {
 	if got[0].Seo != 80 || got[0].Voice != 75 {
 		t.Errorf("variant 0: got seo=%d voice=%d, want 80/75", got[0].Seo, got[0].Voice)
 	}
+	if got[1].Seo != 65 || got[1].Voice != 90 {
+		t.Errorf("variant 1: got seo=%d voice=%d, want 65/90", got[1].Seo, got[1].Voice)
+	}
 	if got[2].Seo != 100 || got[2].Voice != 50 {
 		t.Errorf("variant 2: got seo=%d voice=%d, want 100/50", got[2].Seo, got[2].Voice)
 	}
@@ -158,22 +161,31 @@ func TestParseVariants_MissingScoresAreZero(t *testing.T) {
 	}
 }
 
-func TestParseVariants_BothZeroIsSuspect(t *testing.T) {
-	// Both scores exactly 0 → treated as suspect (the legacy default that
-	// prompted this ticket). Cleared to zero so omitempty drops both fields.
+func TestParseVariants_ZeroScoreIsClearedIndependently(t *testing.T) {
+	// Each score is validated independently — an explicit 0 on one field
+	// is cleared regardless of the other field's value. This is distinct
+	// from TestParseVariants_MissingScoresAreZero, which covers absent
+	// fields; here the LLM explicitly emitted 0 and the validator treats
+	// that as the legacy "no scoring" default per DSGWOO-1326.
 	in := `{"variants":[
 		{"label":"A","angle":"material","body":"hello","seo":0,"voice":0},
 		{"label":"B","angle":"use","body":"world","seo":80,"voice":80},
-		{"label":"C","angle":"story","body":"again","seo":80,"voice":80}
+		{"label":"C","angle":"story","body":"again","seo":0,"voice":75}
 	]}`
 	got, err := parseVariants(in)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	if got[0].Seo != 0 || got[0].Voice != 0 {
-		t.Errorf("both-zero variant 0: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
+		t.Errorf("variant 0 both-zero: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
 	}
 	if got[1].Seo != 80 || got[1].Voice != 80 {
-		t.Errorf("variant 1 should keep its scores: got seo=%d voice=%d", got[1].Seo, got[1].Voice)
+		t.Errorf("variant 1 should keep its scores: got seo=%d voice=%d, want 80/80", got[1].Seo, got[1].Voice)
+	}
+	if got[2].Seo != 0 {
+		t.Errorf("variant 2 asymmetric seo=0: got seo=%d, want 0", got[2].Seo)
+	}
+	if got[2].Voice != 75 {
+		t.Errorf("variant 2 asymmetric voice=75: got voice=%d, want 75 (should NOT be cleared)", got[2].Voice)
 	}
 }

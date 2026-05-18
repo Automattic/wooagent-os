@@ -50,7 +50,11 @@ type variant struct {
 }
 
 // llmVariant is what the LLM returns inside its JSON response. Translated
-// to the persisted `variant` shape after parsing.
+// to the persisted `variant` shape after parsing. Note: a JSON `null` on
+// the Seo/Voice int fields unmarshals to 0, which the parseVariants
+// validator clears via the <= 0 guard — so the prompt-instructed
+// "emit null when corpus unavailable" path lands at the same end state
+// as a missing field.
 type llmVariant struct {
 	Label string `json:"label"`
 	Angle string `json:"angle"`
@@ -94,6 +98,10 @@ func parseVariants(raw string) ([]variant, error) {
 		if label == "" {
 			label = string(rune('A' + i))
 		}
+		// TODO(DSGWOO-1326 follow-up): emit a structured telemetry counter
+		// (marketing.score_missing{kind="seo|voice"}) when scores are cleared.
+		// Counter sink doesn't exist in internal/telemetry yet (turn-event-only
+		// shape); deferred per the plan's "Out-of-band follow-ups" section.
 		// Validate scores. Anything out of [1, 100] (note: 0 is also suspect —
 		// it's the legacy default that prompted DSGWOO-1326) → clear to 0 so
 		// the omitempty JSON tag drops the field; UI then renders '—' for
