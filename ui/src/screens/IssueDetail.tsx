@@ -364,11 +364,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 ? `${activeVariant.voice}%`
                 : undefined
             }
-            score={
-              typeof activeVariant?.voice === 'number'
-                ? activeVariant.voice
-                : undefined
-            }
             tone={
               typeof activeVariant?.voice === 'number'
                 ? voiceToneBand(activeVariant.voice)
@@ -385,11 +380,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             value={
               typeof activeVariant?.seo === 'number'
                 ? String(activeVariant.seo)
-                : undefined
-            }
-            score={
-              typeof activeVariant?.seo === 'number'
-                ? activeVariant.seo
                 : undefined
             }
             tone={
