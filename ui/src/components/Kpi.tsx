@@ -54,9 +54,9 @@ export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Pro
                 lineHeight: 'var(--wpds-typography-line-height-lg)',
               }}
             >
-              {value}
+              {value ?? '—'}
             </Text>
-            {typeof score === 'number' && (
+            {typeof score === 'number' && value != null && (
               <div className="wa-score-bar" style={barStyle} aria-hidden="true">
                 <div style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
               </div>
