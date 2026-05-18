@@ -235,7 +235,15 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
 
-	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription)
+	// Voice corpus: live-sampled per attempt. Soft-fails (logs + empties)
+	// — the prompt's empty-corpus path handles that case explicitly.
+	corpus, corpusErr := fetchVoiceCorpus(ctx, deps.MCP, productID)
+	if corpusErr != nil {
+		fmt.Printf("marketing: voice corpus fetch errored (%v); proceeding with empty corpus\n", corpusErr)
+		corpus = nil
+	}
+
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus)
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -558,13 +566,13 @@ func buildPromptUserMessage(p product, corpus []corpusSample) string {
 // falls back to the OpenAI-compatible endpoint (LM Studio by default)
 // otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
 // means the caller should mark the run Skipped.
-func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string) (string, string, error) {
+func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string, corpus []corpusSample) (string, string, error) {
 	if strings.TrimSpace(env.AnthropicAPIKey) != "" {
 		model := env.AnthropicModel
 		if model == "" {
 			model = defaultAnthropicModel
 		}
-		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription)
+		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription, corpus)
 		if err != nil {
 			return "", fmt.Sprintf("Claude API errored: %v", err), nil
 		}
@@ -586,7 +594,7 @@ func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDe
 	if apiKey == "" {
 		apiKey = defaultOpenAIKey
 	}
-	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription)
+	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription, corpus)
 	if err != nil {
 		return "", fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err), nil
 	}
@@ -627,11 +635,8 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string) (string, error) {
-	user := fmt.Sprintf(
-		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
-		p.Name, p.SKU, strings.TrimSpace(p.Description),
-	)
+func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string, corpus []corpusSample) (string, error) {
+	user := buildPromptUserMessage(p, corpus)
 
 	body, _ := json.Marshal(anthropicReq{
 		Model:     model,
@@ -711,11 +716,9 @@ func draftRewriteOpenAI(
 	base, apiKey, model string,
 	p product,
 	skillDescription string,
+	corpus []corpusSample,
 ) (string, error) {
-	user := fmt.Sprintf(
-		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
-		p.Name, p.SKU, strings.TrimSpace(p.Description),
-	)
+	user := buildPromptUserMessage(p, corpus)
 	body, _ := json.Marshal(chatReq{
 		Model: model,
 		Messages: []chatMsg{
