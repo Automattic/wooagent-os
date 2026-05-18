@@ -550,7 +550,7 @@ func buildPromptUserMessage(p product, corpus []corpusSample) string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 0–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
+	b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 1–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
 	return b.String()
 }
 
