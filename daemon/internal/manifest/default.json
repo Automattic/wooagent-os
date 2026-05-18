@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-04-23T16:56:16Z",
+  "generated_at": "2026-05-18T13:13:21Z",
   "entries": [
     {
       "ability": "core/get-site-info",
@@ -42,7 +42,7 @@
       "ability": "wooagent-products/list",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
-      "schema_hash": "sha256:dd5b020d0c9e3ab7319b88882397b1ee4dede5b2892280e27eedd28748e16435",
+      "schema_hash": "sha256:a0a172b4dcc66cd99a39108fa54db65a29bc65b801d2854a2572e641028b9523",
       "scope": "read",
       "reversibility": 1,
       "personas": [
@@ -57,7 +57,7 @@
       "ability": "wooagent-products/get",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
-      "schema_hash": "sha256:c63eb1b81015447eafbcb75d832b5216f9d44277fa1a81ae289dc58307af3a2e",
+      "schema_hash": "sha256:84f71f25a1d5c58576faf311d070efb73cb7405e593a64e99959e66cb391ee96",
       "scope": "read",
       "reversibility": 1,
       "personas": [
@@ -67,6 +67,21 @@
         "sales-support"
       ],
       "description": "Read a single product including full description, short description, and SEO meta."
+    },
+    {
+      "ability": "wooagent-products/list-categories",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "sha256:a2cbe048da33d91a36082f02ec5936050f0a760d6d3d97b894e2a166cec845db",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Return the store's product category taxonomy as a flat list. Used by Marketing to detect uncategorized clusters and propose category assignments."
     },
     {
       "ability": "wooagent-products/update",
@@ -139,34 +154,124 @@
       "description": "Read a single WooCommerce customer including lifetime spend and order count."
     },
     {
-      "ability": "wooagent-device-pair/request",
-      "namespace_owner": "wooagent-os/companion-plugin",
+      "ability": "woocommerce/plan-batch-operation",
+      "namespace_owner": "woocommerce/woocommerce",
       "source_url": "",
-      "schema_hash": "sha256:daa7810fd7c6a97ac6711d24a1e31c8e83f9f955479a34a68864e32b7c54e3c5",
+      "schema_hash": "sha256:3ed81faceb12b60667f5088e1b81c423cda3bf4a86bb7ffe5e46fd59cf2fc26f",
       "scope": "propose",
       "reversibility": 0.5,
-      "personas": [],
-      "description": "Daemon-initiated: requests a short pairing code the operator can enter in wp-admin. v0.2."
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Resolve selector, freeze operation items, and return a dry-run preview. The selector accepts either inline attribute filters (selector.type \"product_query\") for simple cases like categories/price/stock, or a selector_handle from find-products (selector.type \"find_result\") for behavioral queries like slow movers, margin bands, or data-quality issues. Returns operation_uuid that the user may approve via UI without invoking confirm-batch-operation here; if the user later asks whether the operation ran or what the outcome was, call get-batch-operation-status with that operation_uuid to check."
     },
     {
-      "ability": "wooagent-device-pair/confirm",
-      "namespace_owner": "wooagent-os/companion-plugin",
+      "ability": "woocommerce/confirm-batch-operation",
+      "namespace_owner": "woocommerce/woocommerce",
       "source_url": "",
-      "schema_hash": "sha256:bf0a4d18513a6b37c716690cd9ef8ee911f3ddc611d98e88a366731ed3d5ce06",
+      "schema_hash": "sha256:4f4fb6498c679ce5b5a6066e80f85d8c167d75852186b59a0a80151214431079",
       "scope": "propose",
       "reversibility": 0.5,
-      "personas": [],
-      "description": "Operator-facing: approves a pending pairing code and mints a scoped device token. v0.2."
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Confirm and execute a planned operation. The conflict_policy chosen at plan-batch-operation time is locked in; this ability does not accept a policy override."
     },
     {
-      "ability": "wooagent-device-pair/revoke",
-      "namespace_owner": "wooagent-os/companion-plugin",
+      "ability": "woocommerce/get-batch-operation-status",
+      "namespace_owner": "woocommerce/woocommerce",
       "source_url": "",
-      "schema_hash": "sha256:10d32d6e6645c00bd9eb6b2ef51ed3105911d6900a5aded3469bc6898ad65826",
-      "scope": "apply",
-      "reversibility": 0.2,
-      "personas": [],
-      "description": "Revoke a previously-paired device token. v0.2."
+      "schema_hash": "sha256:3fa42693afdb99ebd5dcc01ea9957448ad13df674edffdb4ffb483c8b7a97dde",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Read operation state and progress counters. Use this to check whether a previously planned batch operation has been executed or completed — the user may approve and run an operation directly via the preview UI without a tool round-trip, so call this with the operation_uuid from plan-batch-operation to verify outcomes. Terminal states: succeeded, partially_succeeded, failed, cancelled."
+    },
+    {
+      "ability": "woocommerce/get-batch-operation-preview",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:b4c894d57003d39becf33e7317bf2659b3bc0c97343cfbf6afd375a6255990ca",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Fetch paginated batch preview rows for an existing operation."
+    },
+    {
+      "ability": "woocommerce/cancel-batch-operation",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:731520e192691fcfb1ebb1e27929650d85a3b03efed870953e1ee6a8fc72440e",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Cancel remaining work for a queued or running operation."
+    },
+    {
+      "ability": "woocommerce/undo-batch-operation",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:5a19d44d98e64a559af9bb4d17946a564b00d3f74c684e7a49ac7281ff1b92f8",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Revert processed items from a completed batch operation. By default, items whose product state has drifted since the original run are skipped to avoid overwriting later merchant edits; pass force: true to revert anyway."
+    },
+    {
+      "ability": "woocommerce/batch-update-product-content",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:652564537b776ff46d797ae7def36e820f51c0d31fab97ef73d2490ee986a4d9",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Plan a batch update for product description or short description through the persisted operation pipeline."
+    },
+    {
+      "ability": "woocommerce/find-products",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "",
+      "schema_hash": "sha256:2462ff270e58666daab760672a5328cf0bd87f120d8daf968fb62e6378962391",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Resolve products by attribute filters (category, price, stock, …) and/or behavioral filters (slow_mover, margin, data_issues). Returns a `selector_handle` for the next step plus a preview of `{product_id, name}` rows. Two main use cases: (1) staging a bulk update — pass the handle to plan-batch-operation as `selector: { type: \"find_result\", handle }`; (2) \"show me what you found\" — bump `preview_size` (default 10, up to 500) so the merchant sees every match listed by name without going through plan."
     },
     {
       "ability": "woocommerce/create-bookable-product",
@@ -319,10 +424,62 @@
       "description": "Analyze store data to recommend shipping zones and methods for US-based stores"
     },
     {
+      "ability": "jetpack-forms/list-forms",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:a9f600329efd653278c6bf625ee4bc55ac79a36fe92b14a8b7128e572bded952",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "List all forms with admin detail including response counts, status, and edit URLs. Supports pagination, search, and status filtering."
+    },
+    {
+      "ability": "jetpack-forms/get-form",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:440950afb5cae1c78573f88d801c8b8870d1a0e89c723b1b0d5c3b617679f317",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Get a single form with its full structure including field definitions, status, and edit URL."
+    },
+    {
+      "ability": "jetpack-forms/create-form",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:6db6291736c6122f9e0dcf9686a714ffb8c16f9f38aff3bed76938e52ef7baec",
+      "scope": "propose",
+      "reversibility": 0.7,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Create a new form with a title. Optionally provide block content for the form structure. Returns the new form ID and edit URL."
+    },
+    {
+      "ability": "jetpack-forms/delete-form",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:824acad9c990d871e03cb4f4698888290ad9cf31af27946d3a606019e27b3a97",
+      "scope": "apply",
+      "reversibility": 0.2,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Move a form to the trash. Does not permanently delete. Trashed forms can be restored."
+    },
+    {
       "ability": "jetpack-forms/get-responses",
       "namespace_owner": "automattic/jetpack",
       "source_url": "",
-      "schema_hash": "sha256:e6dfc984787b5fbc5b10e8ba1b2f6a3b451dd9bae620af4edceae38b354c606b",
+      "schema_hash": "sha256:369dd96a5bfc3f5c86c1bc66e273e589a5fd55693ae260b4ea5eac3cfb881075",
       "scope": "read",
       "reversibility": 1,
       "personas": [
@@ -343,6 +500,19 @@
         "marketing"
       ],
       "description": "Modify a form response. Use to mark as spam, move to trash, restore from trash, or toggle read/unread state."
+    },
+    {
+      "ability": "jetpack-forms/bulk-update-responses",
+      "namespace_owner": "automattic/jetpack",
+      "source_url": "",
+      "schema_hash": "sha256:9d3fef980ddf8636126a7b61202430e20a2e154422947cdd8878c805d9801cdc",
+      "scope": "propose",
+      "reversibility": 0.5,
+      "personas": [
+        "sales-support",
+        "marketing"
+      ],
+      "description": "Mark multiple responses as spam (or restore from spam) in a single call. Each response is processed individually; the result reports per-id success and any per-id failures so callers can see exactly which responses were updated. Also teaches Akismet from the successful updates."
     },
     {
       "ability": "jetpack-forms/get-status-counts",

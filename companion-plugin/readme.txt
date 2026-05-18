@@ -4,7 +4,7 @@ Tags: woocommerce, ai, agents, mcp, abilities
 Requires at least: 6.7
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 License: Apache-2.0
 
 Registers the WooAgent OS ability surface on a WooCommerce store. Paired with the WooAgent OS daemon running on the operator's machine.
@@ -18,9 +18,10 @@ This plugin is part of the WooAgent OS project. It runs on the store side; the a
 == v0.1 Ability Surface ==
 
 Products:
-* wooagent-products/list
+* wooagent-products/list  (v0.2: accepts orderby + order; returns total_sales)
 * wooagent-products/get
 * wooagent-products/update
+* wooagent-products/list-categories  (new in v0.2)
 
 Orders:
 * wooagent-orders/list
@@ -38,6 +39,11 @@ Device pairing (stub — shipping in v0.2):
 Until pairing ships, authenticate with a WordPress Application Password (Users → Profile → Application Passwords).
 
 == Changelog ==
+
+= 0.2.0 =
+* wooagent-products/list: new orderby (menu_order | date | date_modified | total_sales | title) + order (asc | desc) input args.
+* wooagent-products/list: summary now includes total_sales.
+* New ability wooagent-products/list-categories: returns the store's product category taxonomy as {id, name, slug, parent_id, count}.
 
 = 0.1.0 =
 * Initial release. Product, order, and customer CRUD abilities. Device-pair scaffold.

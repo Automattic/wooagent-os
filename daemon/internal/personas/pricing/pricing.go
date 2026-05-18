@@ -313,29 +313,43 @@ type productSummary struct {
 	Status       string `json:"status"`
 	Type         string `json:"type"`
 	RegularPrice string `json:"regular_price"`
+	TotalSales   int    `json:"total_sales"`
 }
 
 // listProductSummaries fetches the first page of products from MCP as
 // lightweight summaries (no descriptions, no categories). Cheap call —
 // no LLM, no web_search. v0.1 doesn't paginate; large catalogs (>~100
 // products) may need a follow-up.
-func listProductSummaries(ctx context.Context, c *mcp.Client) ([]productSummary, error) {
+//
+// orderby+order are passed through to the Companion Plugin (v0.2+ accepts
+// total_sales / date_modified / date / title / menu_order). On stores
+// still running the v0.1 plugin the orderby arg will be rejected by the
+// ability's additionalProperties:false schema — that surfaces as an
+// explicit error rather than a silent mis-order.
+func listProductSummaries(ctx context.Context, c *mcp.Client, orderby, order string) ([]productSummary, error) {
+	args := map[string]any{"per_page": 100}
+	if orderby != "" {
+		args["orderby"] = orderby
+	}
+	if order != "" {
+		args["order"] = order
+	}
 	var listOut struct {
 		Products []productSummary `json:"products"`
 		Total    int              `json:"total"`
 	}
-	if err := callAbility(ctx, c, "wooagent-products/list",
-		map[string]any{"per_page": 100}, &listOut); err != nil {
+	if err := callAbility(ctx, c, "wooagent-products/list", args, &listOut); err != nil {
 		return nil, err
 	}
 	return listOut.Products, nil
 }
 
 // pickFirstProduct returns the first simple, priced, published product
-// whose ID is not in skip. Pulls a wider page (100) than the original 50
-// so a handful of products in cooldown don't starve the picker.
+// whose ID is not in skip. Surfaces slow movers first (orderby=total_sales
+// asc) so Pricing benchmarks the catalog's revenue-soft tail before its
+// best sellers — that's where a re-priced run typically moves the needle.
 func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
-	summaries, err := listProductSummaries(ctx, c)
+	summaries, err := listProductSummaries(ctx, c, "total_sales", "asc")
 	if err != nil {
 		return 0, err
 	}

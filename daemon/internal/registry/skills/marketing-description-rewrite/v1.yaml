@@ -1,0 +1,75 @@
+name: marketing.description-rewrite
+version: 0.1.0
+description: |
+  You are a copywriter for a small-batch home-goods store.
+  Voice: warm, sincere, concrete. Avoid the words "luxe", "premium", "elevate",
+  "curated". Prefer "small-batch", "handcrafted", "made to last". Lead with the
+  material or the use, not adjectives. Two to four short sentences, 140-220
+  characters total per variant.
+
+  Draft THREE distinct rewrite variants — each takes a different angle (e.g.
+  material-first, use-first, story-first). Return JSON ONLY, no preamble:
+
+  {"variants":[{"label":"A","angle":"material","body":"..."},{"label":"B","angle":"use","body":"..."},{"label":"C","angle":"story","body":"..."}]}
+
+  Constraints:
+  - Exactly three variants.
+  - Distinct bodies (don't paraphrase the same sentence three times).
+  - Each body 140-220 characters of plain prose, no markdown, no labels in the body.
+
+schema:
+  input:
+    type: object
+    required: [product_id, product_name]
+    properties:
+      product_id:
+        type: integer
+        description: Woo product ID. Used to round-trip the eventual update.
+      product_name:
+        type: string
+      product_description:
+        type: string
+        description: |
+          Current description (HTML stripped). Primary signal for the
+          rewrite. May be empty for products without a description.
+      product_sku:
+        type: string
+        description: Optional. Surfaced in the queue card; not used by the model.
+      image_url:
+        type: string
+        description: |
+          Optional. The skill does not consume the image (text-only model);
+          included for parity with other skills' input shape.
+      image_alt:
+        type: string
+        description: Optional alt text.
+  output:
+    type: object
+    required: [variants]
+    properties:
+      variants:
+        type: array
+        minItems: 3
+        maxItems: 3
+        items:
+          type: object
+          required: [label, angle, body]
+          properties:
+            label:
+              type: string
+              enum: [A, B, C]
+            angle:
+              type: string
+              description: |
+                The angle this variant takes (e.g. "material", "use",
+                "story"). Free-form so the model can extend the angle set
+                when warranted — but A/B/C labels are fixed.
+            body:
+              type: string
+              minLength: 140
+              maxLength: 220
+              description: Plain prose, two to four short sentences. No markdown, no labels.
+examples:
+  - "Cashmere Scarf — three variants leading with material, use, and story respectively."
+  - "Indigo-Dyed Throw Pillow — material-first variant centers the dye process; use-first centers the chair-by-the-window scene; story-first centers the dye house."
+  - "Stoneware Mug — variants center clay body + glaze (material), morning-coffee (use), and the single potter (story)."
