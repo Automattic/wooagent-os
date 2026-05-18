@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-05-18T13:13:21Z",
+  "generated_at": "2026-05-18T13:46:10Z",
   "entries": [
     {
       "ability": "core/get-site-info",
@@ -526,6 +526,78 @@
         "marketing"
       ],
       "description": "Get a summary of form responses grouped by status. Returns counts for inbox (active), spam, and trash. Useful for dashboard stats or checking if there are new responses."
+    },
+    {
+      "ability": "woocommerce/product-update",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "https://developer.woocommerce.com/2026/05/12/mcp-abilities-api-10-9/",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Pre-signed for WC 10.9 canonical resource-verb naming. Replaces woocommerce/update-product when WC core registers it. Placeholder schema_hash — drift detection auto-demotes to unapproved on first real registration so an operator can review the real schema before the ability becomes invokable. See DSGWOO-1279."
+    },
+    {
+      "ability": "woocommerce/product-delete",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "https://developer.woocommerce.com/2026/05/12/mcp-abilities-api-10-9/",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "apply",
+      "reversibility": 0.2,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Pre-signed for WC 10.9 canonical naming. Destructive operation — reversibility 0.2 mirrors the pattern for delete/revoke verbs. Placeholder schema_hash; see DSGWOO-1279."
+    },
+    {
+      "ability": "woocommerce/products-query",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "https://developer.woocommerce.com/2026/05/12/mcp-abilities-api-10-9/",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "read",
+      "reversibility": 1.0,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "Pre-signed for WC 10.9 canonical naming. Covers the read patterns that today are split across woocommerce/get-product + woocommerce/search-products. Placeholder schema_hash; see DSGWOO-1279."
+    },
+    {
+      "ability": "woocommerce/orders-query",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "https://developer.woocommerce.com/2026/05/12/mcp-abilities-api-10-9/",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "read",
+      "reversibility": 1.0,
+      "personas": [
+        "accounting",
+        "reporting",
+        "sales-support"
+      ],
+      "description": "Pre-signed for WC 10.9 canonical naming. Covers what today is woocommerce/get-order plus order listing patterns. Placeholder schema_hash; see DSGWOO-1279."
+    },
+    {
+      "ability": "woocommerce/order-update-status",
+      "namespace_owner": "woocommerce/woocommerce",
+      "source_url": "https://developer.woocommerce.com/2026/05/12/mcp-abilities-api-10-9/",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "propose",
+      "reversibility": 0.6,
+      "personas": [
+        "accounting",
+        "sales-support"
+      ],
+      "description": "Pre-signed for WC 10.9 canonical naming. Targeted status transition (e.g. 'processing' -> 'completed') without rewriting the rest of the order. Placeholder schema_hash; see DSGWOO-1279."
     }
   ]
 }

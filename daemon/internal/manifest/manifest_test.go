@@ -88,6 +88,42 @@ func TestDevicePairAbilitiesHaveNoPersonas(t *testing.T) {
 	}
 }
 
+// TestPreSignedWC109CanonicalEntriesPresent guards the WC 10.9 canonical-
+// names pre-add (DSGWOO-1279). manifest-compute emits whatever the live
+// store registers — when run against a store that doesn't yet expose the
+// 10.9 names, a naive clobber-style refresh would silently drop these
+// pre-signed entries and a paired 10.9 store would hit PEP denials on
+// first invocation. This test makes that mistake a CI failure.
+//
+// Remove an entry from this list ONLY after the matching canonical
+// ability is live on a paired store and manifest-compute has captured
+// the real schema_hash (i.e., the entry is no longer a placeholder).
+func TestPreSignedWC109CanonicalEntriesPresent(t *testing.T) {
+	m, _ := Default()
+	pending := []string{
+		"woocommerce/product-update",
+		"woocommerce/product-delete",
+		"woocommerce/products-query",
+		"woocommerce/orders-query",
+		"woocommerce/order-update-status",
+	}
+	lookup, _ := NewLookup(m)
+	const placeholder = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	for _, name := range pending {
+		e := lookup.Get(name)
+		if e == nil {
+			t.Errorf("missing pre-signed WC 10.9 canonical entry: %s (DSGWOO-1279)", name)
+			continue
+		}
+		if e.SchemaHash != placeholder {
+			// Real schema captured — this entry is no longer a placeholder
+			// and can be removed from the pending list above. Failing the
+			// test is the prompt to do that cleanup.
+			t.Errorf("%s no longer has the placeholder hash — remove from the pending list in this test (DSGWOO-1279)", name)
+		}
+	}
+}
+
 // TestSchemaHashCanonical verifies that semantically-equivalent schemas with
 // different key ordering / whitespace produce the same hash. This is the
 // property drift detection relies on.

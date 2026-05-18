@@ -78,6 +78,23 @@ Used in **one place only**: the agent avatar squares in the sidebar (`PersonaAva
 ## Build & dev
 
 - `cd ui && npm run dev` — port 5173. Connects to a local daemon via stored bearer token.
+- `scripts/build-companion-plugin-zip.sh` — packages the Companion Plugin for upload to a Woo store. Output at `build/wooagent-companion.zip`.
+
+## Manifest refresh
+
+The pre-signed ability manifest at `daemon/internal/manifest/default.json` is a snapshot of the WP Abilities API on the connected staging store. Drift detection compares the snapshot's schema hashes against what the live store registers — schema changes auto-demote the affected ability to `unapproved` until an operator re-reviews.
+
+Refresh cadence: **monthly, or whenever a plugin update on the staging store changes the ability surface** (e.g., a new WC AI plugin release). Run:
+
+```bash
+WOOAGENT_MCP_USER='you@example.com' \
+WOOAGENT_MCP_APP_PASSWORD='app password from wp-admin' \
+scripts/refresh-manifest.sh
+```
+
+The script surgically merges so pre-signed canonical entries (placeholder `schema_hash`) survive a refresh against a store that doesn't yet register them — see DSGWOO-1279 for context on the WC 10.9 canonical-name pre-signs.
+
+After the refresh, review the diff and commit if it looks right.
 
 ## Git
 
