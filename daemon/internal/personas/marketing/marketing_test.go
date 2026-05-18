@@ -1,9 +1,13 @@
 package marketing
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 )
 
 func TestParseVariants_Happy(t *testing.T) {
@@ -188,4 +192,58 @@ func TestParseVariants_ZeroScoreIsClearedIndependently(t *testing.T) {
 	if got[2].Voice != 75 {
 		t.Errorf("variant 2 asymmetric voice=75: got voice=%d, want 75 (should NOT be cleared)", got[2].Voice)
 	}
+}
+
+func TestFetchVoiceCorpus_FiltersExcludesAndSorts(t *testing.T) {
+	// Stub MCP returning a mix of products. Asserts: filters out the
+	// excluded product, sorts by description length descending, returns
+	// the top 5.
+	fake := &fakeMCP{
+		// 6 published products + 1 draft + the excluded one
+		listProductsResp: []byte(`{"products":[
+			{"id":10,"name":"P10","status":"publish","description":"short"},
+			{"id":11,"name":"P11","status":"publish","description":"aaaaaaaaaa bbbbbbbbbb cccccccccc"},
+			{"id":12,"name":"P12","status":"publish","description":"medium length descrip"},
+			{"id":13,"name":"P13","status":"publish","description":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+			{"id":14,"name":"P14","status":"publish","description":"yyy"},
+			{"id":15,"name":"P15","status":"publish","description":"zzzzzzzzzzzzzzzz zzzzzzzzzzzz"},
+			{"id":99,"name":"Excluded","status":"publish","description":"this product is the one being rewritten"},
+			{"id":20,"name":"Draft","status":"draft","description":"should be filtered out by status"}
+		]}`),
+	}
+	got, err := fetchVoiceCorpus(context.Background(), fake, 99)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("got %d corpus samples, want 5 (top-5 longest after exclusion)", len(got))
+	}
+	if got[0].Name != "P13" {
+		t.Errorf("longest first: got %q, want P13", got[0].Name)
+	}
+	for _, s := range got {
+		if s.Name == "Excluded" {
+			t.Errorf("excluded product (id=99) leaked into corpus")
+		}
+		if s.Name == "Draft" {
+			t.Errorf("non-publish status leaked into corpus")
+		}
+	}
+}
+
+// fakeMCP implements just enough of *mcp.Client for fetchVoiceCorpus.
+// CallTool returns the canned bytes; everything else panics so a wrong
+// invocation surfaces immediately.
+type fakeMCP struct {
+	listProductsResp []byte
+}
+
+func (f *fakeMCP) CallTool(ctx context.Context, name string, params map[string]any) (mcp.ToolCallResult, error) {
+	// Mirrors callAbility's envelope shape.
+	envelope := fmt.Sprintf(`{"success":true,"data":%s}`, string(f.listProductsResp))
+	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
+}
+
+func (f *fakeMCP) Initialize(ctx context.Context) (mcp.ServerInfo, error) {
+	panic("not used by fetchVoiceCorpus")
 }
