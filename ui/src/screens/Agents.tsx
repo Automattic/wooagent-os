@@ -117,18 +117,33 @@ const IMPLEMENTED_PERSONAS = new Set<string>([
   'reporting',
 ]);
 
+// Personas that are built but ship dormant — operator opts in via the Add
+// Agent modal. While disabled (no agents row or enabled=false), they're
+// hidden from the roster entirely; the operator discovers them via the
+// "Add agent" button. After enable they graduate into the roster like any
+// other active persona. Today: Reporting. Future plugin-gated personas
+// (e.g. a Shipping audit persona) would land here too.
+const ADDABLE_PERSONAS = new Set<string>(['reporting']);
+
 function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
   const byKey = new Map(daemonPersonas.map((p) => [p.persona, p]));
-  return ALL_PERSONA_KEYS.map(
-    (key) =>
+  const out: Persona[] = [];
+  for (const key of ALL_PERSONA_KEYS) {
+    const row =
       byKey.get(key) ??
       ({
         persona: key,
         name: key,
         enabled: false,
         model_preference: undefined,
-      } as Persona),
-  );
+      } as Persona);
+    // Addable personas are surfaced via the Add Agent modal, not the
+    // roster, until the operator opts in. Once enabled, they appear here
+    // alongside the always-on fleet.
+    if (ADDABLE_PERSONAS.has(key) && !row.enabled) continue;
+    out.push(row);
+  }
+  return out;
 }
 
 // V1 model options. Hardcoded until the daemon exposes the available-models
