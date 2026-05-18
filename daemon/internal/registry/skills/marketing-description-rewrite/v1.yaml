@@ -8,14 +8,43 @@ description: |
   characters total per variant.
 
   Draft THREE distinct rewrite variants — each takes a different angle (e.g.
-  material-first, use-first, story-first). Return JSON ONLY, no preamble:
+  material-first, use-first, story-first). For each variant, also emit two
+  integer scores in [1, 100]:
 
-  {"variants":[{"label":"A","angle":"material","body":"..."},{"label":"B","angle":"use","body":"..."},{"label":"C","angle":"story","body":"..."}]}
+  - `seo`: how well the variant satisfies the product-copy SEO rubric below.
+  - `voice`: how well the variant matches the store's voice corpus (when
+    provided in the user message). Reward natural alignment in phrasing,
+    register, and lexical choice — do not reward copying. When the user
+    message says the corpus is unavailable, emit `null` for `voice`.
+
+  SEO rubric (six checks, each contributes ~16 points; round the total):
+  1. Focus keyphrase = the product name. The body uses it naturally (not
+     necessarily verbatim — common-noun paraphrases are fine).
+  2. Keyphrase coverage: the product's noun phrase or a close paraphrase
+     appears at least once across the body (in 4 sentences or fewer).
+  3. Length adequacy: 140–220 characters (matches the variant cap above).
+     A variant that is too short or too long fails this check.
+  4. Benefit-led opener: first sentence leads with what the product does
+     for the customer or its standout property, not the product's name or
+     category.
+  5. Scannability: short sentences (median ≤ 20 words), 2–4 sentences total
+     (matches the variant cap above).
+  6. Specificity: the body names at least two concrete features, materials,
+     or measurements (e.g., "wood-fired", "12oz", "two-ply", "stoneware").
+
+  Return JSON ONLY, no preamble:
+
+  {"variants":[{"label":"A","angle":"material","body":"...","seo":85,"voice":78},
+               {"label":"B","angle":"use","body":"...","seo":72,"voice":90},
+               {"label":"C","angle":"story","body":"...","seo":80,"voice":65}]}
 
   Constraints:
   - Exactly three variants.
   - Distinct bodies (don't paraphrase the same sentence three times).
-  - Each body 140-220 characters of plain prose, no markdown, no labels in the body.
+  - Each body 140-220 characters of plain prose, no markdown, no labels in
+    the body.
+  - `seo` and `voice` are integers in [1, 100]. Emit `null` for `voice` when
+    the user message says the corpus is unavailable.
 
 schema:
   input:
@@ -53,7 +82,7 @@ schema:
         maxItems: 3
         items:
           type: object
-          required: [label, angle, body]
+          required: [label, angle, body, seo, voice]
           properties:
             label:
               type: string
@@ -69,6 +98,20 @@ schema:
               minLength: 140
               maxLength: 220
               description: Plain prose, two to four short sentences. No markdown, no labels.
+            seo:
+              type: integer
+              minimum: 1
+              maximum: 100
+              description: |
+                Product-copy SEO score per the rubric in the system prompt.
+                Out-of-range or missing → daemon clears to 0 → UI renders '—'.
+            voice:
+              type:
+                - integer
+                - "null"
+              description: |
+                Voice-corpus match score in [1, 100]. `null` is valid when
+                no corpus was provided in the user message (new-store path).
 examples:
   - "Cashmere Scarf — three variants leading with material, use, and story respectively."
   - "Indigo-Dyed Throw Pillow — material-first variant centers the dye process; use-first centers the chair-by-the-window scene; story-first centers the dye house."
