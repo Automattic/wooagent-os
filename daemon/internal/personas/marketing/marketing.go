@@ -416,8 +416,11 @@ type corpusSample struct {
 // Existing code stays on *mcp.Client; the interface exists so tests can
 // pass a fake without touching the rest of the package.
 type mcpLister interface {
-	CallTool(ctx context.Context, name string, params map[string]any) (mcp.ToolCallResult, error)
+	CallTool(ctx context.Context, name string, args any) (mcp.ToolCallResult, error)
 }
+
+// Compile-time check that *mcp.Client satisfies mcpLister.
+var _ mcpLister = (*mcp.Client)(nil)
 
 // fetchVoiceCorpus pulls 3–5 of the store's longest published product
 // descriptions for use as voice-match context in the marketing prompt.
