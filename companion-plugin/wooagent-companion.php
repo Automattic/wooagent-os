@@ -3,7 +3,7 @@
  * Plugin Name:       WooAgent Companion
  * Plugin URI:        https://github.com/automattic/wooagent-os
  * Description:       Registers the WooAgent OS ability surface on a WooCommerce store. Paired with the WooAgent OS daemon running on the operator's machine.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.7
  * Requires PHP:      7.4
  * Author:            Elizabeth Pizzuti
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WOOAGENT_COMPANION_VERSION', '0.1.0' );
+define( 'WOOAGENT_COMPANION_VERSION', '0.2.0' );
 define( 'WOOAGENT_COMPANION_PATH', plugin_dir_path( __FILE__ ) );
 
 require_once WOOAGENT_COMPANION_PATH . 'includes/abilities-products.php';
