@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/httpapi"
@@ -183,11 +184,12 @@ func newRunCmd() *cobra.Command {
 					Store:    st,
 					Personas: personas.All(),
 					Deps: personas.Deps{
-						Store:    st,
-						MCP:      mcpClient,
-						Skills:   skills,
-						Env:      env,
-						Recorder: telemetry.NewSQLiteRecorder(st.DB, budgetGate),
+						Store:     st,
+						MCP:       mcpClient,
+						Skills:    skills,
+						Env:       env,
+						Recorder:  telemetry.NewSQLiteRecorder(st.DB, budgetGate),
+						Abilities: abilities.NewChecker(st.DB, lookup),
 					},
 					Out:    out,
 					Budget: budgetGate,
