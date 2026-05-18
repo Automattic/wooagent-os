@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,8 +36,9 @@ import (
 
 // variant is the shape the UI's variantsFromProposal expects to find under
 // proposal.target.variants. Keep field names in sync with
-// ui/src/api/client.ts:261 — id, body required; label/charCount/recommended
-// optional; seo/voice default to 0 in the UI until real scoring lands.
+// ui/src/api/client.ts:282 — id, body required; label/charCount/recommended
+// optional; seo/voice optional (omitempty → UI distinguishes "absent" from
+// "real 0" and renders '—' on absent).
 type variant struct {
 	ID          string `json:"id"`
 	Label       string `json:"label,omitempty"`
@@ -44,14 +46,22 @@ type variant struct {
 	CharCount   int    `json:"charCount,omitempty"`
 	Recommended bool   `json:"recommended,omitempty"`
 	Angle       string `json:"angle,omitempty"`
+	Seo         int    `json:"seo,omitempty"`
+	Voice       int    `json:"voice,omitempty"`
 }
 
 // llmVariant is what the LLM returns inside its JSON response. Translated
-// to the persisted `variant` shape after parsing.
+// to the persisted `variant` shape after parsing. Note: a JSON `null` on
+// the Seo/Voice int fields unmarshals to 0, which the parseVariants
+// validator clears via the <= 0 guard — so the prompt-instructed
+// "emit null when corpus unavailable" path lands at the same end state
+// as a missing field.
 type llmVariant struct {
 	Label string `json:"label"`
 	Angle string `json:"angle"`
 	Body  string `json:"body"`
+	Seo   int    `json:"seo"`
+	Voice int    `json:"voice"`
 }
 
 type llmVariantsResp struct {
@@ -89,6 +99,28 @@ func parseVariants(raw string) ([]variant, error) {
 		if label == "" {
 			label = string(rune('A' + i))
 		}
+		// TODO(DSGWOO-1326 follow-up): emit a structured telemetry counter
+		// (marketing.score_missing{kind="seo|voice"}) when scores are cleared.
+		// Counter sink doesn't exist in internal/telemetry yet (turn-event-only
+		// shape); deferred per the plan's "Out-of-band follow-ups" section.
+		// Validate scores. Anything out of [1, 100] (note: 0 is also suspect —
+		// it's the legacy default that prompted DSGWOO-1326) → clear to 0 so
+		// the omitempty JSON tag drops the field; UI then renders '—' for
+		// the missing dimension.
+		seo := v.Seo
+		if seo <= 0 || seo > 100 {
+			if seo != 0 {
+				fmt.Printf("marketing: variant %d seo out of range (%d), clearing\n", i, seo)
+			}
+			seo = 0
+		}
+		voice := v.Voice
+		if voice <= 0 || voice > 100 {
+			if voice != 0 {
+				fmt.Printf("marketing: variant %d voice out of range (%d), clearing\n", i, voice)
+			}
+			voice = 0
+		}
 		out = append(out, variant{
 			ID:          fmt.Sprintf("var_%s", strings.ToLower(label)),
 			Label:       label,
@@ -96,6 +128,8 @@ func parseVariants(raw string) ([]variant, error) {
 			CharCount:   len(body),
 			Recommended: i == 0,
 			Angle:       strings.TrimSpace(v.Angle),
+			Seo:         seo,
+			Voice:       voice,
 		})
 	}
 	return out, nil
@@ -134,11 +168,12 @@ func (Marketing) Cooldown() personas.CooldownPolicy {
 const skillName = "marketing.description-rewrite"
 
 // maxDraftAttempts caps how many products a single Draft run will try
-// before giving up. Each attempt costs one LLM call (~5-15s). 3 is a
-// pragmatic balance: most catalogs have only a few "undraftable" products
-// at any given time, and bounding latency keeps a run from hogging the
-// worker. The cooldown set is appended to in-memory after each LLM
-// no_proposal so the loop doesn't re-pick the same product.
+// before giving up. Each attempt costs one LLM call (~5-15s) plus one
+// MCP list call for the voice corpus (~1s on staging). 3 is a pragmatic
+// balance: most catalogs have only a few "undraftable" products at any
+// given time, and bounding latency keeps a run from hogging the worker.
+// The cooldown set is appended to in-memory after each LLM no_proposal
+// so the loop doesn't re-pick the same product.
 const maxDraftAttempts = 3
 
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
@@ -201,7 +236,15 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
 
-	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription)
+	// Voice corpus: live-sampled per attempt. Soft-fails (logs + empties)
+	// — the prompt's empty-corpus path handles that case explicitly.
+	corpus, corpusErr := fetchVoiceCorpus(ctx, deps.MCP, productID)
+	if corpusErr != nil {
+		fmt.Printf("marketing: voice corpus fetch errored (%v); proceeding with empty corpus\n", corpusErr)
+		corpus = nil
+	}
+
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus)
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -368,6 +411,106 @@ func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{
 	return 0, fmt.Errorf("no published products in store")
 }
 
+// corpusSample is one product-description sample passed into the marketing
+// prompt as a voice reference. Per the design spec, the corpus is the
+// store's existing longest published descriptions (excluding the product
+// currently being rewritten) — those are the closest available proxy for
+// the operator's "good" voice.
+type corpusSample struct {
+	Name string
+	Body string
+}
+
+// mcpLister is the subset of *mcp.Client that fetchVoiceCorpus needs.
+// Existing code stays on *mcp.Client; the interface exists so tests can
+// pass a fake without touching the rest of the package.
+type mcpLister interface {
+	CallTool(ctx context.Context, name string, args any) (mcp.ToolCallResult, error)
+}
+
+// Compile-time check that *mcp.Client satisfies mcpLister.
+var _ mcpLister = (*mcp.Client)(nil)
+
+// fetchVoiceCorpus pulls 3–5 of the store's longest published product
+// descriptions for use as voice-match context in the marketing prompt.
+// Excludes excludeProductID so the LLM isn't grading variants against the
+// description it's about to replace. Returns at most 5 samples; fewer is
+// fine (new stores, all-thin descriptions). Soft-fails: a non-nil error
+// is logged but the caller proceeds with whatever was assembled.
+func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([]corpusSample, error) {
+	const want = 5
+	type productListItem struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		Status      string `json:"status"`
+		Description string `json:"description"`
+	}
+	var out struct {
+		Products []productListItem `json:"products"`
+	}
+	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
+		"ability_name": "wooagent-products/list",
+		"parameters": map[string]any{
+			"per_page": 20,
+			"orderby":  "date_modified",
+			"order":    "desc",
+			"status":   "publish",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetch voice corpus: %w", err)
+	}
+	if len(res.Content) == 0 {
+		return nil, fmt.Errorf("fetch voice corpus: empty content")
+	}
+	// NOTE: mirrors callAbilityInner's envelope decode. The two cannot share
+	// a helper today because callAbilityInner takes *mcp.Client and we take
+	// mcpLister; if a third caller appears, extract a helper that takes
+	// mcp.ToolCallResult instead.
+	var env abilityEnvelope
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &env); err != nil {
+		return nil, fmt.Errorf("decode corpus envelope: %w", err)
+	}
+	if !env.Success {
+		return nil, fmt.Errorf("corpus ability failed: %s", env.Error)
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		return nil, fmt.Errorf("decode corpus data: %w", err)
+	}
+
+	// Belt-and-suspenders: also filter status=publish locally. The server
+	// is asked to filter via the `status` param, but a misconfigured
+	// adapter or older Companion Plugin could return mixed statuses; the
+	// local guard makes the corpus shape robust to that. Then apply the
+	// per-product exclusion.
+	filtered := make([]productListItem, 0, len(out.Products))
+	for _, p := range out.Products {
+		if p.Status != "publish" || p.ID == excludeProductID {
+			continue
+		}
+		body := strings.TrimSpace(p.Description)
+		if body == "" {
+			continue
+		}
+		p.Description = body
+		filtered = append(filtered, p)
+	}
+
+	// Sort by description length descending, take top N.
+	sort.Slice(filtered, func(i, j int) bool {
+		return len(filtered[i].Description) > len(filtered[j].Description)
+	})
+	if len(filtered) > want {
+		filtered = filtered[:want]
+	}
+
+	samples := make([]corpusSample, 0, len(filtered))
+	for _, p := range filtered {
+		samples = append(samples, corpusSample{Name: p.Name, Body: p.Description})
+	}
+	return samples, nil
+}
+
 type product struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
@@ -394,17 +537,43 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 
 // ---- LLM ----
 
+// buildPromptUserMessage assembles the per-product user message for the
+// marketing draft call. The system prompt (carried in the skill YAML
+// description) holds the voice + SEO rubric instructions; this helper
+// supplies the dynamic per-product context: the product to rewrite plus
+// the corpus samples the LLM compares the variants' voice to.
+//
+// Empty corpus is supported (new stores, all-thin descriptions). In that
+// case the prompt tells the LLM to emit null for the voice field — the
+// Go validator clears anything ≤ 0 anyway, so this is belt-and-suspenders.
+func buildPromptUserMessage(p product, corpus []corpusSample) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Product: %s\nSKU: %s\nCurrent description: %s\n\n",
+		p.Name, p.SKU, strings.TrimSpace(p.Description))
+	if len(corpus) == 0 {
+		b.WriteString("Voice corpus: (none available — this store has no other long-form published descriptions to compare against. Emit null for `voice` on each variant; score SEO as normal.)\n\n")
+	} else {
+		b.WriteString("Voice corpus (3–5 of this store's existing published descriptions — use these as the reference for the store's voice; do not copy):\n")
+		for i, s := range corpus {
+			fmt.Fprintf(&b, "\n[%d] %s\n%s\n", i+1, s.Name, s.Body)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 1–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
+	return b.String()
+}
+
 // draftWithFallback prefers Anthropic when AnthropicAPIKey is set, and
 // falls back to the OpenAI-compatible endpoint (LM Studio by default)
 // otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
 // means the caller should mark the run Skipped.
-func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string) (string, string, error) {
+func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string, corpus []corpusSample) (string, string, error) {
 	if strings.TrimSpace(env.AnthropicAPIKey) != "" {
 		model := env.AnthropicModel
 		if model == "" {
 			model = defaultAnthropicModel
 		}
-		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription)
+		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription, corpus)
 		if err != nil {
 			return "", fmt.Sprintf("Claude API errored: %v", err), nil
 		}
@@ -426,7 +595,7 @@ func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDe
 	if apiKey == "" {
 		apiKey = defaultOpenAIKey
 	}
-	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription)
+	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription, corpus)
 	if err != nil {
 		return "", fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err), nil
 	}
@@ -467,11 +636,8 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string) (string, error) {
-	user := fmt.Sprintf(
-		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
-		p.Name, p.SKU, strings.TrimSpace(p.Description),
-	)
+func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string, corpus []corpusSample) (string, error) {
+	user := buildPromptUserMessage(p, corpus)
 
 	body, _ := json.Marshal(anthropicReq{
 		Model:     model,
@@ -551,11 +717,9 @@ func draftRewriteOpenAI(
 	base, apiKey, model string,
 	p product,
 	skillDescription string,
+	corpus []corpusSample,
 ) (string, error) {
-	user := fmt.Sprintf(
-		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
-		p.Name, p.SKU, strings.TrimSpace(p.Description),
-	)
+	user := buildPromptUserMessage(p, corpus)
 	body, _ := json.Marshal(chatReq{
 		Model: model,
 		Messages: []chatMsg{

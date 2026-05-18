@@ -1,9 +1,13 @@
 package marketing
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 )
 
 func TestParseVariants_Happy(t *testing.T) {
@@ -102,4 +106,206 @@ func TestProductJSON_ImageFieldsAbsent_DefaultsEmpty(t *testing.T) {
 	if p.ImageAlt != "" {
 		t.Errorf("ImageAlt = %q, want empty string", p.ImageAlt)
 	}
+}
+
+func TestParseVariants_ValidScores(t *testing.T) {
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":80,"voice":75},
+		{"label":"B","angle":"use","body":"world","seo":65,"voice":90},
+		{"label":"C","angle":"story","body":"again","seo":100,"voice":50}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 80 || got[0].Voice != 75 {
+		t.Errorf("variant 0: got seo=%d voice=%d, want 80/75", got[0].Seo, got[0].Voice)
+	}
+	if got[1].Seo != 65 || got[1].Voice != 90 {
+		t.Errorf("variant 1: got seo=%d voice=%d, want 65/90", got[1].Seo, got[1].Voice)
+	}
+	if got[2].Seo != 100 || got[2].Voice != 50 {
+		t.Errorf("variant 2: got seo=%d voice=%d, want 100/50", got[2].Seo, got[2].Voice)
+	}
+}
+
+func TestParseVariants_OutOfRangeScoresClearedToZero(t *testing.T) {
+	// Out-of-range scores → cleared to zero so omitempty drops them from
+	// the persisted JSON. UI then renders `—` instead of a misleading number.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":101,"voice":-5},
+		{"label":"B","angle":"use","body":"world","seo":50,"voice":50},
+		{"label":"C","angle":"story","body":"again","seo":50,"voice":50}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 {
+		t.Errorf("variant 0 out-of-range seo: got %d, want 0", got[0].Seo)
+	}
+	if got[0].Voice != 0 {
+		t.Errorf("variant 0 out-of-range voice: got %d, want 0", got[0].Voice)
+	}
+}
+
+func TestParseVariants_MissingScoresAreZero(t *testing.T) {
+	// Missing seo/voice fields → zero-value, which omitempty drops.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello"},
+		{"label":"B","angle":"use","body":"world"},
+		{"label":"C","angle":"story","body":"again"}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 || got[0].Voice != 0 {
+		t.Errorf("missing scores: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
+	}
+}
+
+func TestParseVariants_ZeroScoreIsClearedIndependently(t *testing.T) {
+	// Each score is validated independently — an explicit 0 on one field
+	// is cleared regardless of the other field's value. This is distinct
+	// from TestParseVariants_MissingScoresAreZero, which covers absent
+	// fields; here the LLM explicitly emitted 0 and the validator treats
+	// that as the legacy "no scoring" default per DSGWOO-1326.
+	in := `{"variants":[
+		{"label":"A","angle":"material","body":"hello","seo":0,"voice":0},
+		{"label":"B","angle":"use","body":"world","seo":80,"voice":80},
+		{"label":"C","angle":"story","body":"again","seo":0,"voice":75}
+	]}`
+	got, err := parseVariants(in)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if got[0].Seo != 0 || got[0].Voice != 0 {
+		t.Errorf("variant 0 both-zero: got seo=%d voice=%d, want 0/0", got[0].Seo, got[0].Voice)
+	}
+	if got[1].Seo != 80 || got[1].Voice != 80 {
+		t.Errorf("variant 1 should keep its scores: got seo=%d voice=%d, want 80/80", got[1].Seo, got[1].Voice)
+	}
+	if got[2].Seo != 0 {
+		t.Errorf("variant 2 asymmetric seo=0: got seo=%d, want 0", got[2].Seo)
+	}
+	if got[2].Voice != 75 {
+		t.Errorf("variant 2 asymmetric voice=75: got voice=%d, want 75 (should NOT be cleared)", got[2].Voice)
+	}
+}
+
+func TestFetchVoiceCorpus_FiltersExcludesAndSorts(t *testing.T) {
+	// Stub MCP returning a mix of products. Asserts: filters out the
+	// excluded product, sorts by description length descending, returns
+	// the top 5.
+	fake := &fakeMCP{
+		// 6 published products + 1 draft + the excluded one
+		listProductsResp: []byte(`{"products":[
+			{"id":10,"name":"P10","status":"publish","description":"short"},
+			{"id":11,"name":"P11","status":"publish","description":"aaaaaaaaaa bbbbbbbbbb cccccccccc"},
+			{"id":12,"name":"P12","status":"publish","description":"medium length descrip"},
+			{"id":13,"name":"P13","status":"publish","description":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+			{"id":14,"name":"P14","status":"publish","description":"yyy"},
+			{"id":15,"name":"P15","status":"publish","description":"zzzzzzzzzzzzzzzz zzzzzzzzzzzz"},
+			{"id":99,"name":"Excluded","status":"publish","description":"this product is the one being rewritten"},
+			{"id":20,"name":"Draft","status":"draft","description":"should be filtered out by status"}
+		]}`),
+	}
+	got, err := fetchVoiceCorpus(context.Background(), fake, 99)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("got %d corpus samples, want 5 (top-5 longest after exclusion)", len(got))
+	}
+	if got[0].Name != "P13" {
+		t.Errorf("longest first: got %q, want P13", got[0].Name)
+	}
+	for _, s := range got {
+		if s.Name == "Excluded" {
+			t.Errorf("excluded product (id=99) leaked into corpus")
+		}
+		if s.Name == "Draft" {
+			t.Errorf("non-publish status leaked into corpus")
+		}
+	}
+}
+
+func TestBuildPromptUserMessage_IncludesProductAndCorpus(t *testing.T) {
+	p := product{
+		Name:        "Indigo Throw Pillow",
+		SKU:         "PIL-IND-22",
+		Description: "Existing thin description.",
+	}
+	corpus := []corpusSample{
+		{Name: "Stoneware Mug", Body: "Body fired in our wood kiln. Holds 12oz. Hand-thrown."},
+		{Name: "Cashmere Scarf", Body: "Plate-loomed in the Loire valley. 200g of two-ply yarn."},
+	}
+	msg := buildPromptUserMessage(p, corpus)
+
+	// Product fields appear.
+	for _, want := range []string{"Indigo Throw Pillow", "PIL-IND-22", "Existing thin description."} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("user message missing %q\n---\n%s", want, msg)
+		}
+	}
+	// Corpus samples appear.
+	for _, want := range []string{
+		"Voice corpus",
+		"Stoneware Mug",
+		"Body fired in our wood kiln",
+		"Cashmere Scarf",
+		"Plate-loomed in the Loire valley",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("user message missing corpus marker %q\n---\n%s", want, msg)
+		}
+	}
+	// Negative: with a real corpus, the "Emit null" instruction must NOT
+	// appear — that path is reserved for the empty-corpus case.
+	if strings.Contains(msg, "Emit null") {
+		t.Errorf("non-empty-corpus message should NOT contain 'Emit null'\n---\n%s", msg)
+	}
+}
+
+func TestBuildPromptUserMessage_EmptyCorpus(t *testing.T) {
+	p := product{Name: "New Store Product", SKU: "NEW-1", Description: "hi"}
+	msg := buildPromptUserMessage(p, nil)
+	// Empty corpus → prompt instructs the LLM to emit null for voice.
+	if !strings.Contains(msg, "Voice corpus: (none available") {
+		t.Errorf("empty-corpus message should mark the gap explicitly\n---\n%s", msg)
+	}
+	if !strings.Contains(msg, "Emit null for") {
+		t.Errorf("empty-corpus message should explicitly instruct emitting null for voice\n---\n%s", msg)
+	}
+}
+
+func TestBuildPromptUserMessage_EmptyDescription(t *testing.T) {
+	// Empty description still produces a well-formed message — the
+	// "Current description:" label stays, even with an empty value
+	// (signals "no current copy" to the LLM, which is exactly when
+	// marketing's job kicks in).
+	p := product{Name: "Blank Product", SKU: "BLANK-1", Description: ""}
+	corpus := []corpusSample{{Name: "Example", Body: "An existing description."}}
+	msg := buildPromptUserMessage(p, corpus)
+
+	if !strings.Contains(msg, "Current description: \n") {
+		t.Errorf("empty description should still surface the label with an empty value\n---\n%s", msg)
+	}
+	if !strings.Contains(msg, "Blank Product") {
+		t.Errorf("product name still present\n---\n%s", msg)
+	}
+}
+
+// fakeMCP implements just enough of *mcp.Client for fetchVoiceCorpus.
+// CallTool returns the canned bytes; everything else panics so a wrong
+// invocation surfaces immediately.
+type fakeMCP struct {
+	listProductsResp []byte
+}
+
+func (f *fakeMCP) CallTool(ctx context.Context, name string, args any) (mcp.ToolCallResult, error) {
+	// Mirrors callAbility's envelope shape.
+	envelope := fmt.Sprintf(`{"success":true,"data":%s}`, string(f.listProductsResp))
+	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
 }
