@@ -365,7 +365,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     {productSku}
                   </span>
                 </Stack>
-                {selectedVariant && (
+                {selectedVariant && typeof selectedVariant.seo === 'number' && (
                   <span className="wa-score-label">
                     Best SEO{' '}
                     <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
@@ -373,7 +373,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     </span>
                   </span>
                 )}
-                {selectedVariant && (
+                {selectedVariant && typeof selectedVariant.voice === 'number' && (
                   <span className="wa-score-label">
                     Voice{' '}
                     <span className={`wa-score-label__value ${voiceColorClass(selectedVariant.voice)}`}>
@@ -477,18 +477,22 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                             </span>
                           </div>
                           <div className="wa-batch-col__scores">
-                            <span className="wa-score-label">
-                              SEO{' '}
-                              <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
-                                {v.seo}
+                            {typeof v.seo === 'number' && (
+                              <span className="wa-score-label">
+                                SEO{' '}
+                                <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                  {v.seo}
+                                </span>
                               </span>
-                            </span>
-                            <span className="wa-score-label">
-                              Voice{' '}
-                              <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
-                                {v.voice}%
+                            )}
+                            {typeof v.voice === 'number' && (
+                              <span className="wa-score-label">
+                                Voice{' '}
+                                <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
+                                  {v.voice}%
+                                </span>
                               </span>
-                            </span>
+                            )}
                             <span className="wa-score-label">
                               <span className="wa-score-label__value">
                                 {v.charCount} ch
