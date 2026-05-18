@@ -39,14 +39,18 @@ function relativeTime(iso: string): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+// Choose the score-value color class based on the score band. SEO and Voice
+// use slightly different bands (SEO 80+, Voice 80+ for "good") to match the
+// Yoast/voice-model conventions and the corpus-based voice scoring design
+// (docs/specs/2026-05-18-marketing-kpi-scoring-design.md).
 function seoColorClass(score: number): string {
   if (score >= 80) return 'wa-score-label__value--good';
   if (score >= 70) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
 }
 function voiceColorClass(score: number): string {
-  if (score >= 90) return 'wa-score-label__value--good';
-  if (score >= 75) return 'wa-score-label__value--caution';
+  if (score >= 80) return 'wa-score-label__value--good';
+  if (score >= 65) return 'wa-score-label__value--caution';
   return 'wa-score-label__value--warning';
 }
 
@@ -288,13 +292,13 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           label="Brand voice match"
           value="96%"
           score={96}
-          hint="vs. your voice model"
+          hint="vs. your existing copy"
         />
         <Kpi
           label="SEO score"
           value="91"
           score={91}
-          hint="Yoast · out of 100"
+          hint="Product-copy rubric · out of 100"
         />
         <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
       </div>
@@ -365,7 +369,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     {productSku}
                   </span>
                 </Stack>
-                {selectedVariant && (
+                {selectedVariant && typeof selectedVariant.seo === 'number' && (
                   <span className="wa-score-label">
                     Best SEO{' '}
                     <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
@@ -373,7 +377,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     </span>
                   </span>
                 )}
-                {selectedVariant && (
+                {selectedVariant && typeof selectedVariant.voice === 'number' && (
                   <span className="wa-score-label">
                     Voice{' '}
                     <span className={`wa-score-label__value ${voiceColorClass(selectedVariant.voice)}`}>
@@ -477,18 +481,22 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                             </span>
                           </div>
                           <div className="wa-batch-col__scores">
-                            <span className="wa-score-label">
-                              SEO{' '}
-                              <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
-                                {v.seo}
+                            {typeof v.seo === 'number' && (
+                              <span className="wa-score-label">
+                                SEO{' '}
+                                <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                  {v.seo}
+                                </span>
                               </span>
-                            </span>
-                            <span className="wa-score-label">
-                              Voice{' '}
-                              <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
-                                {v.voice}%
+                            )}
+                            {typeof v.voice === 'number' && (
+                              <span className="wa-score-label">
+                                Voice{' '}
+                                <span className={`wa-score-label__value ${voiceColorClass(v.voice)}`}>
+                                  {v.voice}%
+                                </span>
                               </span>
-                            </span>
+                            )}
                             <span className="wa-score-label">
                               <span className="wa-score-label__value">
                                 {v.charCount} ch
