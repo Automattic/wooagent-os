@@ -232,6 +232,27 @@ A suggested order. Each phase produces something operators can use.
 
 **Takeaway:** the trust-labeling work shipped earlier in May had already built ~80% of "Phase 1" before the integration spec was written. The remaining 20% was the persona-facing API surface. Phase 2 is unblocked.
 
+### Sequencing change — 2026-05-18, driven by Friday launch posture
+
+The original sequencing (Phase 2 → 3 → 4 → 5 → 6) was written assuming the WC AI plugin would be available to operators *before* WooAgent launched. As of 2026-05-18 that's not the case: the plugin hasn't shipped publicly yet, so layer-2 enhancements that quietly improve existing personas when WC AI is present deliver **zero operator-visible value** for the Friday May 22 launch — and they add blast radius to personas operators will be exercising heavily during the launch window.
+
+**Launch-week order (replaces Phases 2–6 below for the immediate window):**
+
+1. ✅ **Phase 0** — manifest refresh + verification (done).
+2. ✅ **Phase 1** — discovery infrastructure + `Deps.Abilities.Has` API (done).
+3. ✅ **Phase 5a — Reporting persona scaffold (LAUNCH).** One proposal type (`product_health_digest` over `find-products` with `data_issues` filter). No LLM, no custom UI, no writes. Skips cleanly with "requires Woo AI plugin" when the ability isn't present. Persona registers via `init()` but is **NOT** seeded into the agents table — stays dormant until the operator opts in via the next phase. *Done 2026-05-18 in `feat/reporting-persona-scaffold`.*
+4. ⏳ **Phase 7 — "Add Agent" UI (LAUNCH).** Promoted from a Phase 5 sub-bullet to its own deliverable because it's the operator-visible artifact of the "WooAgent grows when you install plugins" promise. Modal off the Agents page; lists Inventory / Accounting / Reporting / Chief with their requirements; uses `Deps.Abilities.Has` to gate Reporting's enablement (grayed "Requires Woo AI plugin" → "Ready to add — Woo AI detected"); one-click insert of the agents row with `enabled=1` + operator-chosen cadence. Renders Reporting's `product_health_digest` proposals via the existing detail view's markdown path (no custom WC AI UI surface).
+
+**Deferred to post-launch (still real work, just not blocking 2026-05-22):**
+
+5. **Phase 2 — Pricing target-picker upgrade.** `find-products` with `slow_mover` filter behind `Abilities.Has`. 2-3 days. *Why deferred:* zero value until operators have WC AI; adds blast radius to the persona that's done most of the launch-week dogfooding.
+6. **Phase 3 — Pricing batch pipeline migration.** `plan/confirm/undo-batch-operation` replacing the in-house batch path. 1-2 weeks. *Why deferred:* same as Phase 2, plus the migration touches the `batches` table and the existing batch preview UI — too much change for launch week.
+7. **Phase 4 — DSGWOO-1322 / 1323 / 1324 execution.** Baseline filter fixes (1322 + 1323) + variable-product split (1324a closed-as-covered for Marketing, 1324b Pricing per-variation pricing). *Why deferred:* 1322/1323 are small and could fit in if there's slack, but neither is launch-blocking; 1324b needs its own design pass anyway.
+8. **Phase 5b — Reporting persona full design.** Additional proposal types (`shipping_zones_audit` from `analyze-shipping-needs`, `weekly_taxonomy_review` using `find-products` + `list-categories`, `bestseller_summary` from `find-products` with `slow_mover` inverted). LLM-narrated digest copy. Its own design spec. 2-4 weeks. *Why deferred:* scaffold proves the integration end-to-end; expansion is the real product work.
+9. **Phase 6 — Marketing batch updates.** `batch-update-product-content` for "fix all uncategorized products" / per-category description rewrites. 1 week. *Why deferred:* zero value until operators have WC AI.
+
+### Original Phases 2-6 (kept for post-launch reference)
+
 **Phase 2 — Pricing target-picker upgrade (2-3 days).**
 - Pricing's `pickFirstProduct` branches on `Abilities.Has("woocommerce/find-products")`.
 - Behavioral filter selection — start with `slow_mover` for the test, expand once the pattern is proven.
@@ -250,10 +271,10 @@ A suggested order. Each phase produces something operators can use.
 - 1322 + 1323 ship as previously scoped (baseline filter fixes).
 - 1324 partial re-scope based on Phase 0 schema verification: Marketing variable-product needs are covered by `batch-update-product-content` (writes parent description); Pricing variable-product needs are NOT covered and require either a Companion Plugin extension or upstream WC AI work. 1324 splits into (a) closed-as-covered for Marketing, (b) re-titled "Pricing: per-variation pricing support" for the remaining real work.
 
-**Phase 5 — Reporting persona (own design pass; 2-4 weeks).**
+**Phase 5b — Reporting persona full design (post-launch; own design pass; 2-4 weeks).**
 - Separate spec at `docs/specs/YYYY-MM-DD-reporting-persona-design.md`.
-- "Add agent" UX shipped in this phase.
-- First proposal types per Section "Open questions" above.
+- First proposal types beyond `product_health_digest`: `shipping_zones_audit`, `weekly_taxonomy_review`, `bestseller_summary`.
+- LLM-narrated digest copy (the scaffold renders raw lists).
 
 **Phase 6 — Marketing batch updates (1 week).**
 - `batch-update-product-content` for "fix all uncategorized products" / "rewrite all Tshirts category descriptions" workflows.
