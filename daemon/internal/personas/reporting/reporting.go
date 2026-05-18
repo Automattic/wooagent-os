@@ -54,7 +54,7 @@ func init() {
 type Reporting struct{}
 
 func (Reporting) Slug() string        { return "reporting" }
-func (Reporting) DisplayName() string { return "Reporting agent" }
+func (Reporting) DisplayName() string { return "Reporting" }
 
 // Cooldown is zero-value because Reporting doesn't dedup by target. A
 // digest summarizes *the catalog state right now*; the cadence-based
