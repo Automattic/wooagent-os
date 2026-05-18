@@ -24,7 +24,7 @@ const BEHAVIORS = [
 // Visual-only V1 edit modal. The daemon doesn't expose a PATCH /v1/agents
 // yet, so Save/Cancel/Delete all just close. Local state lets the operator
 // see the controls behave; nothing persists.
-export default function EditPersonaModal({ persona, systemPrompt, onClose }: Props) {
+export default function EditAgentModal({ persona, systemPrompt, onClose }: Props) {
   const personaKey = personaKeyFrom(persona.persona);
   // Sentence case for all persona display names (DESIGN.md). Acronyms (SEO)
   // remain uppercased.
@@ -52,7 +52,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
       onRequestClose={onClose}
       __experimentalHideHeader
       size="medium"
-      className="wa-edit-persona-modal"
+      className="wa-edit-agent-modal"
     >
       <Stack direction="column" gap="md">
         <Stack
@@ -87,7 +87,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
         <Stack direction="column" gap="xs">
           <span className="wa-eyebrow">Model</span>
           {/* CUSTOM: model-picker affordance — currently a stub, no menu wired. (a) WPDS SelectControl doesn't render a mono-value + chevron disclosure shape. (b) one-shot disclosure stub with .wa-roster__model chrome. (c) Follow-up: migrate to WPDS Dropdown when the picker is wired. */}
-          <button type="button" className="wa-roster__model wa-edit-persona-modal__select">
+          <button type="button" className="wa-roster__model wa-edit-agent-modal__select">
             <span className="wa-mono">
               {persona.model_preference ?? 'claude-sonnet-4.6'}
             </span>
@@ -109,7 +109,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
             </span>
           </Stack>
           <textarea
-            className="wa-edit-persona-modal__prompt"
+            className="wa-edit-agent-modal__prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value.slice(0, PROMPT_LIMIT))}
             rows={6}
@@ -118,7 +118,7 @@ export default function EditPersonaModal({ persona, systemPrompt, onClose }: Pro
 
         <Stack direction="column" gap="xs">
           <span className="wa-eyebrow">Behavior</span>
-          <div className="wa-edit-persona-modal__chips">
+          <div className="wa-edit-agent-modal__chips">
             {BEHAVIORS.map((b) => {
               const active = behaviors[b.id];
               // CUSTOM: behavior chip toggle. (a) WPDS has no chip-group / multi-select toggle — FormToggle is a single boolean, Button has no selected/pressed state, no chip-group primitive. (b) pill with .wa-chip + .wa-chip--active state. (c) Follow-up: propose a ToggleGroupControl-style chip pattern in #design-systems.

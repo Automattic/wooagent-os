@@ -160,6 +160,13 @@ a {
   margin-left: auto;
   margin-right: auto;
   width: 100%;
+  /* Page hasPadding gives 16px (gap-lg) of top + bottom padding; we add
+     gap-lg again on each axis so the persona eyebrow sits 32px (2xl) below
+     the page header and the last card has 32px of breathing room above the
+     sticky ActionBar. Matches the 797:20806 Figma rhythm and applies to
+     every detail-view template. */
+  padding-top: var(--wpds-dimension-gap-lg);
+  padding-bottom: var(--wpds-dimension-gap-lg);
 }
 
 /* Breadcrumbs — mirrors @wordpress/admin-ui Breadcrumbs styling. The
@@ -206,7 +213,7 @@ a {
 
 /* Score bars on KPI cards. */
 .wa-score-bar {
-  height: 4px;
+  height: 3px;
   border-radius: var(--wpds-border-radius-sm);
   background: var(--wpds-color-bg-surface-neutral-strong);
   overflow: hidden;
@@ -593,7 +600,7 @@ a {
 /* ---------- Agent roster ----------
    Roster table chrome (`.wa-roster`, `.wa-roster__row`, `.wa-roster__toolbar`)
    was retired when the roster moved to <DataViews> — DataViews owns the
-   table rendering and toolbar now. Only the EditPersonaModal faux-select
+   table rendering and toolbar now. Only the EditAgentModal faux-select
    styling (`.wa-roster__model`) stays, since it lives outside the table. */
 
 /* Model dropdown — flat pill that mimics a select. Visual-only for V1. */
@@ -636,13 +643,13 @@ a {
 }
 
 /* ---------- Edit persona modal ---------- */
-.wa-edit-persona-modal__select {
+.wa-edit-agent-modal__select {
   width: 100%;
   justify-content: space-between;
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
   font-size: var(--wpds-typography-font-size-sm);
 }
-.wa-edit-persona-modal__prompt {
+.wa-edit-agent-modal__prompt {
   width: 100%;
   font-family: var(--wpds-typography-font-family-body);
   font-size: var(--wpds-typography-font-size-sm);
@@ -654,11 +661,11 @@ a {
   color: var(--wpds-color-fg-content-neutral);
   background: var(--wpds-color-bg-surface-neutral);
 }
-.wa-edit-persona-modal__prompt:focus {
+.wa-edit-agent-modal__prompt:focus {
   outline: none;
   border-color: var(--wpds-color-stroke-interactive-brand);
 }
-.wa-edit-persona-modal__chips {
+.wa-edit-agent-modal__chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--wpds-dimension-gap-xs);
@@ -729,24 +736,68 @@ a {
 .wa-score-label__value--caution { color: var(--wpds-color-fg-content-caution); }
 .wa-score-label__value--warning { color: var(--wpds-color-fg-content-warning); }
 
-/* Radio mark on the right of each variant card. Selected = filled brand
-   circle with a check; unselected = bordered empty circle. */
+/* Radio mark on the right of each variant card. Standard WPDS-style radio
+   button: outline ring when unselected, brand-colored ring with a filled
+   inner dot when selected. The visible mark is decoration only — the
+   semantic input lives in a `VisuallyHidden` wrapper. */
 .wa-radio-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  display: inline-block;
   height: 18px;
   width: 18px;
   border-radius: 50%;
-  border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong);
+  border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-interactive-neutral);
   background: var(--wpds-color-bg-surface-neutral);
-  color: transparent;
   flex: none;
 }
 .wa-radio-mark--selected {
   background: var(--wpds-color-bg-interactive-brand-strong);
   border-color: var(--wpds-color-bg-interactive-brand-strong);
+}
+.wa-radio-mark--selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  height: 6px;
+  width: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* Variant letter circle — used both on the variant cards (24px) and the
+   ActionBar footer badge (28px, --lg). Always filled with a tone selected
+   by the `data-tone` attribute; uppercase letter in white.
+   CUSTOM: the per-variant B/C tones (navy + violet) are not in WPDS — they
+   come from the variant-letter component in Figma to visually distinguish
+   the three drafts. Tone A reuses the WPDS brand-strong token. Documented
+   in DESIGN.md alongside the persona-color exception. */
+.wa-variant-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--wpds-color-bg-interactive-brand-strong);
   color: var(--wpds-color-fg-interactive-brand-strong);
+  font-weight: var(--wpds-typography-font-weight-medium);
+  font-size: var(--wpds-typography-font-size-sm);
+  text-transform: uppercase;
+}
+.wa-variant-letter--lg {
+  height: 28px;
+  width: 28px;
+  font-weight: 700;
+}
+.wa-variant-letter[data-tone="B"] {
+  background: #1E3A8A;
+  color: #ffffff;
+}
+.wa-variant-letter[data-tone="C"] {
+  background: #7C3AED;
+  color: #ffffff;
 }
 
 /* "Agent pick" inline pill — moved into the variant header row instead of
@@ -769,19 +820,6 @@ a {
   align-items: center;
   gap: var(--wpds-dimension-gap-sm);
   min-width: 0;
-}
-
-/* Reversible-always green pill shown only in the review-state action bar. */
-.wa-reversible-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-xs);
-  padding: 4px var(--wpds-dimension-padding-sm);
-  border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-bg-surface-success-weak);
-  color: var(--wpds-color-fg-content-success);
-  font-size: var(--wpds-typography-font-size-xs);
-  font-weight: var(--wpds-typography-font-weight-medium);
 }
 
 /* Done-state ✓ icon — green filled circle on the left of the bar. */
@@ -976,18 +1014,19 @@ a {
 }
 
 /* IssueDetail body — single column (right rail was removed in the Figma
-   refresh; the "Reversible" reminder now lives in the action bar). */
+   refresh; the "Reversible" reminder now lives in the action bar). Cards
+   stack with gap-xl (24px) between siblings to match the Figma rhythm. */
 .wa-detail-body {
   display: flex;
   flex-direction: column;
-  gap: var(--wpds-dimension-gap-lg);
+  gap: var(--wpds-dimension-gap-xl);
 }
 .wa-detail-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--wpds-dimension-gap-lg);
+  gap: var(--wpds-dimension-gap-xl);
 }
 
 /* IssueDetail KPI row */
@@ -995,6 +1034,33 @@ a {
   display: flex;
   flex-direction: row;
   gap: var(--wpds-dimension-gap-md);
+}
+
+/* CollapsibleCard.Content is itself a wrapper that nests a real Card.Content
+   inside (.content-inner). The inner element owns the padding, so an inline
+   style on CollapsibleCard.Content lands on the wrong node. Zero the bottom
+   padding via a descendant selector so the last full-bleed line-item row
+   becomes the natural bottom edge of the Order context card. */
+.wa-order-context-content > * {
+  padding-block-end: 0;
+}
+
+/* Order-context card line-item row. Each line is a full-bleed band with a
+   hairline top border (the first row gets one too — acts as the visual
+   divider between the meta block and the items list). Matches the 742:1331
+   Figma. Owned by the Sales Support detail's Order context card; not
+   reused elsewhere. */
+.wa-order-line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-md);
+  padding:
+    var(--wpds-dimension-padding-md)
+    var(--wpds-dimension-padding-2xl);
+  border-top:
+    var(--wpds-border-width-xs) solid
+    var(--wpds-color-stroke-surface-neutral-weak);
 }
 
 /* IssueDetail page header — title block + status block side by side */
@@ -1461,10 +1527,30 @@ a {
   object-fit: cover;
   border-radius: var(--wpds-border-radius-md);
   background: var(--wpds-color-bg-surface-neutral-weak);
+  /* DataViews table rows are flex containers and stretch their cells'
+     children unless we lock the box down. Use min/max + flex:none so the
+     illustration tile (a flex div) lands at the exact same dimensions as
+     the <img> photo tile. overflow:hidden clips any oversized inline-SVG
+     so a viewBox-bigger glyph can't bleed past the tile bounds. */
+  box-sizing: border-box;
+  flex: none;
+  overflow: hidden;
 }
-.wa-product-thumb--sm { width: 40px; height: 40px; }
-.wa-product-thumb--md { width: 72px; height: 72px; }
-.wa-product-thumb--lg { width: 86px; height: 86px; }
+.wa-product-thumb--sm {
+  width: 40px; height: 40px;
+  min-width: 40px; min-height: 40px;
+  max-width: 40px; max-height: 40px;
+}
+.wa-product-thumb--md {
+  width: 72px; height: 72px;
+  min-width: 72px; min-height: 72px;
+  max-width: 72px; max-height: 72px;
+}
+.wa-product-thumb--lg {
+  width: 86px; height: 86px;
+  min-width: 86px; min-height: 86px;
+  max-width: 86px; max-height: 86px;
+}
 .wa-product-thumb--placeholder {
   display: flex;
   align-items: center;
@@ -1521,6 +1607,13 @@ a {
 .dataviews-view-grid__media .wa-product-thumb {
   width: 100%;
   height: 100%;
+  /* The table-view lock-down on the --sm/md/lg modifiers pins max/min to
+     a fixed px size; in the grid we want full-bleed instead, so reset all
+     four constraints back to `none` here. */
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
   border-radius: 0;
 }
 /* In the DataViews grid the tile fills its (much larger) slot, so the

@@ -21,7 +21,7 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
-import EditPersonaModal from '../components/EditPersonaModal';
+import EditAgentModal from '../components/EditAgentModal';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -436,7 +436,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     () => [
       {
         id: 'persona',
-        label: 'Persona',
+        label: 'Agent',
         enableHiding: false,
         enableGlobalSearch: true,
         getValue: ({ item }) => displayName(item),
@@ -526,7 +526,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     () => [
       {
         id: 'edit',
-        label: 'Edit persona',
+        label: 'Edit agent',
         isEligible: (item) => IMPLEMENTED_PERSONAS.has(item.persona),
         callback: (items) => {
           const p = items[0];
@@ -568,7 +568,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   // active / coming-soon counts only show once the daemon snapshot loads.
   const subTitle =
     personas === null
-      ? 'Fleet roster · 7 personas'
+      ? 'Fleet roster · 7 agents'
       : `Fleet roster · ${activeCount} active · ${comingSoonCount} coming soon`;
 
   return (
@@ -636,7 +636,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
           />
 
           {editing && (
-            <EditPersonaModal
+            <EditAgentModal
               persona={editing}
               mandate={metaFor(editing.persona).mandate}
               systemPrompt={metaFor(editing.persona).systemPrompt}

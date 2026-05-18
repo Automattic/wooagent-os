@@ -59,7 +59,7 @@ export default function Models({ connection, onAskAgent }: Props) {
   return (
     <Page
       title="Models"
-      subTitle="The LLM providers your agents use. The default is the fallback when a persona doesn't override it."
+      subTitle="The LLM providers your agents use. The default is the fallback when an agent doesn't override it."
       actions={
         <Stack direction="row" align="center" gap="md">
           <Button variant="primary" icon={plus} __next40pxDefaultSize>

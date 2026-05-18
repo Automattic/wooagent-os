@@ -214,7 +214,7 @@ func draftForOrder(
 	return personas.Drafted{
 		Title: title,
 		Description: fmt.Sprintf(
-			"Drafted by Sales Support persona for order #%s (%s · %s %s).",
+			"Drafted by Sales Support agent for order #%s (%s · %s %s).",
 			firstNonEmpty(o.Number, fmt.Sprintf("%d", o.ID)),
 			status, o.Total, o.Currency,
 		),

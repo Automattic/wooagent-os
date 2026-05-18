@@ -370,7 +370,7 @@ export default function NeedsReview({
             src={item.imageUrl}
             alt={item.imageAlt}
             persona={item.personaSlug}
-            size="md"
+            size="sm"
           />
         ),
       },

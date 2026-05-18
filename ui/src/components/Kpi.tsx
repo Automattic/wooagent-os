@@ -32,7 +32,9 @@ const TONE_BAR: Record<KpiTone, string | null> = {
 };
 
 // One KPI tile from the IssueDetail header row. Stays a thin wrapper around
-// Card so the four tiles read as a unit.
+// Card so the four tiles read as a unit. Spacing rhythm follows the
+// 797:20825 / 797:20826 Figma frames: 12px between label and value (+ bar
+// when present), 16px before the hint.
 export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Props) {
   const barFill = TONE_BAR[tone];
   const barStyle: CSSProperties | undefined = barFill
@@ -41,22 +43,25 @@ export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Pro
   return (
     <Card.Root style={{ flex: 1, minWidth: 0 }}>
       <Card.Content>
-        <Stack direction="column" gap="sm">
-          <span className="wa-eyebrow">{label}</span>
-          <Text
-            variant="heading-lg"
-            style={{
-              color: TONE_FG[tone],
-              fontWeight: 'var(--wpds-typography-font-weight-medium)',
-            }}
-          >
-            {value}
-          </Text>
-          {typeof score === 'number' && (
-            <div className="wa-score-bar" style={barStyle} aria-hidden="true">
-              <div style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
-            </div>
-          )}
+        <Stack direction="column" gap="md">
+          <Stack direction="column" gap="sm">
+            <span className="wa-eyebrow">{label}</span>
+            <Text
+              style={{
+                color: TONE_FG[tone],
+                fontSize: 'var(--wpds-typography-font-size-lg)',
+                fontWeight: 700,
+                lineHeight: 'var(--wpds-typography-line-height-lg)',
+              }}
+            >
+              {value}
+            </Text>
+            {typeof score === 'number' && (
+              <div className="wa-score-bar" style={barStyle} aria-hidden="true">
+                <div style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
+              </div>
+            )}
+          </Stack>
           {hint && (
             <Text
               variant="body-sm"

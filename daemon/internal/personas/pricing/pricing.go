@@ -239,7 +239,7 @@ func draftForProduct(
 	return personas.Drafted{
 		Title: title,
 		Description: fmt.Sprintf(
-			"Drafted by Pricing persona for product #%d (%s). %d benchmarked sources.",
+			"Drafted by Pricing agent for product #%d (%s). %d benchmarked sources.",
 			p.ID, p.SKU, len(out.Sources),
 		),
 		Priority:        "medium",
