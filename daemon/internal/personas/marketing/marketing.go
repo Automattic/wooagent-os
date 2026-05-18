@@ -242,7 +242,7 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 	return personas.Drafted{
 		Title: fmt.Sprintf("Product description rewrite · %s", p.Name),
 		Description: fmt.Sprintf(
-			"Drafted by Marketing persona for product #%d (%s).",
+			"Drafted by Marketing agent for product #%d (%s).",
 			p.ID, p.SKU,
 		),
 		Priority:        "medium",

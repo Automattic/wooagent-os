@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
 import { Icon, chevronDown, chevronUp, check } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
@@ -727,19 +727,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             </Stack>
           </div>
           <div className="wa-action-bar-actions">
-            <span className="wa-reversible-pill">
-              <span
-                aria-hidden="true"
-                style={{
-                  height: 6,
-                  width: 6,
-                  borderRadius: '50%',
-                  background: 'currentColor',
-                  display: 'inline-block',
-                }}
-              />
-              Reversible · always
-            </span>
+            <Badge intent="none">Reversible · always</Badge>
             <Button
               __next40pxDefaultSize
               variant="tertiary"

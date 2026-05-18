@@ -112,7 +112,7 @@ export default function Done({ issues, batches, error, onAskAgent }: Props) {
             src={item.imageUrl}
             alt={item.imageAlt}
             persona={item.personaSlug}
-            size="md"
+            size="sm"
           />
         ),
       },
