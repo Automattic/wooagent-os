@@ -118,32 +118,38 @@ const IMPLEMENTED_PERSONAS = new Set<string>([
 ]);
 
 // Personas that are built but ship dormant — operator opts in via the Add
-// Agent modal. While disabled (no agents row or enabled=false), they're
-// hidden from the roster entirely; the operator discovers them via the
-// "Add agent" button. After enable they graduate into the roster like any
-// other active persona. Today: Reporting. Future plugin-gated personas
-// (e.g. a Shipping audit persona) would land here too.
+// Agent modal rather than getting them on by default. The roster shows
+// them with the "Coming soon" treatment (no toggle / no Run now) while
+// disabled, so the canonical 7-persona fleet view stays intact; the Add
+// Agent modal is the discovery surface that flips them from addable to
+// active. After enable, the persona graduates into full roster controls.
+// Today: Reporting. Future plugin-gated personas (a Shipping audit
+// persona, etc.) would land here too.
 const ADDABLE_PERSONAS = new Set<string>(['reporting']);
+
+// isOperable: row should render with full controls (model dropdown,
+// toggle, Run now). A persona is operable when it's implemented AND
+// either it's not addable (default-on personas like Marketing) or it
+// has been opted in (enabled=true). Addable + disabled = "Coming soon"
+// treatment until the operator clicks Add agent on it.
+function isOperable(p: Persona): boolean {
+  if (!IMPLEMENTED_PERSONAS.has(p.persona)) return false;
+  if (ADDABLE_PERSONAS.has(p.persona) && !p.enabled) return false;
+  return true;
+}
 
 function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
   const byKey = new Map(daemonPersonas.map((p) => [p.persona, p]));
-  const out: Persona[] = [];
-  for (const key of ALL_PERSONA_KEYS) {
-    const row =
+  return ALL_PERSONA_KEYS.map(
+    (key) =>
       byKey.get(key) ??
       ({
         persona: key,
         name: key,
         enabled: false,
         model_preference: undefined,
-      } as Persona);
-    // Addable personas are surfaced via the Add Agent modal, not the
-    // roster, until the operator opts in. Once enabled, they appear here
-    // alongside the always-on fleet.
-    if (ADDABLE_PERSONAS.has(key) && !row.enabled) continue;
-    out.push(row);
-  }
-  return out;
+      } as Persona),
+  );
 }
 
 // V1 model options. Hardcoded until the daemon exposes the available-models
@@ -242,7 +248,7 @@ function StatusCell({ persona }: { persona: Persona }) {
   // ability handlers wired up. Surface that plainly instead of pretending
   // they can be enabled. Implemented personas show daemon truth via a
   // disabled FormToggle — controls land once /v1/agents accepts PATCH.
-  if (!IMPLEMENTED_PERSONAS.has(persona.persona)) {
+  if (!isOperable(persona)) {
     return <Badge intent="draft">Coming soon</Badge>;
   }
   return (
@@ -377,7 +383,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   // board side without the operator leaving this page.
   const handleRunNow = useCallback(
     async (persona: Persona) => {
-      if (!IMPLEMENTED_PERSONAS.has(persona.persona)) return;
+      if (!isOperable(persona)) return;
       setRunBusy(persona.persona);
       setRunErrors((prev) => {
         const next = { ...prev };
@@ -484,7 +490,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         label: 'Status',
         enableSorting: false,
         getValue: ({ item }) =>
-          IMPLEMENTED_PERSONAS.has(item.persona) ? Boolean(item.enabled) : false,
+          isOperable(item) ? Boolean(item.enabled) : false,
         render: ({ item }) => (
           <NoRowClick>
             <StatusCell persona={item} />
@@ -497,7 +503,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         enableSorting: false,
         getValue: () => '',
         render: ({ item }) => {
-          if (!IMPLEMENTED_PERSONAS.has(item.persona)) return null;
+          if (!isOperable(item)) return null;
           const isBusy = runBusy === item.persona;
           const err = runErrors[item.persona];
           return (
@@ -545,7 +551,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
       {
         id: 'edit',
         label: 'Edit agent',
-        isEligible: (item) => IMPLEMENTED_PERSONAS.has(item.persona),
+        isEligible: (item) => isOperable(item),
         callback: (items) => {
           const p = items[0];
           if (p) setEditing(p);
@@ -573,12 +579,8 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     [fullRoster, view, fields],
   );
 
-  const activeCount = fullRoster.filter(
-    (p) => IMPLEMENTED_PERSONAS.has(p.persona) && p.enabled,
-  ).length;
-  const comingSoonCount = fullRoster.filter(
-    (p) => !IMPLEMENTED_PERSONAS.has(p.persona),
-  ).length;
+  const activeCount = fullRoster.filter((p) => isOperable(p) && p.enabled).length;
+  const comingSoonCount = fullRoster.filter((p) => !isOperable(p)).length;
 
   // Subtitle is honest about what the daemon actually knows: how many
   // implemented personas are enabled, and how many are still coming soon.
@@ -635,7 +637,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
             paginationInfo={paginationInfo}
             defaultLayouts={{ table: {} }}
             onClickItem={(p) => {
-              if (IMPLEMENTED_PERSONAS.has(p.persona)) setEditing(p);
+              if (isOperable(p)) setEditing(p);
             }}
             empty={<EmptyState />}
           />
