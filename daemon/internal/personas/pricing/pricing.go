@@ -245,6 +245,9 @@ func draftForProduct(
 		Priority:        "medium",
 		ProposalType:    "product_price_change",
 		ProposalContent: out.Rationale,
+		// Belt over the existing product_id Cooldown.
+		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+		DedupKey: fmt.Sprintf("product:%d", p.ID),
 		Target: map[string]any{
 			"product_id":      p.ID,
 			"product_name":    p.Name,
