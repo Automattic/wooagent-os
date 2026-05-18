@@ -35,8 +35,9 @@ import (
 
 // variant is the shape the UI's variantsFromProposal expects to find under
 // proposal.target.variants. Keep field names in sync with
-// ui/src/api/client.ts:261 — id, body required; label/charCount/recommended
-// optional; seo/voice default to 0 in the UI until real scoring lands.
+// ui/src/api/client.ts:282 — id, body required; label/charCount/recommended
+// optional; seo/voice optional (omitempty → UI distinguishes "absent" from
+// "real 0" and renders '—' on absent).
 type variant struct {
 	ID          string `json:"id"`
 	Label       string `json:"label,omitempty"`
@@ -44,6 +45,8 @@ type variant struct {
 	CharCount   int    `json:"charCount,omitempty"`
 	Recommended bool   `json:"recommended,omitempty"`
 	Angle       string `json:"angle,omitempty"`
+	Seo         int    `json:"seo,omitempty"`
+	Voice       int    `json:"voice,omitempty"`
 }
 
 // llmVariant is what the LLM returns inside its JSON response. Translated
@@ -52,6 +55,8 @@ type llmVariant struct {
 	Label string `json:"label"`
 	Angle string `json:"angle"`
 	Body  string `json:"body"`
+	Seo   int    `json:"seo"`
+	Voice int    `json:"voice"`
 }
 
 type llmVariantsResp struct {
@@ -89,6 +94,24 @@ func parseVariants(raw string) ([]variant, error) {
 		if label == "" {
 			label = string(rune('A' + i))
 		}
+		// Validate scores. Anything out of [1, 100] (note: 0 is also suspect —
+		// it's the legacy default that prompted DSGWOO-1326) → clear to 0 so
+		// the omitempty JSON tag drops the field; UI then renders '—' for
+		// the missing dimension.
+		seo := v.Seo
+		if seo <= 0 || seo > 100 {
+			if seo != 0 {
+				fmt.Printf("marketing: variant %d seo out of range (%d), clearing\n", i, seo)
+			}
+			seo = 0
+		}
+		voice := v.Voice
+		if voice <= 0 || voice > 100 {
+			if voice != 0 {
+				fmt.Printf("marketing: variant %d voice out of range (%d), clearing\n", i, voice)
+			}
+			voice = 0
+		}
 		out = append(out, variant{
 			ID:          fmt.Sprintf("var_%s", strings.ToLower(label)),
 			Label:       label,
@@ -96,6 +119,8 @@ func parseVariants(raw string) ([]variant, error) {
 			CharCount:   len(body),
 			Recommended: i == 0,
 			Angle:       strings.TrimSpace(v.Angle),
+			Seo:         seo,
+			Voice:       voice,
 		})
 	}
 	return out, nil
