@@ -3,12 +3,13 @@
 **Date:** 2026-05-18
 **Status:** Design draft — pending review
 **Related:**
-- [DSGWOO-1322](https://linear.app/a8c/issue/DSGWOO-1322) — Pricing: subscription product support (likely subsumed)
-- [DSGWOO-1323](https://linear.app/a8c/issue/DSGWOO-1323) — Pricing: grouped products via child fan-out (likely subsumed)
-- [DSGWOO-1324](https://linear.app/a8c/issue/DSGWOO-1324) — Pricing: variable-product design + ship (scope may shrink dramatically)
+- [DSGWOO-1279](https://linear.app/a8c/issue/DSGWOO-1279) — Manifest hygiene: WC 10.9 canonical naming alignment (Phase 0 resolves Issues 2 + 3; Issue 1 pre-handled via placeholder entries)
+- [DSGWOO-1322](https://linear.app/a8c/issue/DSGWOO-1322) — Pricing: subscription product support (still ships as baseline filter fix)
+- [DSGWOO-1323](https://linear.app/a8c/issue/DSGWOO-1323) — Pricing: grouped products via child fan-out (still ships as baseline)
+- [DSGWOO-1324](https://linear.app/a8c/issue/DSGWOO-1324) — Pricing: variable-product design + ship (partial shrink: Marketing covered by `batch-update-product-content`; Pricing variation pricing still real work — see Phase 0 findings below)
 - [DSGWOO-1325](https://linear.app/a8c/issue/DSGWOO-1325) — Inventory: design product-type-aware semantics
 - PRD §11.4 (Companion Plugin = baseline ability provider) and §11.7 (WPCOM-enhanced mode = optional additive tier)
-- Apr 23 manifest snapshot at `daemon/internal/manifest/default.json`; current live ability set at `/tmp/abilities-all-2026-05-17.json`
+- Manifest snapshot at `daemon/internal/manifest/default.json` (refreshed 2026-05-18 via `scripts/refresh-manifest.sh`)
 **Branch:** not started
 
 ## Why
@@ -204,11 +205,22 @@ Splitting into "enhance existing" (layer 2, no new agent) + "unlock a job-shaped
 
 A suggested order. Each phase produces something operators can use.
 
-**Phase 0 — Manifest refresh + verification (1-2 days).**
-- Re-run `cmd/manifest-compute` against staging, commit refreshed `daemon/internal/manifest/default.json`.
-- Verify `woocommerce/find-products` and `woocommerce/get-product` schemas for variation coverage (informs DSGWOO-1324 re-scoping).
-- Set up monthly manifest-refresh CI (or document the manual cadence).
-- No persona behavior changes yet.
+**Phase 0 — Manifest refresh + verification (1-2 days). ✅ DONE 2026-05-18.**
+- ✅ Re-run `cmd/manifest-compute` against staging, commit refreshed `daemon/internal/manifest/default.json`. (Landed in PR #42 — 25 → 36 entries, refreshed schema hashes.)
+- ✅ Verify `woocommerce/find-products` and `woocommerce/get-product` schemas for variation coverage. **Finding: scope of DSGWOO-1324 partially shrinks for Marketing (`batch-update-product-content` covers variable-product descriptions at the parent), does NOT shrink for Pricing (no `update-variation` or per-variation pricing ability exists in the WC AI plugin as of 2026-05-18).** See "Findings" subsection below.
+- ✅ Document monthly manifest-refresh cadence — `scripts/refresh-manifest.sh` (surgical merge: preserves pre-signed placeholder entries) + section in CLAUDE.md. GH Action deferred — too much YAML for too little value at v0.1.
+- ⚠️ "No persona behavior changes yet" **slipped.** Baseline-tier picker improvements landed in the same PR #42 (Pricing → `orderby=total_sales asc`, Marketing → `orderby=date_modified asc` + `data_issues` post-filter). Behavior change uses the new Companion Plugin v0.2 `orderby` arg, not WC AI's `find-products`, so it's not Phase 2. But it IS persona behavior that Phase 0 said we'd defer. Noted for the next phase planning.
+- ✅ Cross-link to [DSGWOO-1279](https://linear.app/a8c/issue/DSGWOO-1279) added. Phase 0 also resolved Issues 2 + 3 from that ticket and pre-added Issue 1's WC 10.9 canonical names with placeholder schema hashes (PEP whitelists them now; drift detection fires when real schemas arrive). Guard test `TestPreSignedWC109CanonicalEntriesPresent` prevents accidental clobber on future refreshes.
+
+### Findings from Phase 0 schema verification
+
+- **`woocommerce/find-products`** input filter accepts `product_type` (array, can target `variable`); output `counts` includes `variations` and `total_variations` (server-side tracks them). Preview only returns `{product_id, name}` — no variation IDs in the preview.
+- **`woocommerce/get-product`** output is parent-only. No `variations` array, no per-variation pricing, no variation IDs. Does NOT cover variations.
+- **`woocommerce/update-product`** input takes single `product_id` + parent property fields. No `variation_id`, no per-variation update. Does NOT cover variations.
+- **`woocommerce/batch-update-product-content`** `field` enum restricted to `description` / `short_description`. Writes to parent. **Covers Marketing's variable-product needs at the parent level**; does NOT cover Pricing.
+- **No `update-variation`, `update-variation-price`, or `variations-list` ability exists in the WC AI plugin's current ability surface.**
+
+**Consequence for [DSGWOO-1324](https://linear.app/a8c/issue/DSGWOO-1324):** scope does NOT shrink as the original spec hoped. Pricing variable-product support is still real work — either build a Companion Plugin variation extension (`wooagent-products/variations-list` + `wooagent-products/update-variation`) or wait for WC AI to add variation support upstream.
 
 **Phase 1 — Discovery infrastructure (3-5 days).**
 - New `store_abilities` table + migration.
@@ -233,7 +245,7 @@ A suggested order. Each phase produces something operators can use.
 
 **Phase 4 — DSGWOO-1322 / 1323 / 1324 re-scoping and execution.**
 - 1322 + 1323 ship as previously scoped (baseline filter fixes).
-- 1324 likely shrinks to "verify WC AI variation coverage; if sufficient, mark closed in favor of layer-2 paths."
+- 1324 partial re-scope based on Phase 0 schema verification: Marketing variable-product needs are covered by `batch-update-product-content` (writes parent description); Pricing variable-product needs are NOT covered and require either a Companion Plugin extension or upstream WC AI work. 1324 splits into (a) closed-as-covered for Marketing, (b) re-titled "Pricing: per-variation pricing support" for the remaining real work.
 
 **Phase 5 — Reporting persona (own design pass; 2-4 weeks).**
 - Separate spec at `docs/specs/YYYY-MM-DD-reporting-persona-design.md`.
