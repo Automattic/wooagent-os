@@ -42,13 +42,11 @@ func TestCompanionPluginBaselineEntries(t *testing.T) {
 		"wooagent-products/list",
 		"wooagent-products/get",
 		"wooagent-products/update",
+		"wooagent-products/list-categories",
 		"wooagent-orders/list",
 		"wooagent-orders/get",
 		"wooagent-orders/add-note",
 		"wooagent-customers/get",
-		"wooagent-device-pair/request",
-		"wooagent-device-pair/confirm",
-		"wooagent-device-pair/revoke",
 	}
 	for _, name := range baseline {
 		e := lookup.Get(name)

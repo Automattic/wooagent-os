@@ -40,6 +40,18 @@ function wooagent_companion_register_product_abilities(): void {
 						'type'        => 'string',
 						'description' => 'Text search across product name and SKU.',
 					),
+					'orderby'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'menu_order', 'date', 'date_modified', 'total_sales', 'title' ),
+						'default'     => 'menu_order',
+						'description' => 'Sort key. "total_sales" with order="asc" surfaces slow movers; with order="desc" surfaces bestsellers. "date_modified" with order="asc" surfaces stale products.',
+					),
+					'order'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'asc', 'desc' ),
+						'default'     => 'desc',
+						'description' => 'Sort direction. Ignored when orderby="menu_order" (WooCommerce default applies).',
+					),
 				),
 				'additionalProperties' => false,
 			),
@@ -64,6 +76,7 @@ function wooagent_companion_register_product_abilities(): void {
 								'short_description_length' => array( 'type' => 'integer' ),
 								'featured'             => array( 'type' => 'boolean' ),
 								'date_modified'        => array( 'type' => 'string' ),
+								'total_sales'          => array( 'type' => 'integer', 'description' => 'Lifetime units sold per WooCommerce. 0 for products that have never been ordered.' ),
 							),
 						),
 					),
@@ -147,6 +160,54 @@ function wooagent_companion_register_product_abilities(): void {
 	);
 
 	wp_register_ability(
+		'wooagent-products/list-categories',
+		array(
+			'label'               => __( 'List product categories', 'wooagent-companion' ),
+			'description'         => __( 'Return the store\'s product category taxonomy as a flat list. Used by Marketing to detect uncategorized clusters and propose category assignments.', 'wooagent-companion' ),
+			'input_schema'        => array(
+				'type'       => 'object',
+				'properties' => array(
+					'hide_empty' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => 'When true, omit categories with zero products. Default false so callers see the full taxonomy including new/empty branches.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'categories' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'id'        => array( 'type' => 'integer' ),
+								'name'      => array( 'type' => 'string' ),
+								'slug'      => array( 'type' => 'string' ),
+								'parent_id' => array( 'type' => 'integer', 'description' => '0 when the category is at the root.' ),
+								'count'     => array( 'type' => 'integer', 'description' => 'Number of products assigned (including drafts).' ),
+							),
+							'required'   => array( 'id', 'name', 'slug', 'parent_id', 'count' ),
+						),
+					),
+					'total'      => array( 'type' => 'integer' ),
+				),
+				'required'   => array( 'categories', 'total' ),
+			),
+			'category'            => 'wooagent-products',
+			'execute_callback'    => 'wooagent_products_list_categories_execute',
+			'permission_callback' => 'wooagent_products_read_permission',
+			'meta'                => array(
+				'show_in_rest' => true,
+				'mcp'          => array( 'public' => true ),
+				'annotations'  => array( 'readonly' => true, 'idempotent' => true ),
+			),
+		)
+	);
+
+	wp_register_ability(
 		'wooagent-products/update',
 		array(
 			'label'               => __( 'Update product', 'wooagent-companion' ),
@@ -214,6 +275,36 @@ function wooagent_products_list_execute( array $args ) {
 
 	if ( ! empty( $args['search'] ) ) {
 		$query_args['s'] = $args['search'];
+	}
+
+	// orderby: pass-through for the names WC's WC_Product_Query understands
+	// natively (date, title, menu_order). date_modified + total_sales need
+	// to be translated to meta_value_num lookups since WC_Product_Query
+	// doesn't accept them as first-class orderby keys.
+	$orderby = $args['orderby'] ?? 'menu_order';
+	$order   = strtoupper( $args['order'] ?? 'desc' );
+	if ( ! in_array( $order, array( 'ASC', 'DESC' ), true ) ) {
+		$order = 'DESC';
+	}
+	switch ( $orderby ) {
+		case 'menu_order':
+			// WC default; intentionally leave query_args alone so the
+			// "menu_order title" multi-key WC default applies.
+			break;
+		case 'date':
+		case 'title':
+			$query_args['orderby'] = $orderby;
+			$query_args['order']   = $order;
+			break;
+		case 'date_modified':
+			$query_args['orderby'] = 'modified';
+			$query_args['order']   = $order;
+			break;
+		case 'total_sales':
+			$query_args['orderby']  = 'meta_value_num';
+			$query_args['meta_key'] = 'total_sales'; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			$query_args['order']    = $order;
+			break;
 	}
 
 	$result = wc_get_products( $query_args );
@@ -286,6 +377,35 @@ function wooagent_products_get_execute( array $args ) {
 	);
 }
 
+function wooagent_products_list_categories_execute( array $args ) {
+	$terms = get_terms(
+		array(
+			'taxonomy'   => 'product_cat',
+			'hide_empty' => ! empty( $args['hide_empty'] ),
+		)
+	);
+
+	if ( is_wp_error( $terms ) ) {
+		return $terms;
+	}
+
+	$out = array();
+	foreach ( $terms as $term ) {
+		$out[] = array(
+			'id'        => (int) $term->term_id,
+			'name'      => (string) $term->name,
+			'slug'      => (string) $term->slug,
+			'parent_id' => (int) $term->parent,
+			'count'     => (int) $term->count,
+		);
+	}
+
+	return array(
+		'categories' => $out,
+		'total'      => count( $out ),
+	);
+}
+
 function wooagent_products_update_execute( array $args ) {
 	$product = wc_get_product( (int) $args['id'] );
 	if ( ! $product ) {
@@ -352,5 +472,6 @@ function wooagent_product_to_summary( $product ): array {
 		'short_description_length' => strlen( (string) $product->get_short_description() ),
 		'featured'                 => $product->is_featured(),
 		'date_modified'            => $product->get_date_modified() ? $product->get_date_modified()->date( 'c' ) : '',
+		'total_sales'              => (int) $product->get_total_sales(),
 	);
 }

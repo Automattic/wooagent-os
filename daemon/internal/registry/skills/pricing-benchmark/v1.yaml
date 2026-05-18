@@ -1,5 +1,5 @@
 name: pricing.benchmark
-version: 0.2.0
+version: 0.3.0
 description: |
   Propose a price change for a single WooCommerce product, grounded in live
   market research at a known set of accessible mid-tier retailers. The
@@ -65,11 +65,23 @@ description: |
        - Fewer than 3 comparables surface across all retailers
        - Comparable prices vary by more than 4× (suggests category
          mismatch — search isn't returning a coherent set)
-       - The store's product is a subscription, custom-made, or other
-         shape that doesn't have one-shot retail comparables
        - The store's product is in a tier the preferred retailers don't
          carry (e.g., $5 dish towel against Parachute $40 dish towels —
          the comparable is Target / Walmart, not the preferred list)
+
+       Subscription products (monthly boxes, recurring shipments) and
+       custom-made products are NOT auto-decline. Many have real public
+       competitor pricing — monthly sock subscriptions have Bombas
+       Subscribers, FootCardigan, Sock Fancy; coffee subscriptions have
+       Atlas Coffee Club, Trade, Blue Bottle; meal kits, candles, etc.
+       follow the same pattern. Search for "[product noun] subscription
+       monthly" or "[product noun] subscription box" across the
+       preferred-tier retailers first; only decline when those searches
+       genuinely return no comparable monthly-recurring pricing. When a
+       subscription's per-shipment price is being benchmarked against
+       one-shot retail prices (e.g., a monthly cashmere sock subscription
+       at $25/mo vs. J.Crew's $30 socks), flag the cadence mismatch in
+       the rationale rather than declining outright.
     3. When you decline, reason_no_proposal MUST name (a) the searches
        you ran, (b) what came back, (c) why it doesn't qualify. "I
        searched site:jcrew.com socks subscription and got 0 results;

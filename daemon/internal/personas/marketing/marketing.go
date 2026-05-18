@@ -131,21 +131,7 @@ func (Marketing) Cooldown() personas.CooldownPolicy {
 	}
 }
 
-const systemPrompt = `You are a copywriter for a small-batch home-goods store.
-Voice: warm, sincere, concrete. Avoid the words "luxe", "premium", "elevate",
-"curated". Prefer "small-batch", "handcrafted", "made to last". Lead with the
-material or the use, not adjectives. Two to four short sentences, 140-220
-characters total per variant.
-
-Draft THREE distinct rewrite variants — each takes a different angle (e.g.
-material-first, use-first, story-first). Return JSON ONLY, no preamble:
-
-{"variants":[{"label":"A","angle":"material","body":"..."},{"label":"B","angle":"use","body":"..."},{"label":"C","angle":"story","body":"..."}]}
-
-Constraints:
-- Exactly three variants.
-- Distinct bodies (don't paraphrase the same sentence three times).
-- Each body 140-220 characters of plain prose, no markdown, no labels in the body.`
+const skillName = "marketing.description-rewrite"
 
 // maxDraftAttempts caps how many products a single Draft run will try
 // before giving up. Each attempt costs one LLM call (~5-15s). 3 is a
@@ -167,10 +153,18 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		return personas.Drafted{}, fmt.Errorf("mcp initialize: %w", err)
 	}
 
+	skill, ok := deps.Skills[skillName]
+	if !ok {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("skill %q not found in skills registry", skillName),
+		}, nil
+	}
+
 	// Debug override: always draft on the operator-supplied product,
 	// bypassing both cooldown and the within-run loop.
 	if deps.Env.ProductIDOverride != 0 {
-		return draftForProduct(ctx, deps, deps.Env.ProductIDOverride)
+		return draftForProduct(ctx, deps, deps.Env.ProductIDOverride, skill.Description)
 	}
 
 	// Skip products that already have an open issue, an approved
@@ -193,7 +187,7 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		"product",
 		skip,
 		func(s map[int]struct{}) (int, error) { return pickFirstPublished(ctx, deps.MCP, s) },
-		func(id int) (personas.Drafted, error) { return draftForProduct(ctx, deps, id) },
+		func(id int) (personas.Drafted, error) { return draftForProduct(ctx, deps, id, skill.Description) },
 	)
 }
 
@@ -201,13 +195,13 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 // LLM, parse variants, assemble Drafted. Returns Drafted{Skipped:true}
 // when the LLM yields no_proposal or an empty rewrite — the outer Draft
 // loop treats that as "try the next product" rather than ending the run.
-func draftForProduct(ctx context.Context, deps personas.Deps, productID int) (personas.Drafted, error) {
+func draftForProduct(ctx context.Context, deps personas.Deps, productID int, skillDescription string) (personas.Drafted, error) {
 	p, err := getProduct(ctx, deps.MCP, productID)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
 
-	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p)
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription)
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -303,28 +297,40 @@ func callAbilityInner(ctx context.Context, c *mcp.Client, ability string, params
 }
 
 type productSummary struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	SKU    string `json:"sku"`
-	Status string `json:"status"`
+	ID                     int    `json:"id"`
+	Name                   string `json:"name"`
+	SKU                    string `json:"sku"`
+	Status                 string `json:"status"`
+	DescriptionLength      int    `json:"description_length"`
+	ShortDescriptionLength int    `json:"short_description_length"`
 }
 
-// pickFirstPublished returns the first published product whose ID is not
-// in skip. Pulls a wider page (100) than the original 5 so a few products
-// in cooldown don't starve the picker. If every published product in the
-// fetched window is in skip, returns an explanatory error so the run
-// surfaces as Skipped rather than re-proposing on a cooldown product.
+// pickFirstPublished returns the next published product whose ID is not
+// in skip. Surfaces stale + content-thin products first (orderby=date_modified
+// asc, then a client-side bias toward products with empty descriptions —
+// "data_issues" in the WC AI plugin's behavioral vocabulary). Marketing's
+// job is to provide descriptions for products that need them most; sorting
+// by date_modified ascending puts the products no one's touched in a while
+// at the top, and the data_issues bias prefers ones missing the content
+// Marketing can supply.
+//
+// orderby is passed through to the Companion Plugin (v0.2+ accepts it). On
+// stores still running v0.1 of the plugin the arg is rejected by the
+// ability's additionalProperties:false schema — surfaces as an explicit
+// error rather than a silent mis-order.
 func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
 	var listOut struct {
 		Products []productSummary `json:"products"`
 	}
 	if err := callAbility(ctx, c, "wooagent-products/list",
-		map[string]any{"per_page": 100}, &listOut); err != nil {
+		map[string]any{"per_page": 100, "orderby": "date_modified", "order": "asc"}, &listOut); err != nil {
 		return 0, err
 	}
 	if len(listOut.Products) == 0 {
 		return 0, fmt.Errorf("no products in store")
 	}
+	// Two-pass: first prefer products with an obvious data_issue (empty
+	// description); fall back to first-eligible if no data_issues remain.
 	skipped := 0
 	for _, p := range listOut.Products {
 		if p.Status != "publish" && p.Status != "" {
@@ -332,6 +338,17 @@ func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{
 		}
 		if _, inCooldown := skip[p.ID]; inCooldown {
 			skipped++
+			continue
+		}
+		if p.DescriptionLength == 0 || p.ShortDescriptionLength == 0 {
+			return p.ID, nil
+		}
+	}
+	for _, p := range listOut.Products {
+		if p.Status != "publish" && p.Status != "" {
+			continue
+		}
+		if _, inCooldown := skip[p.ID]; inCooldown {
 			continue
 		}
 		return p.ID, nil
@@ -376,13 +393,13 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 // falls back to the OpenAI-compatible endpoint (LM Studio by default)
 // otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
 // means the caller should mark the run Skipped.
-func draftWithFallback(ctx context.Context, env personas.Env, p product) (string, string, error) {
+func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string) (string, string, error) {
 	if strings.TrimSpace(env.AnthropicAPIKey) != "" {
 		model := env.AnthropicModel
 		if model == "" {
 			model = defaultAnthropicModel
 		}
-		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p)
+		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription)
 		if err != nil {
 			return "", fmt.Sprintf("Claude API errored: %v", err), nil
 		}
@@ -404,7 +421,7 @@ func draftWithFallback(ctx context.Context, env personas.Env, p product) (string
 	if apiKey == "" {
 		apiKey = defaultOpenAIKey
 	}
-	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p)
+	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription)
 	if err != nil {
 		return "", fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err), nil
 	}
@@ -445,7 +462,7 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product) (string, error) {
+func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string) (string, error) {
 	user := fmt.Sprintf(
 		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
 		p.Name, p.SKU, strings.TrimSpace(p.Description),
@@ -454,7 +471,7 @@ func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product)
 	body, _ := json.Marshal(anthropicReq{
 		Model:     model,
 		MaxTokens: 2048, // headroom for 3 variants × ~220 chars + JSON overhead
-		System:    systemPrompt,
+		System:    skillDescription,
 		Messages:  []anthropicMsg{{Role: "user", Content: user}},
 	})
 
@@ -528,6 +545,7 @@ func draftRewriteOpenAI(
 	ctx context.Context,
 	base, apiKey, model string,
 	p product,
+	skillDescription string,
 ) (string, error) {
 	user := fmt.Sprintf(
 		"Product: %s\nSKU: %s\nCurrent description: %s\n\nWrite a new description.",
@@ -536,7 +554,7 @@ func draftRewriteOpenAI(
 	body, _ := json.Marshal(chatReq{
 		Model: model,
 		Messages: []chatMsg{
-			{Role: "system", Content: systemPrompt},
+			{Role: "system", Content: skillDescription},
 			{Role: "user", Content: user},
 		},
 		Temperature: 0.7,
