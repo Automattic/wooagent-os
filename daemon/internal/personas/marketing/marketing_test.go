@@ -231,6 +231,50 @@ func TestFetchVoiceCorpus_FiltersExcludesAndSorts(t *testing.T) {
 	}
 }
 
+func TestBuildPromptUserMessage_IncludesProductAndCorpus(t *testing.T) {
+	p := product{
+		Name:        "Indigo Throw Pillow",
+		SKU:         "PIL-IND-22",
+		Description: "Existing thin description.",
+	}
+	corpus := []corpusSample{
+		{Name: "Stoneware Mug", Body: "Body fired in our wood kiln. Holds 12oz. Hand-thrown."},
+		{Name: "Cashmere Scarf", Body: "Plate-loomed in the Loire valley. 200g of two-ply yarn."},
+	}
+	msg := buildPromptUserMessage(p, corpus)
+
+	// Product fields appear.
+	for _, want := range []string{"Indigo Throw Pillow", "PIL-IND-22", "Existing thin description."} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("user message missing %q\n---\n%s", want, msg)
+		}
+	}
+	// Corpus samples appear.
+	for _, want := range []string{
+		"Voice corpus",
+		"Stoneware Mug",
+		"Body fired in our wood kiln",
+		"Cashmere Scarf",
+		"Plate-loomed in the Loire valley",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("user message missing corpus marker %q\n---\n%s", want, msg)
+		}
+	}
+}
+
+func TestBuildPromptUserMessage_EmptyCorpus(t *testing.T) {
+	p := product{Name: "New Store Product", SKU: "NEW-1", Description: "hi"}
+	msg := buildPromptUserMessage(p, nil)
+	// Empty corpus → prompt instructs the LLM to emit null for voice.
+	if !strings.Contains(msg, "Voice corpus: (none available") {
+		t.Errorf("empty-corpus message should mark the gap explicitly\n---\n%s", msg)
+	}
+	if !strings.Contains(msg, "null") {
+		t.Errorf("empty-corpus message should instruct emitting null for voice\n---\n%s", msg)
+	}
+}
+
 // fakeMCP implements just enough of *mcp.Client for fetchVoiceCorpus.
 // CallTool returns the canned bytes; everything else panics so a wrong
 // invocation surfaces immediately.

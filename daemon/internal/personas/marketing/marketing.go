@@ -528,6 +528,32 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 
 // ---- LLM ----
 
+// buildPromptUserMessage assembles the per-product user message for the
+// marketing draft call. The system prompt (carried in the skill YAML
+// description) holds the voice + SEO rubric instructions; this helper
+// supplies the dynamic per-product context: the product to rewrite plus
+// the corpus samples the LLM compares the variants' voice to.
+//
+// Empty corpus is supported (new stores, all-thin descriptions). In that
+// case the prompt tells the LLM to emit null for the voice field — the
+// Go validator clears anything ≤ 0 anyway, so this is belt-and-suspenders.
+func buildPromptUserMessage(p product, corpus []corpusSample) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Product: %s\nSKU: %s\nCurrent description: %s\n\n",
+		p.Name, p.SKU, strings.TrimSpace(p.Description))
+	if len(corpus) == 0 {
+		b.WriteString("Voice corpus: (none available — this store has no other long-form published descriptions to compare against. Emit null for `voice` on each variant; score SEO as normal.)\n\n")
+	} else {
+		b.WriteString("Voice corpus (3–5 of this store's existing published descriptions — use these as the reference for the store's voice; do not copy):\n")
+		for _, s := range corpus {
+			fmt.Fprintf(&b, "\n— %s —\n%s\n", s.Name, s.Body)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 0–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
+	return b.String()
+}
+
 // draftWithFallback prefers Anthropic when AnthropicAPIKey is set, and
 // falls back to the OpenAI-compatible endpoint (LM Studio by default)
 // otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
