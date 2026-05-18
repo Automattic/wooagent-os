@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner, Button } from '@wordpress/components';
-import { Icon, rotateRight, check } from '@wordpress/icons';
+import { Badge, Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
+import { Spinner, VisuallyHidden } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
@@ -16,12 +15,9 @@ import {
   type MessageProposal,
   type PriceProposal,
   type Proposal,
-  type Run,
   type Variant,
 } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
-import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
-import { RunStatusBadge } from '../components/RunStatusBadge';
 import Kpi from '../components/Kpi';
 import type { KpiTone } from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
@@ -30,25 +26,12 @@ import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import SectionHeader from '../components/SectionHeader';
 import SourceRow from '../components/SourceRow';
-import ProductThumbnail from '../components/ProductThumbnail';
+import ProposalHeader from '../components/ProposalHeader';
 
 interface Props {
   connection: Connection;
   onChanged?: () => void;
   onAskAgent: () => void;
-}
-
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '—';
-  const diffMs = Date.now() - then;
-  const min = Math.round(diffMs / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} minutes ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hours ago`;
-  const days = Math.round(hr / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
 // Choose the score-value color class based on the score band. SEO and Voice
@@ -238,7 +221,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   }
 
   const { issue, proposal } = data;
-  const personaKey = personaKeyFrom(issue.persona);
   const personaLabel = personaLabelFrom(issue.persona);
   const reviewable = issue.status === 'in_review';
   const isDone = issue.status === 'done';
@@ -267,7 +249,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           proposal={priceProposal}
           rawProposal={proposal}
           rationale={proposal?.content ?? ''}
-          personaKey={personaKey}
           personaLabel={personaLabel}
           actionMsg={actionMsg}
           busy={busy}
@@ -293,7 +274,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         <MessageIssueView
           issue={issue}
           proposal={messageProposal}
-          personaKey={personaKey}
           personaLabel={personaLabel}
           actionMsg={actionMsg}
           busy={busy}
@@ -343,45 +323,20 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         className="wa-detail-shell-page"
       >
         <div className="wa-subpage-content">
-        {/* Persona eyebrow */}
-        <Stack direction="row" gap="sm" align="center" style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}>
-          <PersonaAvatar persona={personaKey} size="md" />
-          <Text variant="body-sm" style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
-            <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
-              {personaLabel}
-            </strong>{' '}
-            proposes content · {relativeTime(issue.updated_at)} ·{' '}
-            <span className="wa-mono">Claude Sonnet 4.6</span>
-          </Text>
-        </Stack>
-
-        {/* Title row — 86×86 product thumbnail + title + subhead */}
-        <div className="wa-detail-title-row">
-          <ProductThumbnail
-            src={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
-            alt={typeof data.proposal?.target?.image_alt === 'string' ? data.proposal.target.image_alt : undefined}
-            persona={data.issue.persona}
-            size="lg"
-          />
-          <div className="wa-detail-title-text">
-            <Text
-              variant="heading-2xl"
-              render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
-            >
-              {issue.title}
-            </Text>
-            <Text
-              variant="body-md"
-              style={{
-                color: 'var(--wpds-color-fg-content-neutral-weak)',
-                maxWidth: 760,
-              }}
-            >
-              {issue.description ??
-                'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'}
-            </Text>
-          </div>
-        </div>
+        <ProposalHeader
+          persona={data.issue.persona ?? ''}
+          personaLabel={personaLabel}
+          verb="proposes content"
+          timestamp={issue.updated_at}
+          modelLine="Claude Sonnet 4.6"
+          title={issue.title}
+          description={
+            issue.description ??
+            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'
+          }
+          imageUrl={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
+          imageAlt={typeof data.proposal?.target?.image_alt === 'string' ? data.proposal.target.image_alt : undefined}
+        />
 
         {/* KPI row */}
         <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}>
@@ -421,33 +376,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
               <Card.Header>
                 <SectionHeader
                   eyebrow="Current description"
-                  badge={
-                    productBound ? (
-                      <span
-                        style={{
-                          fontSize: 'var(--wpds-typography-font-size-xs)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--wpds-border-radius-sm)',
-                          background: 'var(--wpds-color-bg-surface-success-weak)',
-                          color: 'var(--wpds-color-fg-content-success)',
-                        }}
-                      >
-                        Bound{productSku ? ` · ${productSku}` : ''}
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          fontSize: 'var(--wpds-typography-font-size-xs)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--wpds-border-radius-sm)',
-                          background: 'var(--wpds-color-bg-surface-warning-weak)',
-                          color: 'var(--wpds-color-fg-content-warning)',
-                        }}
-                      >
-                        No product bound
-                      </span>
-                    )
-                  }
                   meta={
                     <span
                       style={{
@@ -476,20 +404,17 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
               </Card.Content>
             </Card.Root>
 
-            {/* Proposed section */}
-            <SectionHeader
-              title="Proposed · pick one"
-              action={
-                <Button
-                  __next40pxDefaultSize
-                  variant="tertiary"
-                  icon={rotateRight}
-                  disabled
-                >
-                  Regenerate
-                </Button>
-              }
-            />
+            {/* Proposed section. Negative margins shave the surrounding
+                gap-xl (24px) down to 16px on top and bottom so the eyebrow
+                sits tighter between cards. */}
+            <div
+              style={{
+                marginTop: 'calc(-1 * var(--wpds-dimension-gap-sm))',
+                marginBottom: 'calc(-1 * var(--wpds-dimension-gap-sm))',
+              }}
+            >
+              <SectionHeader title="Proposed · pick one" />
+            </div>
 
 
             {!proposal ? (
@@ -499,28 +424,48 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 </Notice.Description>
               </Notice.Root>
             ) : variants ? (
-              variants
+              // CUSTOM: card-as-radio variant selector. WPDS has no
+              // RadioCard primitive (RadioControl renders flat options).
+              // (a) The whole list is a `role="radiogroup"` so screen readers
+              // announce it as a radio group and arrow keys traverse it;
+              // (b) each card wraps a visually-hidden native `<input
+              // type="radio">` so focus, keyboard activation, and form
+              // semantics are real; (c) the visual `wa-radio-mark` is a
+              // decoration only (`aria-hidden`). Follow-up: see CardLink
+              // composite note in Kanban.tsx.
+              <div
+                role="radiogroup"
+                aria-label="Variant selection"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--wpds-dimension-gap-xl)',
+                }}
+              >
+              {variants
                 .filter((v) => !isDone || v.id === (approvedVariant ?? selectedVariant))
                 .map((v) => {
                   const isSelected = selectedVariant === v.id;
-                  // CUSTOM: whole-card variant selector. Same pattern as Kanban card-as-button — (a) no WPDS clickable-card / radio-card component, (b) reset chrome wraps <Card.Root>, (c) Follow-up: see CardLink composite note in Kanban.tsx.
                   return (
-                    <button
+                    <label
                       key={v.id}
-                      type="button"
-                      onClick={() => setSelectedVariant(v.id)}
-                      disabled={isDone}
                       style={{
                         display: 'block',
                         width: '100%',
                         minWidth: 0,
-                        textAlign: 'left',
-                        padding: 0,
-                        background: 'transparent',
-                        border: 'none',
                         cursor: isDone ? 'default' : 'var(--wpds-cursor-control)',
                       }}
                     >
+                      <VisuallyHidden as="span">
+                        <input
+                          type="radio"
+                          name="marketing-variant"
+                          value={v.id}
+                          checked={isSelected}
+                          disabled={isDone}
+                          onChange={() => setSelectedVariant(v.id)}
+                        />
+                      </VisuallyHidden>
                       <Card.Root
                         className={`wa-variant-card${
                           isSelected ? ' wa-variant-card--selected' : ''
@@ -529,51 +474,62 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                         <Card.Content>
                           <div className="wa-variant-header">
                             <div className="wa-variant-header__left">
-                              <span
-                                aria-hidden="true"
-                                style={{
-                                  height: 24,
-                                  width: 24,
-                                  borderRadius: '50%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                                  fontSize: 'var(--wpds-typography-font-size-sm)',
-                                  flex: 'none',
-                                  background: isSelected
-                                    ? 'var(--wpds-color-bg-interactive-brand-strong)'
-                                    : 'transparent',
-                                  color: isSelected
-                                    ? 'var(--wpds-color-fg-interactive-brand-strong)'
-                                    : 'var(--wpds-color-fg-content-neutral)',
-                                  border: isSelected
-                                    ? 'none'
-                                    : 'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-strong)',
-                                }}
-                              >
-                                {v.id}
-                              </span>
-                              {v.recommended ? (
-                                <Text
-                                  variant="body-sm"
-                                  style={{
-                                    color: 'var(--wpds-color-fg-interactive-brand)',
-                                    fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                                  }}
-                                >
-                                  Agent pick{v.label ? ` · ${v.label}` : ''}
-                                </Text>
-                              ) : (
-                                v.label && (
-                                  <Text
-                                    variant="body-sm"
-                                    style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
-                                  >
-                                    {v.label}
-                                  </Text>
-                                )
-                              )}
+                              {(() => {
+                                // v.label is overloaded: in LLM output it's just
+                                // the letter "A"/"B"/"C"; in seed/demo data it's
+                                // a longer voice descriptor ("Warm · sincere").
+                                // Derive a single letter for the circle from the
+                                // variant id (`var_a` → A) so the circle stays
+                                // consistent across data sources, and surface the
+                                // descriptor as text alongside the circle when
+                                // the label is more than one character.
+                                const letter = (v.id.split('_').pop() ?? v.label ?? '').slice(0, 1).toUpperCase();
+                                // Prefer a multi-char `label` (seed/demo data
+                                // encodes the descriptor here as "Warm ·
+                                // sincere"). Fall back to the LLM-emitted
+                                // `angle` ("material" / "use" / "story"),
+                                // title-cased, so the variant cards always
+                                // have a descriptor to differentiate them.
+                                const titleCase = (s: string) =>
+                                  s.charAt(0).toUpperCase() + s.slice(1);
+                                const descriptor =
+                                  v.label && v.label.length > 1
+                                    ? v.label
+                                    : v.angle
+                                      ? titleCase(v.angle)
+                                      : null;
+                                return (
+                                  <>
+                                    <span
+                                      aria-hidden="true"
+                                      className="wa-variant-letter"
+                                      data-tone={letter}
+                                    >
+                                      {letter}
+                                    </span>
+                                    {v.recommended ? (
+                                      <Text
+                                        variant="body-sm"
+                                        style={{
+                                          color: 'var(--wpds-color-fg-interactive-brand)',
+                                          fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                                        }}
+                                      >
+                                        Agent pick{descriptor ? ` · ${descriptor}` : ''}
+                                      </Text>
+                                    ) : (
+                                      descriptor && (
+                                        <Text
+                                          variant="body-sm"
+                                          style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                                        >
+                                          {descriptor}
+                                        </Text>
+                                      )
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                             <div className="wa-variant-header__right">
                               <span className="wa-score-label">
@@ -600,9 +556,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                   isSelected ? ' wa-radio-mark--selected' : ''
                                 }`}
                                 aria-hidden="true"
-                              >
-                                {isSelected && <Icon icon={check} size={14} />}
-                              </span>
+                              />
                             </div>
                           </div>
                           <Text
@@ -627,9 +581,10 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           )}
                         </Card.Content>
                       </Card.Root>
-                    </button>
+                    </label>
                   );
-                })
+                })}
+              </div>
             ) : (
               <Card.Root
                 className="wa-variant-card wa-variant-card--selected"
@@ -687,7 +642,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
               </Notice.Root>
             )}
 
-            <IssueRuns connection={connection} issueId={issue.id} />
           </div>
         </div>
         </div>
@@ -732,7 +686,6 @@ interface PriceViewProps {
   proposal: PriceProposal;
   rawProposal?: Proposal | null;
   rationale: string;
-  personaKey: ReturnType<typeof personaKeyFrom>;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
   busy: 'approve' | 'reject' | null;
@@ -749,7 +702,7 @@ interface PriceViewProps {
 
 function PriceIssueView(props: PriceViewProps) {
   const { onAskAgent } = props;
-  const { issue, proposal, rawProposal, rationale, personaKey, personaLabel } = props;
+  const { issue, proposal, rawProposal, rationale, personaLabel } = props;
   const productBound = typeof proposal.productId === 'number';
   const scope = proposal.productName ?? proposal.productSku ?? '—';
   const currency = proposal.currency;
@@ -798,54 +751,20 @@ function PriceIssueView(props: PriceViewProps) {
         className="wa-detail-shell-page"
       >
         <div className="wa-subpage-content">
-        {/* Persona eyebrow */}
-        <Stack
-          direction="row"
-          gap="sm"
-          align="center"
-          style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}
-        >
-          <PersonaAvatar persona={personaKey} size="md" />
-          <Text
-            variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-          >
-            <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
-              {personaLabel}
-            </strong>{' '}
-            proposes a price change · {relativeTime(issue.updated_at)} ·{' '}
-            <span className="wa-mono">Claude Haiku 4.5 · web_search</span>
-          </Text>
-        </Stack>
-
-        {/* Title row — 86×86 thumbnail + title + subhead */}
-        <div className="wa-detail-title-row">
-          <ProductThumbnail
-            src={typeof rawProposal?.target?.image_url === 'string' ? rawProposal.target.image_url : undefined}
-            alt={typeof rawProposal?.target?.image_alt === 'string' ? rawProposal.target.image_alt : undefined}
-            persona="pricing"
-            size="lg"
-          />
-          <div className="wa-detail-title-text">
-            <Text
-              variant="heading-2xl"
-              render={<h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />}
-            >
-              {issue.title}
-            </Text>
-            <Text
-              variant="body-md"
-              style={{
-                color: 'var(--wpds-color-fg-content-neutral-weak)',
-                maxWidth: 760,
-                marginBottom: 'var(--wpds-dimension-gap-xl)',
-              }}
-            >
-              {issue.description ??
-                `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce; the previous price is snapshotted and reversible from the Done column.`}
-            </Text>
-          </div>
-        </div>
+        <ProposalHeader
+          persona="pricing"
+          personaLabel={personaLabel}
+          verb="proposes a price change"
+          timestamp={issue.updated_at}
+          modelLine="Claude Haiku 4.5 · web_search"
+          title={issue.title}
+          description={
+            issue.description ??
+            `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce; the previous price is snapshotted and reversible from the Done column.`
+          }
+          imageUrl={typeof rawProposal?.target?.image_url === 'string' ? rawProposal.target.image_url : undefined}
+          imageAlt={typeof rawProposal?.target?.image_alt === 'string' ? rawProposal.target.image_alt : undefined}
+        />
 
         {/* KPI row — price tiles */}
         <div
@@ -1043,7 +962,6 @@ function PriceIssueView(props: PriceViewProps) {
               </Notice.Root>
             )}
 
-            <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
         </div>
         </div>
@@ -1174,12 +1092,29 @@ function ObservedRange({ low, median, high, proposed, currency }: ObservedRangeP
   );
 }
 
+// Single label/value row inside the Order context card's meta block.
+// Labels are a fixed 80px column to match the 742:1331 Figma rhythm.
+function OrderMetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Stack direction="row" gap="sm" align="start">
+      <span
+        className="wa-eyebrow"
+        style={{ width: 80, flex: 'none', paddingTop: 2 }}
+      >
+        {label}
+      </span>
+      <Text variant="body-sm" style={{ flex: 1, minWidth: 0 }}>
+        {value}
+      </Text>
+    </Stack>
+  );
+}
+
 // ---------- Message-draft view (Sales Support persona) ----------
 
 interface MessageViewProps {
   issue: IssueDetailPayload['issue'];
   proposal: MessageProposal;
-  personaKey: ReturnType<typeof personaKeyFrom>;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
   busy: 'approve' | 'reject' | null;
@@ -1196,7 +1131,7 @@ interface MessageViewProps {
 
 function MessageIssueView(props: MessageViewProps) {
   const { onAskAgent } = props;
-  const { issue, proposal, personaKey, personaLabel } = props;
+  const { issue, proposal, personaLabel } = props;
   const isInternal = proposal.noteType === 'internal';
   const customerName = proposal.customerName ?? 'the customer';
   const recipientLabel = proposal.customerEmail
@@ -1224,73 +1159,26 @@ function MessageIssueView(props: MessageViewProps) {
             ]}
           />
         }
-        badges={
-          <>
-            <StatusBadge status={issue.status} />
-            <span
-              style={{
-                fontSize: 'var(--wpds-typography-font-size-xs)',
-                padding: '2px 8px',
-                borderRadius: 'var(--wpds-border-radius-sm)',
-                background: isInternal
-                  ? 'var(--wpds-color-bg-surface-warning-weak)'
-                  : 'var(--wpds-color-bg-surface-success-weak)',
-                color: isInternal
-                  ? 'var(--wpds-color-fg-content-warning)'
-                  : 'var(--wpds-color-fg-content-success)',
-              }}
-            >
-              {isInternal ? 'Internal note' : 'Customer-facing'}
-            </span>
-          </>
-        }
+        badges={<StatusBadge status={issue.status} />}
         actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
         hasPadding
         className="wa-detail-shell-page"
       >
         <div className="wa-subpage-content">
-        {/* Persona eyebrow */}
-        <Stack
-          direction="row"
-          gap="sm"
-          align="center"
-          style={{ marginBottom: 'var(--wpds-dimension-gap-sm)' }}
-        >
-          <PersonaAvatar persona={personaKey} size="md" />
-          <Text
-            variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-          >
-            <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
-              {personaLabel}
-            </strong>{' '}
-            drafted a customer reply · {relativeTime(issue.updated_at)} ·{' '}
-            <span className="wa-mono">Claude Haiku 4.5</span>
-          </Text>
-        </Stack>
-
-        {/* Title + subhead */}
-        <Text
-          variant="heading-2xl"
-          render={
-            <h2 style={{ margin: 0, marginBottom: 'var(--wpds-dimension-gap-sm)' }} />
-          }
-        >
-          {issue.title}
-        </Text>
-        <Text
-          variant="body-md"
-          style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
-            maxWidth: 760,
-            marginBottom: 'var(--wpds-dimension-gap-xl)',
-          }}
-        >
-          {issue.description ??
+        <ProposalHeader
+          persona="sales-support"
+          personaLabel={personaLabel}
+          verb={isInternal ? 'drafted an internal note' : 'drafted a customer reply'}
+          timestamp={issue.updated_at}
+          modelLine="Claude Haiku 4.5"
+          title={issue.title}
+          description={
+            issue.description ??
             (isInternal
               ? `Internal note for order ${orderLabel}. Saves to wp-admin only — not visible to the customer.`
-              : `Customer-facing note for ${customerName}. Approval emails this directly to ${proposal.customerEmail ?? 'the customer'}; reversible from the Done column.`)}
-        </Text>
+              : `Customer-facing note for ${customerName}. Approval emails this directly to ${proposal.customerEmail ?? 'the customer'}; reversible from the Done column.`)
+          }
+        />
 
         {/* KPI row */}
         <div
@@ -1311,129 +1199,150 @@ function MessageIssueView(props: MessageViewProps) {
         {/* Body */}
         <div className="wa-detail-body">
           <div className="wa-detail-main">
-            {/* Order summary */}
-            <Card.Root>
-              <Card.Header>
-                <SectionHeader
-                  eyebrow="Order context"
-                  meta={
-                    <span
-                      className="wa-mono"
-                      style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
-                      }}
-                    >
-                      {proposal.orderStatus ?? '—'}
-                    </span>
-                  }
-                />
-              </Card.Header>
-              <Card.Content>
-                <Stack direction="column" gap="sm">
-                  <Stack direction="row" gap="md" wrap="wrap">
-                    <Stack direction="column" gap="xs">
-                      <span className="wa-eyebrow">Customer</span>
-                      <Text variant="body-sm">
-                        {customerName}
-                        {proposal.customerEmail ? ` · ${proposal.customerEmail}` : ''}
-                      </Text>
-                    </Stack>
-                    <Stack direction="column" gap="xs">
-                      <span className="wa-eyebrow">Placed</span>
-                      <Text
-                        variant="body-sm"
-                        className="wa-mono"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-                      >
-                        {proposal.orderDate ?? '—'}
-                      </Text>
-                    </Stack>
-                  </Stack>
-                  {proposal.lineItems.length > 0 && (
-                    <Stack direction="column" gap="xs">
-                      <span className="wa-eyebrow">Line items</span>
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: 'var(--wpds-dimension-padding-md)',
-                          color: 'var(--wpds-color-fg-content-neutral)',
-                        }}
-                      >
-                        {proposal.lineItems.map((li, idx) => (
-                          <li key={idx}>
-                            <Text variant="body-sm">
-                              {li.name}
-                              {typeof li.quantity === 'number' ? ` × ${li.quantity}` : ''}
-                              {li.sku ? ` · ${li.sku}` : ''}
-                              {li.total ? ` · ${li.total}` : ''}
-                            </Text>
-                          </li>
-                        ))}
-                      </ul>
-                    </Stack>
+            {/* Order context — collapsible. Header: label + items/total summary
+                pill + chevron. Expanded body: Customer/Placed/Status meta + a
+                full-bleed list of line items separated by 1px hairlines.
+                Matches the 742:1330/742:1331 Figma pair. */}
+            <CollapsibleCard.Root>
+              <CollapsibleCard.Header>
+                <Stack direction="row" gap="md" align="center">
+                  <Text
+                    variant="body-md"
+                    style={{
+                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                    }}
+                  >
+                    Order context
+                  </Text>
+                  <Badge intent="none">
+                    {`${proposal.lineItems.length} ${
+                      proposal.lineItems.length === 1 ? 'item' : 'items'
+                    }${orderTotal !== '—' ? ` · ${orderTotal}` : ''}`}
+                  </Badge>
+                </Stack>
+              </CollapsibleCard.Header>
+              <CollapsibleCard.Content className="wa-order-context-content">
+                <Stack direction="column" gap="xs">
+                  <OrderMetaRow
+                    label="Customer"
+                    value={
+                      customerName +
+                      (proposal.customerEmail
+                        ? ` · ${proposal.customerEmail}`
+                        : '')
+                    }
+                  />
+                  <OrderMetaRow
+                    label="Placed"
+                    value={proposal.orderDate ?? '—'}
+                  />
+                  {proposal.orderStatus && (
+                    <OrderMetaRow label="Status" value={proposal.orderStatus} />
                   )}
                 </Stack>
-              </Card.Content>
-            </Card.Root>
+                {proposal.lineItems.length > 0 && (
+                  <Card.FullBleed
+                    style={{
+                      marginTop: 'var(--wpds-dimension-gap-xl)',
+                    }}
+                  >
+                    {proposal.lineItems.map((li, idx) => (
+                      <div key={idx} className="wa-order-line">
+                        <Text variant="body-sm" style={{ flex: 1, minWidth: 0 }}>
+                          {li.name}
+                          {li.sku ? ` · ${li.sku}` : ''}
+                        </Text>
+                        {typeof li.quantity === 'number' && (
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: 'var(--wpds-color-fg-content-neutral-weak)',
+                            }}
+                          >
+                            × {li.quantity}
+                          </Text>
+                        )}
+                        {li.total && (
+                          <Text
+                            variant="body-md"
+                            style={{
+                              fontWeight:
+                                'var(--wpds-typography-font-weight-medium)',
+                              minWidth: 72,
+                              textAlign: 'right',
+                            }}
+                          >
+                            {li.total}
+                          </Text>
+                        )}
+                      </div>
+                    ))}
+                  </Card.FullBleed>
+                )}
+              </CollapsibleCard.Content>
+            </CollapsibleCard.Root>
 
-            {/* Drafted message — preview-shaped so the operator reads it as the customer would */}
-            <Card.Root
-              className="wa-variant-card wa-variant-card--selected"
-              style={{ borderWidth: 'var(--wpds-border-width-md)' }}
-            >
+            {/* Drafted message — same surface treatment as the Order context
+                card above (Card.Root with the Header/Content rhythm) but not
+                collapsible. Header carries the message label, optional subject
+                pill, and a char-count meta. Body is To/Subject meta rows
+                (customer flow only) followed by the message body in body-md.
+                Matches 815:33529 in Figma. The brand-blue
+                `wa-variant-card--selected` outline marks this as the
+                approved/active draft. */}
+            <Card.Root className="wa-variant-card--selected">
               <Card.Header>
-                <SectionHeader
-                  eyebrow={isInternal ? 'Internal note' : 'Customer-facing message'}
-                  badge={
-                    proposal.subjectHint ? (
-                      <span
-                        style={{
-                          fontSize: 'var(--wpds-typography-font-size-xs)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--wpds-border-radius-sm)',
-                          background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                          color: 'var(--wpds-color-fg-content-neutral)',
-                        }}
-                      >
-                        {proposal.subjectHint}
-                      </span>
-                    ) : undefined
-                  }
-                  meta={
-                    <span
-                      className="wa-mono"
+                <Stack
+                  direction="row"
+                  gap="md"
+                  align="center"
+                  style={{ width: '100%' }}
+                >
+                  <Stack direction="row" gap="md" align="center">
+                    <Text
+                      variant="body-md"
                       style={{
-                        fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        fontWeight: 'var(--wpds-typography-font-weight-medium)',
                       }}
                     >
-                      {charCount} chars
-                    </span>
-                  }
-                />
-              </Card.Header>
-              <Card.Content>
-                {!isInternal && (
-                  <div
+                      {isInternal ? 'Internal note' : 'Customer-facing message'}
+                    </Text>
+                    {!isInternal && proposal.subjectHint && (
+                      <Badge intent="none">{proposal.subjectHint}</Badge>
+                    )}
+                  </Stack>
+                  <Text
+                    variant="body-sm"
                     style={{
-                      paddingBottom: 'var(--wpds-dimension-padding-md)',
-                      marginBottom: 'var(--wpds-dimension-gap-md)',
-                      borderBottom:
-                        'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                      marginLeft: 'auto',
                       color: 'var(--wpds-color-fg-content-neutral-weak)',
                     }}
                   >
-                    To: {proposal.customerEmail ?? '(no email on file)'} · Order {orderLabel}
-                  </div>
+                    {charCount} chars
+                  </Text>
+                </Stack>
+              </Card.Header>
+              <Card.Content>
+                {!isInternal && (
+                  <Stack
+                    direction="column"
+                    gap="xs"
+                    style={{ marginBottom: 'var(--wpds-dimension-gap-xl)' }}
+                  >
+                    <OrderMetaRow
+                      label="To"
+                      value={`${proposal.customerEmail ?? '(no email on file)'} · Order ${orderLabel}`}
+                    />
+                    {proposal.subjectHint && (
+                      <OrderMetaRow label="Subject" value={proposal.subjectHint} />
+                    )}
+                  </Stack>
                 )}
                 <Text
                   variant="body-md"
                   style={{
                     whiteSpace: 'pre-wrap',
                     lineHeight: 1.65,
-                    fontFamily: 'var(--wpds-typography-font-family-body)',
                   }}
                 >
                   {proposal.message}
@@ -1449,7 +1358,6 @@ function MessageIssueView(props: MessageViewProps) {
               </Notice.Root>
             )}
 
-            <IssueRuns connection={props.connection} issueId={issue.id} />
           </div>
         </div>
         </div>
@@ -1480,73 +1388,6 @@ function MessageIssueView(props: MessageViewProps) {
         />
       )}
     </div>
-  );
-}
-
-// Collapsed runs card shown in the issue detail sidebar area. Loads runs
-// matching the issue_id and renders them newest-first. Hidden entirely when
-// there are no runs yet — don't dominate the layout with an empty section.
-function IssueRuns({
-  connection,
-  issueId,
-}: {
-  connection: Connection;
-  issueId: string;
-}) {
-  const [runs, setRuns] = useState<Run[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.runs
-      .list(connection, { issueId })
-      .then((res) => {
-        if (!cancelled) setRuns(res.runs);
-      })
-      .catch(() => {
-        // Best-effort — don't surface a blocking error in the detail view.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connection, issueId]);
-
-  if (runs.length === 0) return null;
-
-  return (
-    <CollapsibleCard.Root>
-      <CollapsibleCard.Header>
-        <Card.Title>Runs ({runs.length})</Card.Title>
-      </CollapsibleCard.Header>
-      <CollapsibleCard.Content>
-        <Stack direction="column" gap="sm">
-          {runs.map((r) => (
-            <Stack key={r.id} direction="row" gap="md" align="center">
-              <RunStatusBadge status={r.status} />
-              <Text
-                variant="body-sm"
-                style={{
-                  color: 'var(--wpds-color-fg-content-neutral-weak)',
-                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                }}
-              >
-                {r.scheduled_at
-                  ? new Date(r.scheduled_at).toLocaleString()
-                  : '—'}
-              </Text>
-              <Link
-                to={`/runs/${r.id}`}
-                style={{
-                  fontSize: 'var(--wpds-typography-font-size-xs)',
-                  color: 'var(--wpds-color-fg-content-neutral-weak)',
-                }}
-              >
-                {r.id.slice(0, 8).toUpperCase()}
-              </Link>
-            </Stack>
-          ))}
-        </Stack>
-      </CollapsibleCard.Content>
-    </CollapsibleCard.Root>
   );
 }
 
