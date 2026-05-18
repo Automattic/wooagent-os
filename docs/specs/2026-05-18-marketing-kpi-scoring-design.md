@@ -98,11 +98,11 @@ Adds two sections to the existing instruction block:
 
 - **Voice corpus**: "Here are 3–5 existing product descriptions from this store. Use them as the reference for the store's voice. Each variant's `voice` score is its match against this corpus on a 0–100 scale — phrasing, register, sentence rhythm, lexical choices. Reward natural alignment; do not reward copying."
 - **SEO rubric** (6 checks, each contributes ~16 points, LLM rounds the total):
-  - Focus keyphrase = the product name; appears in the body naturally
-  - Keyphrase density in the 0.5–3% band (no stuffing, no absence)
-  - Length adequacy: 80–300 words
-  - Benefit-led opener: first sentence leads with what the product does for the customer, not the product's name
-  - Scannability: short sentences (median ≤ 20 words), short paragraphs (≤ 3 sentences)
+  - Focus keyphrase = the product name; appears in the body naturally (not necessarily verbatim — common-noun variants are fine)
+  - Keyphrase coverage: the product's noun phrase or a close paraphrase appears at least once in 4 sentences or fewer
+  - Length adequacy: variant body is within the skill's existing 140–220 character window (the schema constraint — a "too short" or "too long" variant fails this check)
+  - Benefit-led opener: first sentence leads with what the product does for the customer, not the product's name or category
+  - Scannability: short sentences (median ≤ 20 words), 2–4 sentences total per the existing skill rule
   - Specificity: at least 2 concrete features, materials, or measurements
 
 Output schema in the prompt updates from `{variants: [{label, angle, body}]}` to `{variants: [{label, angle, body, seo, voice}]}`. When the corpus is empty (new store, all thin descriptions), the prompt instructs the LLM to emit `null` for `voice` (not 0) — the Go validator treats `null` as "field absent" and omits it from the persisted variant.
