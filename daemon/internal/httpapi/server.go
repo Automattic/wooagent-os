@@ -126,6 +126,7 @@ func (s *Server) buildRouter() chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(s.bearerAuth)
 		r.Get("/v1/agents", s.handleListAgents)
+		r.Post("/v1/agents/{slug}/enable", s.handleEnableAgent)
 		r.Get("/v1/issues", s.handleListIssues)
 		r.Post("/v1/issues", s.handleCreateIssue)
 		r.Get("/v1/issues/{id}", s.handleGetIssue)

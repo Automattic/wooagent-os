@@ -16,8 +16,19 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
+
+// addableDefaultCadenceSeconds maps a persona slug to the cadence used
+// when the operator adds it via POST /v1/agents/{slug}/enable. Slugs not
+// in the map fall back to the agents.cadence_seconds column default
+// (21600 / 6h). Tune per persona based on the work shape: digest-style
+// personas (Reporting) want a longer interval than continuous-task
+// personas (Marketing, Pricing).
+var addableDefaultCadenceSeconds = map[string]int{
+	"reporting": 86400, // 24h — Reporting is digest-style
+}
 
 // Persona is the v0.1 agent-persona wire shape.
 type Persona struct {
@@ -80,6 +91,7 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	agents := []Persona{}
+	seen := map[string]bool{}
 	for rows.Next() {
 		var p Persona
 		var enabled int
@@ -100,9 +112,109 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		seen[p.Persona] = true
 		agents = append(agents, p)
 	}
+
+	// Merge in personas registered at runtime that aren't yet in the
+	// agents table. These appear with Enabled=false so the UI can
+	// surface them as addable (via the Add Agent modal -> POST
+	// /v1/agents/{slug}/enable). A persona absent from the registry but
+	// present in the DB (e.g. a slug from an earlier daemon version)
+	// stays in the response as-is — operators can still see / disable
+	// historical rows.
+	for _, p := range personas.All() {
+		slug := p.Slug()
+		if seen[slug] {
+			continue
+		}
+		agents = append(agents, Persona{
+			Persona: slug,
+			Name:    p.DisplayName(),
+			Enabled: false,
+		})
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+}
+
+// handleEnableAgent inserts (or updates) the agents row for the slug in
+// the URL with enabled=1, picking a sensible default cadence per
+// addableDefaultCadenceSeconds. The persona must be registered in the
+// runtime registry — otherwise 404. The slug must already exist in the
+// agents table (rare for v0.1 but possible after a fresh init) — handled
+// by INSERT OR REPLACE which preserves last_run_at via COALESCE.
+//
+// Returns the updated Persona on success so the UI can refresh
+// optimistically without a second round-trip.
+func (s *Server) handleEnableAgent(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	p, ok := personas.Lookup(slug)
+	if !ok {
+		writeError(w, http.StatusNotFound, "persona_not_registered",
+			fmt.Sprintf("no persona %q is registered in this daemon build", slug))
+		return
+	}
+
+	cadence := addableDefaultCadenceSeconds[slug] // 0 = use column default
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// INSERT OR REPLACE rewrites the row but preserves last_run_at via
+	// COALESCE against the existing value (NULL for a fresh insert).
+	// max_attempts uses the column default on first insert; existing
+	// rows keep their value.
+	if cadence > 0 {
+		_, err := s.store.DB.ExecContext(r.Context(),
+			`INSERT INTO agents(persona, name, cadence_seconds, enabled, created_at, updated_at)
+			 VALUES(?, ?, ?, 1, ?, ?)
+			 ON CONFLICT(persona) DO UPDATE SET
+			   name = excluded.name,
+			   cadence_seconds = excluded.cadence_seconds,
+			   enabled = 1,
+			   updated_at = excluded.updated_at`,
+			slug, p.DisplayName(), cadence, now, now,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
+		}
+	} else {
+		_, err := s.store.DB.ExecContext(r.Context(),
+			`INSERT INTO agents(persona, name, enabled, created_at, updated_at)
+			 VALUES(?, ?, 1, ?, ?)
+			 ON CONFLICT(persona) DO UPDATE SET
+			   name = excluded.name,
+			   enabled = 1,
+			   updated_at = excluded.updated_at`,
+			slug, p.DisplayName(), now, now,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
+		}
+	}
+
+	// Read back the canonical row so the response matches what GET
+	// /v1/agents will return.
+	var persona Persona
+	var enabled int
+	var lastRunAt sql.NullString
+	err := s.store.DB.QueryRowContext(r.Context(),
+		`SELECT persona, name, COALESCE(model_preference, ''), enabled,
+		        cadence_seconds, max_attempts, last_run_at
+		 FROM agents WHERE persona = ?`, slug,
+	).Scan(&persona.Persona, &persona.Name, &persona.ModelPreference, &enabled,
+		&persona.CadenceSeconds, &persona.MaxAttempts, &lastRunAt)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_readback", err.Error())
+		return
+	}
+	persona.Enabled = enabled != 0
+	if lastRunAt.Valid && lastRunAt.String != "" {
+		v := lastRunAt.String
+		persona.LastRunAt = &v
+	}
+	writeJSON(w, http.StatusOK, persona)
 }
 
 func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
