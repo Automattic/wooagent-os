@@ -5,17 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
-
-// stubAbilities is the test double for personas.Abilities — answers true
-// for any name in have, false for everything else.
-type stubAbilities struct {
-	have map[string]bool
-}
-
-func (s stubAbilities) Has(name string) bool { return s.have[name] }
 
 func TestReporting_SlugAndDisplayName(t *testing.T) {
 	r := Reporting{}
@@ -54,66 +45,64 @@ func TestReporting_Draft_NoMCP_SkippedWithReason(t *testing.T) {
 	}
 }
 
-// Reporting requires woocommerce/find-products (a WC AI plugin ability).
-// Without it, the persona MUST skip rather than fall back — there's no
-// baseline Companion Plugin ability that exposes the data_issues filter.
-func TestReporting_Draft_NoAbilities_SkippedWithReason(t *testing.T) {
-	deps := personas.Deps{
-		MCP:       &mcp.Client{},
-		Abilities: personas.NilAbilities{},
-	}
-	res, err := Reporting{}.Draft(context.Background(), deps)
-	if err != nil {
-		t.Fatalf("Draft: %v", err)
-	}
-	if !res.Skipped {
-		t.Errorf("expected Skipped when Abilities.Has returns false for everything")
-	}
-	if !strings.Contains(res.SkipReason, "Woo AI") {
-		t.Errorf("SkipReason should call out the Woo AI plugin by name (operator-facing); got %q", res.SkipReason)
-	}
-	if !strings.Contains(res.SkipReason, requiredAbility) {
-		t.Errorf("SkipReason should name the missing ability for diagnosability; got %q", res.SkipReason)
+// The data-issue detection is pure-function and exercised here without
+// MCP. dataIssuesFor is the heart of the persona: it decides what counts
+// as "needs attention." Test that the two checks fire independently and
+// that a fully-filled product produces an empty issue list.
+func TestDataIssuesFor_BothMissing(t *testing.T) {
+	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish"})
+	if len(issues) != 2 {
+		t.Errorf("expected 2 issues for zero-length descriptions; got %v", issues)
 	}
 }
 
-// When deps.Abilities is left nil (rather than NilAbilities), Draft must
-// still skip gracefully — never panic on the nil-check path. Guards
-// against a future caller that forgets to wire the field.
-func TestReporting_Draft_NilAbilitiesField_SkippedNotPanic(t *testing.T) {
-	deps := personas.Deps{
-		MCP:       &mcp.Client{},
-		Abilities: nil,
-	}
-	res, err := Reporting{}.Draft(context.Background(), deps)
-	if err != nil {
-		t.Fatalf("Draft: %v", err)
-	}
-	if !res.Skipped {
-		t.Errorf("expected Skipped when Abilities field is nil")
+func TestDataIssuesFor_LongOnly(t *testing.T) {
+	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish", ShortDescriptionLength: 50})
+	if len(issues) != 1 || !strings.Contains(issues[0], "long description") {
+		t.Errorf("expected just \"missing long description\"; got %v", issues)
 	}
 }
 
-func TestRenderDigest_TotalAndPreviewMatch(t *testing.T) {
+func TestDataIssuesFor_ShortOnly(t *testing.T) {
+	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish", DescriptionLength: 200})
+	if len(issues) != 1 || !strings.Contains(issues[0], "short description") {
+		t.Errorf("expected just \"missing short description\"; got %v", issues)
+	}
+}
+
+func TestDataIssuesFor_AllPresent_NoIssues(t *testing.T) {
+	issues := dataIssuesFor(productSummary{
+		ID: 1, Name: "X", Status: "publish",
+		DescriptionLength: 200, ShortDescriptionLength: 50,
+	})
+	if len(issues) != 0 {
+		t.Errorf("expected zero issues for a fully-filled product; got %v", issues)
+	}
+}
+
+func TestRenderDigest_NotTruncated(t *testing.T) {
 	matches := []productMatch{
-		{ProductID: 1, Name: "Cashmere Scarf"},
-		{ProductID: 2, Name: "Wool Cardigan"},
+		{ProductID: 1, Name: "Cashmere Scarf", Issues: []string{"missing long description"}},
+		{ProductID: 2, Name: "Wool Cardigan", Issues: []string{"missing short description"}},
 	}
-	body := renderDigest(matches, 2)
+	body := renderDigest(matches, 2, false)
 	if !strings.Contains(body, "**2 products:**") {
 		t.Errorf("body should say \"2 products\" when total equals preview length; got:\n%s", body)
 	}
 	if !strings.Contains(body, "Cashmere Scarf") || !strings.Contains(body, "product #1") {
 		t.Errorf("body should include product name + ID; got:\n%s", body)
 	}
+	if !strings.Contains(body, "missing long description") {
+		t.Errorf("body should include the issue text; got:\n%s", body)
+	}
 }
 
-func TestRenderDigest_TotalExceedsPreview_NotesTruncation(t *testing.T) {
+func TestRenderDigest_Truncated(t *testing.T) {
 	matches := []productMatch{
-		{ProductID: 1, Name: "Cashmere Scarf"},
-		{ProductID: 2, Name: "Wool Cardigan"},
+		{ProductID: 1, Name: "Cashmere Scarf", Issues: []string{"missing long description"}},
+		{ProductID: 2, Name: "Wool Cardigan", Issues: []string{"missing short description"}},
 	}
-	body := renderDigest(matches, 47)
+	body := renderDigest(matches, 47, true)
 	if !strings.Contains(body, "**47 total matches**") {
 		t.Errorf("body should call out the truncated total; got:\n%s", body)
 	}
