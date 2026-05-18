@@ -80,6 +80,20 @@ func TestDataIssuesFor_AllPresent_NoIssues(t *testing.T) {
 	}
 }
 
+// DedupKey on the Drafted is the system-wide guard's hook — without it,
+// two scheduler ticks (or two operator "Run Now" clicks) race straight
+// through RunAndPersist and produce identical digest cards. See
+// docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+func TestBuildDataIssuesDigest_SetsDedupKey(t *testing.T) {
+	matches := []productMatch{
+		{ProductID: 1, Name: "X", Issues: []string{"missing long description"}},
+	}
+	d := buildDataIssuesDigest(matches, 1, false)
+	if d.DedupKey != "digest:data_issues" {
+		t.Errorf("DedupKey = %q, want %q", d.DedupKey, "digest:data_issues")
+	}
+}
+
 func TestRenderDigest_NotTruncated(t *testing.T) {
 	matches := []productMatch{
 		{ProductID: 1, Name: "Cashmere Scarf", Issues: []string{"missing long description"}},

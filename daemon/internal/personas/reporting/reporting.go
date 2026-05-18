@@ -57,11 +57,15 @@ func (Reporting) Slug() string        { return "reporting" }
 func (Reporting) DisplayName() string { return "Reporting" }
 
 // Cooldown is zero-value because Reporting doesn't dedup by target. A
-// digest summarizes *the catalog state right now*; the cadence-based
-// gating on agents.cadence_seconds (set when the operator opts in via
-// Add Agent) is the only "don't propose too often" lever this persona
-// uses. Draft must not call personas.RecentlyTouchedTargets — the empty
-// TargetKey would return an error.
+// digest summarizes *the catalog state right now*; per-target Cooldown
+// (Marketing's product_id pattern) doesn't fit. Draft must not call
+// personas.RecentlyTouchedTargets — the empty TargetKey would return
+// an error.
+//
+// The "don't double-emit while still in review" guarantee comes from
+// Drafted.DedupKey (set to "digest:data_issues" in buildDataIssuesDigest)
+// + RunAndPersist's insert-time guard. The cadence-based gating on
+// agents.cadence_seconds is still the upstream throttle.
 func (Reporting) Cooldown() personas.CooldownPolicy {
 	return personas.CooldownPolicy{}
 }
@@ -92,22 +96,35 @@ func (Reporting) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		}, nil
 	}
 
-	title := fmt.Sprintf("Product health digest · %d product%s need attention",
-		total, plural(total))
-	content := renderDigest(matches, total, truncated)
+	return buildDataIssuesDigest(matches, total, truncated), nil
+}
 
+// buildDataIssuesDigest assembles the Drafted for a data-issues digest.
+// Extracted from Draft so unit tests can verify the persona's contract
+// fields (notably DedupKey, the hook for RunAndPersist's insert-time
+// dedup guard) without standing up a fake MCP.
+func buildDataIssuesDigest(matches []productMatch, total int, truncated bool) personas.Drafted {
 	return personas.Drafted{
-		Title:           title,
+		Title: fmt.Sprintf("Product health digest · %d product%s need attention",
+			total, plural(total)),
 		Description:     fmt.Sprintf("Drafted by Reporting persona. %d total matches; previewing up to %d.", total, digestPreviewSize),
 		Priority:        "low",
 		ProposalType:    "product_health_digest",
-		ProposalContent: content,
+		ProposalContent: renderDigest(matches, total, truncated),
 		Target: map[string]any{
 			"digest_kind":  "data_issues",
 			"total_count":  total,
 			"preview_size": len(matches),
 		},
-	}, nil
+		// DedupKey is what RunAndPersist's insert-time guard reads to
+		// block a second in_review digest from landing while the first
+		// is still open. Reporting summarizes catalog state and has no
+		// per-target id to dedup against, so a stable string is the
+		// right shape. Future digest kinds get their own slug; future
+		// time-bucketed digests would add an ISO-week suffix.
+		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+		DedupKey: "digest:data_issues",
+	}
 }
 
 // productSummary mirrors the wooagent-products/list summary fields

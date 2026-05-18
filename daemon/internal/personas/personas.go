@@ -43,13 +43,14 @@ import (
 // target (a product, an order, etc.).
 //
 // When adding a new persona (Inventory, Accounting, Reporting, Chief of
-// Staff, …), apply BOTH established patterns:
+// Staff, …), apply ALL THREE established patterns:
 //
 //   1. Implement Cooldown() with the right TargetKey + per-risk durations.
 //      Customer-facing targets (orders, messages) → longer windows; pure
 //      back-of-house copy/price tweaks → shorter windows. Call
 //      RecentlyTouchedTargets at the top of Draft and pass the set into
-//      the picker.
+//      the picker. Digest-style personas with no per-target id leave
+//      Cooldown zero-value and rely on DedupKey (pattern 3) instead.
 //
 //   2. Run an in-Draft loop up to maxDraftAttempts (=3, defined per
 //      package). If the LLM returns no_proposal / empty draft for the
@@ -58,6 +59,14 @@ import (
 //      product the web_search can't find comparables for) blocks the
 //      persona indefinitely — the failed target never enters the
 //      persistent cooldown because no issue was ever inserted.
+//
+//   3. Set Drafted.DedupKey to a stable string identifying the proposal's
+//      logical target so the system-wide insert-time guard refuses to
+//      emit a second in_review issue with the same identity. Marketing /
+//      Pricing use "product:<id>"; Sales Support uses "order:<id>";
+//      digest personas use "digest:<kind>" (add an ISO-week suffix for
+//      time-bucketed digests). See
+//      docs/specs/2026-05-18-agent-proposal-dedup-design.md.
 //
 // See marketing.go / pricing.go / sales-support.go for canonical examples.
 type Persona interface {
@@ -159,6 +168,19 @@ type Drafted struct {
 	Target          map[string]any
 	Skipped         bool
 	SkipReason      string
+
+	// DedupKey is the proposal's logical identity for the insert-time
+	// guard in RunAndPersist. When non-empty, a new emit is skipped if an
+	// in_review issue with the same (persona, dedup_key) already exists.
+	// Empty string opts out — back-compat default. Examples:
+	//   Marketing/Pricing: "product:<id>"
+	//   Sales Support:     "order:<id>"
+	//   Reporting:         "digest:data_issues" (or "digest:<kind>:<period>"
+	//                      for time-bucketed digests)
+	// Cooldown still owns the approved/dismissed history windows; this
+	// field only blocks while a prior proposal is still open.
+	// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+	DedupKey string
 
 	// BatchSiblings, when non-nil, turns this Drafted into the *first* child
 	// of a batch. RunAndPersist creates a row in the `batches` table and
@@ -344,6 +366,40 @@ func RecentlyTouchedTargets(
 	return out, nil
 }
 
+// findOpenIssueWithDedupKey returns the id of an in_review issue for the
+// given persona whose dedup_key matches the supplied key, or an empty
+// string when none exists. NULL-stored keys never match (the partial
+// index excludes them anyway). Used by RunAndPersist's insert-time guard
+// to skip a Drafted whose logical identity is already represented by an
+// open proposal.
+//
+// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+func findOpenIssueWithDedupKey(
+	ctx context.Context,
+	st *store.Store,
+	slug, key string,
+) (string, error) {
+	var id sql.NullString
+	err := st.DB.QueryRowContext(ctx, `
+		SELECT id FROM issues
+		 WHERE persona = ?
+		   AND dedup_key = ?
+		   AND status = 'in_review'
+		 LIMIT 1`,
+		slug, key,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("query open dedup issue: %w", err)
+	}
+	if !id.Valid {
+		return "", nil
+	}
+	return id.String, nil
+}
+
 // RunAndPersist is the boot-time entry point. Checks agents.enabled,
 // guards against duplicate seeding, calls Draft, and inserts the issue.
 // All persistence happens here so child packages stay focused on the
@@ -454,6 +510,29 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 			continue
 		}
 
+		// Insert-time dedup guard: when the persona declared a stable
+		// logical identity via Drafted.DedupKey, refuse to emit a second
+		// in_review issue with the same key. Cooldown still owns the
+		// approved/dismissed history; this only blocks while a prior
+		// proposal is still open. Fail-open on a transient query error
+		// (the guard is a safety net, not a correctness invariant).
+		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+		if d.DedupKey != "" {
+			if existingID, qerr := findOpenIssueWithDedupKey(ctx, deps.Store, slug, d.DedupKey); qerr == nil && existingID != "" {
+				recordTurn(ctx, deps.Recorder, tracker, "", d)
+				reason := fmt.Sprintf("duplicate of %s (still in review)", existingID)
+				if i == 0 {
+					res.Skipped = true
+					res.SkipReason = reason
+					return res, nil
+				}
+				if res.SkipReason == "" {
+					res.SkipReason = fmt.Sprintf("emit %d/%d skipped: %s", i+1, emitTarget, reason)
+				}
+				break
+			}
+		}
+
 		id, err := insertIssue(ctx, deps.Store, slug, d)
 		if err != nil {
 			recordTurn(ctx, deps.Recorder, tracker, "", d)
@@ -517,10 +596,15 @@ func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted
 		targetJSON = sql.NullString{String: string(b), Valid: true}
 	}
 
+	var dedupKey sql.NullString
+	if d.DedupKey != "" {
+		dedupKey = sql.NullString{String: d.DedupKey, Valid: true}
+	}
+
 	_, err := st.DB.ExecContext(ctx,
-		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, dedup_key) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, d.Title, d.Description, persona, "in_review", priority, now, now,
-		d.ProposalType, d.ProposalContent, targetJSON,
+		d.ProposalType, d.ProposalContent, targetJSON, dedupKey,
 	)
 	if err != nil {
 		return "", err

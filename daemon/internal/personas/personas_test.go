@@ -2,6 +2,7 @@ package personas
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -321,6 +322,250 @@ func TestRecentlyTouchedTargets_EmptyTargetKeyErrors(t *testing.T) {
 	_, err := RecentlyTouchedTargets(context.Background(), st, "ghost", CooldownPolicy{})
 	if err == nil {
 		t.Fatal("expected error for empty TargetKey, got nil")
+	}
+}
+
+// ---- RunAndPersist dedup-key guard ----
+
+func TestRunAndPersist_DedupKey_BlocksWhileInReview(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	p := fakePersona{slug: "reporter", drafted: Drafted{
+		Title:           "Product health digest",
+		ProposalType:    "product_health_digest",
+		ProposalContent: "body",
+		DedupKey:        "digest:data_issues",
+	}}
+	first, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if first.Skipped || first.IssueID == "" {
+		t.Fatalf("first run: expected insert, got %+v", first)
+	}
+
+	// Second run, identical DedupKey, first issue still in_review.
+	// Count-based guard would let this through (1 open < threshold),
+	// so a block here proves the dedup-key guard fired.
+	second, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if !second.Skipped {
+		t.Errorf("expected second run blocked by dedup-key guard; got %+v", second)
+	}
+	if second.IssueID != "" {
+		t.Errorf("expected no IssueID on dup skip; got %q", second.IssueID)
+	}
+	if !strings.Contains(second.SkipReason, first.IssueID) {
+		t.Errorf("SkipReason should reference duplicate id %q; got %q", first.IssueID, second.SkipReason)
+	}
+}
+
+func TestRunAndPersist_DedupKey_EmptyKeyIsNoOp(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "fake-empty", 1)
+	p := fakePersona{slug: "fake-empty", drafted: Drafted{
+		Title: "first", ProposalType: "x", ProposalContent: "1",
+		// DedupKey deliberately empty — back-compat path.
+	}}
+	if _, err := RunAndPersist(context.Background(), p, Deps{Store: st}); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	// Second emit with empty DedupKey must NOT be blocked by the
+	// dedup-key guard. (Count threshold still applies; with one open,
+	// we're under it.)
+	res, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if res.Skipped {
+		t.Errorf("empty DedupKey should not block; got skip: %s", res.SkipReason)
+	}
+	if res.IssueID == "" {
+		t.Errorf("expected second IssueID; got empty")
+	}
+}
+
+func TestRunAndPersist_DedupKey_DoneRowDoesNotBlock(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	p := fakePersona{slug: "reporter", drafted: Drafted{
+		Title:           "x",
+		ProposalType:    "y",
+		ProposalContent: "z",
+		DedupKey:        "digest:data_issues",
+	}}
+	first, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil || first.IssueID == "" {
+		t.Fatalf("first run: %v / %+v", err, first)
+	}
+	// Resolve it.
+	if _, err := st.DB.ExecContext(context.Background(),
+		`UPDATE issues SET status='done' WHERE id=?`, first.IssueID,
+	); err != nil {
+		t.Fatalf("flip to done: %v", err)
+	}
+	second, err := RunAndPersist(context.Background(), p, Deps{Store: st})
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if second.Skipped {
+		t.Errorf("done row should not block same DedupKey; got skip: %s", second.SkipReason)
+	}
+	if second.IssueID == "" {
+		t.Errorf("expected new IssueID; got empty")
+	}
+}
+
+// ---- findOpenIssueWithDedupKey ----
+
+// seedIssueWithDedupKey is a sibling of seedIssue for the dedup-key tests.
+// dedupKey "" lands as SQL NULL; non-empty lands as a literal string.
+func seedIssueWithDedupKey(
+	t *testing.T,
+	st *store.Store,
+	persona, status, dedupKey string,
+) string {
+	t.Helper()
+	id := uuid.NewString()
+	now := time.Now().UTC().Format(time.RFC3339)
+	var keyArg any
+	if dedupKey != "" {
+		keyArg = dedupKey
+	}
+	_, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, dedup_key)
+		 VALUES(?, 'fixture', '', ?, ?, 'medium', ?, ?, 'x', '', ?)`,
+		id, persona, status, now, now, keyArg,
+	)
+	if err != nil {
+		t.Fatalf("seed issue: %v", err)
+	}
+	return id
+}
+
+func TestFindOpenIssueWithDedupKey_HitsInReview(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	wantID := seedIssueWithDedupKey(t, st, "reporter", "in_review", "digest:data_issues")
+
+	got, err := findOpenIssueWithDedupKey(context.Background(), st, "reporter", "digest:data_issues")
+	if err != nil {
+		t.Fatalf("findOpenIssueWithDedupKey: %v", err)
+	}
+	if got != wantID {
+		t.Errorf("got id %q, want %q", got, wantID)
+	}
+}
+
+func TestFindOpenIssueWithDedupKey_IgnoresNonInReview(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	// Three matching-key issues in non-in_review states; the guard must
+	// not block on any of them — Cooldown owns approved/dismissed gating.
+	seedIssueWithDedupKey(t, st, "reporter", "done", "digest:data_issues")
+	seedIssueWithDedupKey(t, st, "reporter", "dismissed", "digest:data_issues")
+	seedIssueWithDedupKey(t, st, "reporter", "rejected", "digest:data_issues")
+
+	got, err := findOpenIssueWithDedupKey(context.Background(), st, "reporter", "digest:data_issues")
+	if err != nil {
+		t.Fatalf("findOpenIssueWithDedupKey: %v", err)
+	}
+	if got != "" {
+		t.Errorf("got id %q, want empty (no in_review row)", got)
+	}
+}
+
+func TestFindOpenIssueWithDedupKey_IgnoresOtherPersona(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	seedAgent(t, st, "marketer", 1)
+	// Same key, different persona — must not collide. Cross-persona
+	// dedup is out of scope (Marketing copy + Reporting digest can both
+	// reference the same underlying data).
+	seedIssueWithDedupKey(t, st, "marketer", "in_review", "digest:data_issues")
+
+	got, err := findOpenIssueWithDedupKey(context.Background(), st, "reporter", "digest:data_issues")
+	if err != nil {
+		t.Fatalf("findOpenIssueWithDedupKey: %v", err)
+	}
+	if got != "" {
+		t.Errorf("got id %q, want empty (cross-persona)", got)
+	}
+}
+
+func TestFindOpenIssueWithDedupKey_NullStoredKey(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	// A NULL-keyed in_review row must never match a non-empty query —
+	// otherwise existing personas that don't set DedupKey would
+	// accidentally block each other.
+	seedIssueWithDedupKey(t, st, "reporter", "in_review", "")
+
+	got, err := findOpenIssueWithDedupKey(context.Background(), st, "reporter", "digest:data_issues")
+	if err != nil {
+		t.Fatalf("findOpenIssueWithDedupKey: %v", err)
+	}
+	if got != "" {
+		t.Errorf("got id %q, want empty (NULL stored key)", got)
+	}
+}
+
+// ---- insertIssue + Drafted.DedupKey ----
+
+// dedupKeyFor reads the stored dedup_key for an issue id, returning the
+// SQL value as (string, isNull) so tests can distinguish empty-string
+// from NULL — the partial index hinges on the difference.
+func dedupKeyFor(t *testing.T, st *store.Store, issueID string) (string, bool) {
+	t.Helper()
+	var key sql.NullString
+	err := st.DB.QueryRowContext(context.Background(),
+		`SELECT dedup_key FROM issues WHERE id = ?`, issueID,
+	).Scan(&key)
+	if err != nil {
+		t.Fatalf("read dedup_key: %v", err)
+	}
+	return key.String, key.Valid
+}
+
+func TestInsertIssue_PersistsDedupKey(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	d := Drafted{
+		Title:           "x",
+		ProposalType:    "y",
+		ProposalContent: "z",
+		DedupKey:        "digest:data_issues",
+	}
+	id, err := insertIssue(context.Background(), st, "reporter", d)
+	if err != nil {
+		t.Fatalf("insertIssue: %v", err)
+	}
+	got, valid := dedupKeyFor(t, st, id)
+	if !valid || got != "digest:data_issues" {
+		t.Errorf("dedup_key: got (%q, valid=%v), want (\"digest:data_issues\", true)", got, valid)
+	}
+}
+
+func TestInsertIssue_EmptyDedupKeyStoresNull(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "reporter", 1)
+	d := Drafted{
+		Title:           "x",
+		ProposalType:    "y",
+		ProposalContent: "z",
+		// DedupKey deliberately empty — back-compat for personas that
+		// don't opt in must store SQL NULL so the partial index excludes
+		// the row.
+	}
+	id, err := insertIssue(context.Background(), st, "reporter", d)
+	if err != nil {
+		t.Fatalf("insertIssue: %v", err)
+	}
+	_, valid := dedupKeyFor(t, st, id)
+	if valid {
+		t.Errorf("expected dedup_key NULL for empty DedupKey, got valid string")
 	}
 }
 

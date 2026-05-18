@@ -249,6 +249,11 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 		ProposalType:    "product_description_rewrite",
 		ProposalContent: content,
 		Target:          target,
+		// Belt over the existing product_id Cooldown — the picker
+		// already skips products with open issues, but RunAndPersist's
+		// insert-time guard catches races that bypass the picker.
+		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+		DedupKey: fmt.Sprintf("product:%d", p.ID),
 	}, nil
 }
 
