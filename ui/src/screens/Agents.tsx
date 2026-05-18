@@ -164,10 +164,16 @@ function modelOptionsFor(current: string | undefined) {
 }
 
 // Sentence case for all display names. Acronyms (SEO) stay uppercased.
+// The 'reporting' override exists alongside the Go-side rename in
+// Reporting.DisplayName() because operators who added Reporting before
+// the rename still have "Reporting agent" cached in their agents.name
+// column — this override ensures they see the new name on next page load
+// without a DB migration.
 function displayName(p: Persona): string {
   if (p.persona === 'marketing') return 'Marketing & SEO';
   if (p.persona === 'inventory') return 'Inventory manager';
   if (p.persona === 'sales-support') return 'Sales support';
+  if (p.persona === 'reporting') return 'Reporting';
   if (p.persona === 'chief') return 'Chief of staff';
   const fallback = p.name || p.persona;
   return fallback.charAt(0).toUpperCase() + fallback.slice(1).toLowerCase();
