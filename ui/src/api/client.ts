@@ -598,6 +598,10 @@ export interface Ability {
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
+  enableAgent: (c: Connection, slug: string) =>
+    request<Persona>(c, `/v1/agents/${encodeURIComponent(slug)}/enable`, {
+      method: 'POST',
+    }),
   runs: {
     list: (
       c: Connection,
