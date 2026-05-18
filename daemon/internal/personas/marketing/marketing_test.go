@@ -238,7 +238,7 @@ type fakeMCP struct {
 	listProductsResp []byte
 }
 
-func (f *fakeMCP) CallTool(ctx context.Context, name string, params map[string]any) (mcp.ToolCallResult, error) {
+func (f *fakeMCP) CallTool(ctx context.Context, name string, args any) (mcp.ToolCallResult, error) {
 	// Mirrors callAbility's envelope shape.
 	envelope := fmt.Sprintf(`{"success":true,"data":%s}`, string(f.listProductsResp))
 	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
