@@ -101,7 +101,37 @@ type Deps struct {
 	// the just-inserted issue showing up in RecentlyTouchedTargets so
 	// each persona picks a *different* target each loop.
 	MaxEmits int
+	// Abilities answers "is this fully-qualified ability invokable on the
+	// connected store right now?" Personas use it to branch between a
+	// baseline path (always-on Companion Plugin abilities) and an enhanced
+	// path that depends on an optional plugin (e.g. the WC AI plugin's
+	// woocommerce/find-products, woocommerce/plan-batch-operation, etc.).
+	// See docs/specs/2026-05-18-wc-ai-integration-strategy-design.md.
+	//
+	// Nil-safe: when unset, personas should fall through to the baseline
+	// path (NilAbilities is the explicit zero value for tests and debug
+	// runs).
+	Abilities Abilities
 }
+
+// Abilities reports which ability names are presently invokable on the
+// connected store. "Invokable" mirrors the PEP's trust-gate semantics:
+// the ability is either pre-signed in the bundled manifest, or operator-
+// trusted in the abilities cache at its current schema_hash, and not
+// revoked. A persona asking Has does not get a hard guarantee that an
+// eventual call will succeed (PEP runs more checks: persona scope, schema
+// validation, budget); it gets the lightweight pre-check needed to decide
+// which code path to take.
+type Abilities interface {
+	Has(name string) bool
+}
+
+// NilAbilities is the explicit "no enhanced abilities available" sentinel.
+// Personas constructed with NilAbilities always take the baseline path.
+type NilAbilities struct{}
+
+// Has always returns false.
+func (NilAbilities) Has(string) bool { return false }
 
 // Env is the env-var surface area a persona is allowed to consult. We
 // flatten it through Deps so unit tests can supply fixtures and so missing
