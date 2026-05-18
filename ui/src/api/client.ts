@@ -288,6 +288,10 @@ export interface Variant {
   charCount: number;
   recommended?: boolean;
   note?: string;
+  /** Marketing-specific tone descriptor surfaced by the LLM
+   *  ('material' / 'use' / 'story'). Falls back to undefined for seed/demo
+   *  data that encodes the descriptor in `label` instead. */
+  angle?: string;
 }
 
 export interface Proposal {
@@ -325,6 +329,7 @@ export function variantsFromProposal(p: Proposal | null | undefined): Variant[] 
         typeof r.charCount === 'number' ? r.charCount : r.body.length,
       recommended: r.recommended === true,
       note: typeof r.note === 'string' ? r.note : undefined,
+      angle: typeof r.angle === 'string' ? r.angle : undefined,
     });
   }
   return out.length > 0 ? out : null;

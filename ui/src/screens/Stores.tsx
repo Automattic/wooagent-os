@@ -135,7 +135,7 @@ export default function Stores({
 
         <Notice.Root intent="info">
           <Notice.Description>
-            Guardrails, redaction rules, and per-persona opt-in settings land
+            Guardrails, redaction rules, and per-agent opt-in settings land
             in later phases.
           </Notice.Description>
         </Notice.Root>

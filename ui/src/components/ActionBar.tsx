@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Stack, Text } from '@wordpress/ui';
+import { Badge, Stack, Text } from '@wordpress/ui';
 import { Button } from '@wordpress/components';
 import { Icon, check } from '@wordpress/icons';
 
@@ -56,6 +56,9 @@ interface DoneProps {
 
 type Props = ReviewProps | DoneProps;
 
+// Used only for the non-variant badges (price `$`, message `✉` / `#`). The
+// variant badge below uses the shared `.wa-variant-letter` class so the
+// A/B/C circle stays in lockstep with the one on each variant card.
 const badgeBaseStyle: CSSProperties = {
   height: 28,
   width: 28,
@@ -147,7 +150,7 @@ function DoneBar(props: DoneProps) {
           variant="body-sm"
           style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
         >
-          Variant {props.variantId ?? 'A'} written to WooCommerce
+          Variant {variantLetterFromId(props.variantId)} written to WooCommerce
         </Text>
         <Text
           variant="body-sm"
@@ -188,9 +191,17 @@ function DoneBar(props: DoneProps) {
   );
 }
 
+// Variant ids come from the daemon as `var_a` / `var_b` / `var_c`. The
+// footer only needs the trailing letter, uppercased — matches the
+// .wa-variant-letter circle on each variant card.
+function variantLetterFromId(id: string | null | undefined): string {
+  if (!id) return 'A';
+  return (id.split('_').pop() ?? id).slice(0, 1).toUpperCase();
+}
+
 function ReviewBar(props: ReviewProps) {
   const entity = props.entity ?? 'variant';
-  const variantLabel = props.selectedVariantId ?? 'A';
+  const variantLabel = variantLetterFromId(props.selectedVariantId);
   const isPrice = entity === 'price';
   const isMessage = entity === 'message';
   const isInternal = isMessage && props.messageNoteType === 'internal';
@@ -209,7 +220,15 @@ function ReviewBar(props: ReviewProps) {
       </span>
     );
   } else {
-    badge = <span style={badgeBaseStyle}>{variantLabel}</span>;
+    badge = (
+      <span
+        className="wa-variant-letter wa-variant-letter--lg"
+        data-tone={variantLabel.toUpperCase()}
+        aria-hidden="true"
+      >
+        {variantLabel}
+      </span>
+    );
   }
 
   let primaryLine: string;
@@ -282,19 +301,7 @@ function ReviewBar(props: ReviewProps) {
           </Stack>
         </div>
         <div className="wa-action-bar-actions">
-          <span className="wa-reversible-pill">
-            <span
-              aria-hidden="true"
-              style={{
-                height: 6,
-                width: 6,
-                borderRadius: '50%',
-                background: 'currentColor',
-                display: 'inline-block',
-              }}
-            />
-            Reversible · always
-          </span>
+          <Badge intent="none">Reversible · always</Badge>
           <Button
             __next40pxDefaultSize
             variant="tertiary"
