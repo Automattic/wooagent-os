@@ -325,6 +325,11 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 	if err != nil {
 		fmt.Printf("marketing: cold-draft candidate scan errored (%v); falling back to single-rewrite\n", err)
 	} else if len(candidates) >= coldDraftMin {
+		ids := make([]int, 0, len(candidates))
+		for _, c := range candidates {
+			ids = append(ids, c.ID)
+		}
+		fmt.Printf("marketing: cold-draft scan found %d candidates (ids: %v); drafting batch\n", len(candidates), ids)
 		batch, err := draftColdDraftBatch(ctx, deps, candidates, skill.Description, draftColdDraftForProduct)
 		if err != nil {
 			return personas.Drafted{}, err
@@ -333,6 +338,8 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 			return batch, nil
 		}
 		fmt.Printf("marketing: cold-draft batch skipped (%s); falling back to single-rewrite\n", batch.SkipReason)
+	} else {
+		fmt.Printf("marketing: cold-draft scan found %d candidates (need %d); falling back to single-rewrite\n", len(candidates), coldDraftMin)
 	}
 
 	// Within-run iteration: if the LLM can't draft for a product (returns
