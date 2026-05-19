@@ -54,6 +54,7 @@ type Pricing struct{}
 
 func (Pricing) Slug() string        { return "pricing" }
 func (Pricing) DisplayName() string { return "Pricing agent" }
+func (Pricing) Addable() bool       { return false }
 
 // Cooldown: product-centric (proposal_target.product_id). 7d after an
 // approve so the new price has time to settle; 30d after a dismiss so we

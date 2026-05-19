@@ -250,6 +250,7 @@ type Marketing struct{}
 
 func (Marketing) Slug() string        { return "marketing" }
 func (Marketing) DisplayName() string { return "Marketing agent" }
+func (Marketing) Addable() bool       { return false }
 
 // Cooldown: product-centric (proposal_target.product_id). 7d after an
 // approve so we don't rewrite the same description we just wrote; 30d

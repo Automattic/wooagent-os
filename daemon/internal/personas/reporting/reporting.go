@@ -1,14 +1,19 @@
 // Package reporting is the Reporting agent persona.
 //
-// The persona is registered at init() so it appears in the seven-persona
-// sidebar model. Draft() is currently a dormant stub — the original
-// product_health_digest skill was retired 2026-05-18 when Marketing's
-// cold-draft batch workflow took over the empty-copy workflow.
+// Draft is a dormant stub today — the original product_health_digest skill
+// was retired 2026-05-18 when Marketing's cold-draft batch workflow took
+// over the empty-copy workflow. Until a real reporting skill lands
+// (sales summaries, KPI digests, or equivalent), the persona is
+// intentionally NOT registered in the personas registry, so:
 //
-// Draft will return Skipped:true until a real reporting skill lands
-// (sales summaries, KPI digests, or equivalent). The registration and
-// all identity methods are intentionally preserved so the persona shows
-// in the sidebar without code changes when a new skill is wired in.
+//   - GET /v1/agents reports Implemented=false for any historical row
+//     (operators who previously enabled Reporting see "Coming soon" rather
+//     than dead controls).
+//   - PATCH /v1/agents/{slug=reporting} returns 404 (no opt-in path).
+//   - The UI's Add Agent modal does not offer Reporting.
+//
+// The Go-side persona type and methods are preserved so re-enabling once
+// skills are wired is a one-line change (un-comment the Register call).
 package reporting
 
 import (
@@ -18,13 +23,18 @@ import (
 )
 
 func init() {
-	personas.Register(&Reporting{})
+	// Disabled until a real Reporting skill lands. See package comment.
+	// personas.Register(&Reporting{})
 }
 
 type Reporting struct{}
 
 func (Reporting) Slug() string        { return "reporting" }
 func (Reporting) DisplayName() string { return "Reporting" }
+
+// Addable: Reporting ships dormant. Draft is a stub today (product_health_digest
+// retired); operator opts in via Add Agent when a real Reporting skill lands.
+func (Reporting) Addable() bool { return true }
 
 // Cooldown is zero-value because Reporting doesn't dedup by target.
 // A digest summarizes catalog state rather than acting on a specific

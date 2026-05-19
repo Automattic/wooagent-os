@@ -21,16 +21,22 @@ import (
 )
 
 // addableDefaultCadenceSeconds maps a persona slug to the cadence used
-// when the operator adds it via POST /v1/agents/{slug}/enable. Slugs not
-// in the map fall back to the agents.cadence_seconds column default
-// (21600 / 6h). Tune per persona based on the work shape: digest-style
-// personas (Reporting) want a longer interval than continuous-task
-// personas (Marketing, Pricing).
+// when PATCH /v1/agents/{slug} first inserts the row (no operator-supplied
+// cadence_seconds in the patch body). Slugs not in the map fall back to
+// the agents.cadence_seconds column default (21600 / 6h). Tune per persona
+// based on the work shape: digest-style personas (Reporting) want a longer
+// interval than continuous-task personas (Marketing, Pricing).
 var addableDefaultCadenceSeconds = map[string]int{
 	"reporting": 86400, // 24h — Reporting is digest-style
 }
 
 // Persona is the v0.1 agent-persona wire shape.
+//
+// Implemented and Addable are sourced from the in-process personas registry,
+// not from the agents table: they describe what the daemon *can* drive, not
+// what's currently configured. The Agents screen uses them to decide
+// whether to render full controls (toggle, model picker, Run now) or the
+// "Coming soon" treatment.
 type Persona struct {
 	Persona         string  `json:"persona"`
 	Name            string  `json:"name"`
@@ -40,6 +46,16 @@ type Persona struct {
 	MaxAttempts     int     `json:"max_attempts"`
 	LastRunAt       *string `json:"last_run_at"`
 	NextRunAt       *string `json:"next_run_at"`
+	// Implemented reports whether a Go-side persona is registered for this
+	// slug — i.e. the daemon has a Draft() implementation. Unimplemented
+	// slugs (Inventory, Accounting, Chief of Staff today) render as
+	// "Coming soon" in the UI.
+	Implemented bool `json:"implemented"`
+	// Addable reports whether this persona ships dormant. Addable+disabled
+	// rows surface via the Add Agent modal rather than getting full roster
+	// controls until the operator opts in. Reporting is the only addable
+	// persona today.
+	Addable bool `json:"addable"`
 }
 
 // Issue is the v0.1 issue wire shape.
@@ -112,67 +128,96 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		annotateRegistryFlags(&p)
 		seen[p.Persona] = true
 		agents = append(agents, p)
 	}
 
 	// Merge in personas registered at runtime that aren't yet in the
-	// agents table. These appear with Enabled=false so the UI can
-	// surface them as addable (via the Add Agent modal -> POST
-	// /v1/agents/{slug}/enable). A persona absent from the registry but
-	// present in the DB (e.g. a slug from an earlier daemon version)
-	// stays in the response as-is — operators can still see / disable
-	// historical rows.
+	// agents table. These appear with Enabled=false so the UI can surface
+	// them as addable (via the Add Agent modal -> PATCH /v1/agents/{slug}).
+	// A persona absent from the registry but present in the DB (e.g. a
+	// slug from an earlier daemon version) stays in the response as-is —
+	// operators can still see / disable historical rows.
 	for _, p := range personas.All() {
 		slug := p.Slug()
 		if seen[slug] {
 			continue
 		}
 		agents = append(agents, Persona{
-			Persona: slug,
-			Name:    p.DisplayName(),
-			Enabled: false,
+			Persona:     slug,
+			Name:        p.DisplayName(),
+			Enabled:     false,
+			Implemented: true,
+			Addable:     p.Addable(),
 		})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
 }
 
-// handleEnableAgent inserts (or updates) the agents row for the slug in
-// the URL with enabled=1, picking a sensible default cadence per
-// addableDefaultCadenceSeconds. The persona must be registered in the
-// runtime registry — otherwise 404. The slug must already exist in the
-// agents table (rare for v0.1 but possible after a fresh init) — handled
-// by INSERT OR REPLACE which preserves last_run_at via COALESCE.
-//
-// Returns the updated Persona on success so the UI can refresh
-// optimistically without a second round-trip.
-func (s *Server) handleEnableAgent(w http.ResponseWriter, r *http.Request) {
+// annotateRegistryFlags fills Implemented and Addable on p from the
+// in-process personas registry. Slugs without a registry entry stay
+// Implemented=false / Addable=false — that's the "Coming soon" treatment
+// for personas the daemon can't currently drive (Inventory, Accounting,
+// Chief of Staff today) and for historical DB rows whose persona has
+// been removed from this build.
+func annotateRegistryFlags(p *Persona) {
+	if reg, ok := personas.Lookup(p.Persona); ok {
+		p.Implemented = true
+		p.Addable = reg.Addable()
+	}
+}
+
+// patchAgentRequest is the v1 PATCH /v1/agents/{slug} body. All fields
+// are optional pointers; only fields set in the request are written. This
+// supports the three operator gestures (flip enabled, change model, change
+// cadence) from a single endpoint, and lets the UI send partial updates
+// without round-tripping the whole Persona shape.
+type patchAgentRequest struct {
+	Enabled         *bool   `json:"enabled,omitempty"`
+	ModelPreference *string `json:"model_preference,omitempty"`
+	CadenceSeconds  *int    `json:"cadence_seconds,omitempty"`
+}
+
+// handlePatchAgent applies a partial update to the agents row for the slug
+// in the URL. The persona must be registered in the runtime registry —
+// otherwise 404. If no row exists for the persona yet (e.g. an addable
+// persona that the operator is opting in for the first time), we INSERT
+// with sensible defaults sourced from the registry + addableDefaultCadenceSeconds,
+// then UPDATE with whatever the patch supplied. Returns the canonical row
+// post-update so the UI can refresh optimistically without a second round-trip.
+func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
-	p, ok := personas.Lookup(slug)
+	regPersona, ok := personas.Lookup(slug)
 	if !ok {
 		writeError(w, http.StatusNotFound, "persona_not_registered",
 			fmt.Sprintf("no persona %q is registered in this daemon build", slug))
 		return
 	}
 
-	cadence := addableDefaultCadenceSeconds[slug] // 0 = use column default
+	var req patchAgentRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request",
+				fmt.Sprintf("invalid JSON body: %v", err))
+			return
+		}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// INSERT OR REPLACE rewrites the row but preserves last_run_at via
-	// COALESCE against the existing value (NULL for a fresh insert).
-	// max_attempts uses the column default on first insert; existing
-	// rows keep their value.
-	if cadence > 0 {
+	// Ensure a row exists for the persona. INSERT OR IGNORE keeps the
+	// existing row untouched when present; on first-touch it seeds the
+	// row with sensible defaults from the registry (display name) plus
+	// the per-persona cadence override if any. enabled starts at 0; the
+	// UPDATE below flips it if the patch requested.
+	defaultCadence := addableDefaultCadenceSeconds[slug]
+	if defaultCadence > 0 {
 		_, err := s.store.DB.ExecContext(r.Context(),
-			`INSERT INTO agents(persona, name, cadence_seconds, enabled, created_at, updated_at)
-			 VALUES(?, ?, ?, 1, ?, ?)
-			 ON CONFLICT(persona) DO UPDATE SET
-			   name = excluded.name,
-			   cadence_seconds = excluded.cadence_seconds,
-			   enabled = 1,
-			   updated_at = excluded.updated_at`,
-			slug, p.DisplayName(), cadence, now, now,
+			`INSERT OR IGNORE INTO agents(persona, name, cadence_seconds, enabled, created_at, updated_at)
+			 VALUES(?, ?, ?, 0, ?, ?)`,
+			slug, regPersona.DisplayName(), defaultCadence, now, now,
 		)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
@@ -180,18 +225,45 @@ func (s *Server) handleEnableAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		_, err := s.store.DB.ExecContext(r.Context(),
-			`INSERT INTO agents(persona, name, enabled, created_at, updated_at)
-			 VALUES(?, ?, 1, ?, ?)
-			 ON CONFLICT(persona) DO UPDATE SET
-			   name = excluded.name,
-			   enabled = 1,
-			   updated_at = excluded.updated_at`,
-			slug, p.DisplayName(), now, now,
+			`INSERT OR IGNORE INTO agents(persona, name, enabled, created_at, updated_at)
+			 VALUES(?, ?, 0, ?, ?)`,
+			slug, regPersona.DisplayName(), now, now,
 		)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 			return
 		}
+	}
+
+	// Apply the patch. Each field is set independently so a request that
+	// only touches one column doesn't clobber the others. updated_at
+	// always advances on a PATCH, even if the body was empty — the empty
+	// body case is treated as "touch this row" rather than rejected; that
+	// keeps the contract simple for the UI's optimistic-refresh path.
+	setParts := []string{"updated_at = ?"}
+	args := []any{now}
+	if req.Enabled != nil {
+		setParts = append(setParts, "enabled = ?")
+		enabledInt := 0
+		if *req.Enabled {
+			enabledInt = 1
+		}
+		args = append(args, enabledInt)
+	}
+	if req.ModelPreference != nil {
+		setParts = append(setParts, "model_preference = ?")
+		args = append(args, *req.ModelPreference)
+	}
+	if req.CadenceSeconds != nil {
+		setParts = append(setParts, "cadence_seconds = ?")
+		args = append(args, *req.CadenceSeconds)
+	}
+	args = append(args, slug)
+
+	updateSQL := "UPDATE agents SET " + strings.Join(setParts, ", ") + " WHERE persona = ?"
+	if _, err := s.store.DB.ExecContext(r.Context(), updateSQL, args...); err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
 	}
 
 	// Read back the canonical row so the response matches what GET
@@ -214,6 +286,7 @@ func (s *Server) handleEnableAgent(w http.ResponseWriter, r *http.Request) {
 		v := lastRunAt.String
 		persona.LastRunAt = &v
 	}
+	annotateRegistryFlags(&persona)
 	writeJSON(w, http.StatusOK, persona)
 }
 
