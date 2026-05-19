@@ -7,7 +7,7 @@ description: |
   material or the use, not adjectives. Two to four short sentences, 140-220
   characters total per variant.
 
-  Draft THREE distinct rewrite variants — each takes a different angle (e.g.
+  Draft THREE distinct variants — each takes a different angle (e.g.
   material-first, use-first, story-first). For each variant, also emit two
   integer scores in [1, 100]:
 
@@ -23,8 +23,8 @@ description: |
      not repeat it more than twice.
   2. Natural placement: the keyphrase appears in the first or second
      sentence, not deferred to the last sentence alone.
-  3. Length adequacy: 140–220 characters (same character cap as the
-     variant constraints below). A variant that is too short or too
+  3. Length adequacy: the body fits the per-mode length range documented
+     in the "Body fields" section below. A variant that is too short or too
      long fails this check.
   4. Benefit-led opener: first sentence leads with what the product does
      for the customer or its standout property, not the product's name or
@@ -34,17 +34,52 @@ description: |
   6. Specificity: the body names at least two concrete features, materials,
      or measurements (e.g., "wood-fired", "12oz", "two-ply", "stoneware").
 
+  ## Body fields
+
+  Each variant carries one or more body fields. Which fields you emit depends
+  on the mode signaled by the user message:
+
+  - **Rewrite mode (default)** — when the user message provides a non-empty
+    `Current description:` and does NOT mention `Drafting fields:`. Emit a
+    single `body` field. Length 140–220 characters of plain prose.
+
+  - **Cold-draft mode** — when the user message says `Drafting fields: ...`
+    listing one or both of `short` and `long`. Emit only the body fields the
+    user message lists:
+    - `body_short` (when "short" is in the list): 60–200 characters. A
+      scannable, listing-page snippet — leads with the standout property
+      or use. Plain prose.
+    - `body_long` (when "long" is in the list): 200–800 characters. The
+      product-detail-page body — persuasive, 2–5 short sentences. Plain
+      prose; no markdown; no headings.
+
+  In cold-draft mode, leave `body` empty (do not emit it). In rewrite mode,
+  leave `body_short` and `body_long` empty.
+
+  The SEO rubric applies to whichever body field you emit. When you emit
+  both `body_short` and `body_long`, score `seo` against `body_long` (the
+  PDP body is the SEO surface).
+
   Return JSON ONLY, no preamble:
 
+  Rewrite mode:
   {"variants":[{"label":"A","angle":"material","body":"...","seo":85,"voice":78},
                {"label":"B","angle":"use","body":"...","seo":72,"voice":90},
                {"label":"C","angle":"story","body":"...","seo":80,"voice":65}]}
 
+  Cold-draft mode (Drafting fields: short, long):
+  {"variants":[{"label":"A","angle":"material","body_short":"...","body_long":"...","seo":85,"voice":78},
+               {"label":"B","angle":"use","body_short":"...","body_long":"...","seo":72,"voice":90},
+               {"label":"C","angle":"story","body_short":"...","body_long":"...","seo":80,"voice":65}]}
+
   Constraints:
   - Exactly three variants.
   - Distinct bodies (don't paraphrase the same sentence three times).
-  - Each body 140-220 characters of plain prose, no markdown, no labels in
-    the body.
+  - Plain prose, no markdown, no labels in the body.
+  - In rewrite mode: each `body` is 140-220 characters.
+  - In cold-draft mode: `body_short` is 60-200 characters; `body_long` is
+    200-800 characters. Emit only the fields the user message listed in
+    `Drafting fields:`.
   - `seo` and `voice` are integers in [1, 100]. Emit `null` for `voice` when
     the user message says the corpus is unavailable.
 
@@ -84,7 +119,7 @@ schema:
         maxItems: 3
         items:
           type: object
-          required: [label, angle, body, seo, voice]
+          required: [label, angle, seo, voice]
           properties:
             label:
               type: string
@@ -97,9 +132,21 @@ schema:
                 when warranted — but A/B/C labels are fixed.
             body:
               type: string
-              minLength: 140
-              maxLength: 220
-              description: Plain prose, two to four short sentences. No markdown, no labels.
+              description: |
+                Rewrite-mode body (140-220 chars per the prompt). Empty
+                or omitted in cold-draft mode.
+            body_short:
+              type: string
+              description: |
+                Cold-draft short_description (60-200 chars per the prompt).
+                Emitted only when the user message lists "short" in
+                `Drafting fields:`. Empty/omitted in rewrite mode.
+            body_long:
+              type: string
+              description: |
+                Cold-draft long_description (200-800 chars per the prompt).
+                Emitted only when the user message lists "long" in
+                `Drafting fields:`. Empty/omitted in rewrite mode.
             seo:
               type: integer
               minimum: 1

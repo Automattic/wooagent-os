@@ -33,6 +33,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 
 	// Side-effect import: registers Marketing in the personas registry.
@@ -71,9 +72,20 @@ func main() {
 		}
 	}
 
+	// Load the embedded skill registry — matches the production daemon
+	// path (see internal/cli/run.go:loadSkillsForPersonas). Without this,
+	// Marketing.Draft returns Skipped immediately at the skill-registry
+	// lookup; the cold-draft branch and the rewrite path both rely on
+	// skills[marketing.description-rewrite].
+	skills, err := registry.Skills()
+	if err != nil {
+		log.Fatalf("load embedded skill registry: %v", err)
+	}
+
 	deps := personas.Deps{
-		Store: st,
-		MCP:   mcpClient,
+		Store:  st,
+		MCP:    mcpClient,
+		Skills: skills,
 		Env: personas.Env{
 			AnthropicAPIKey:   os.Getenv("ANTHROPIC_API_KEY"),
 			AnthropicModel:    os.Getenv("ANTHROPIC_MODEL"),
