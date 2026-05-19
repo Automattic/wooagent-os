@@ -115,7 +115,7 @@ export default function AddAgentModal({ connection, agents, onAgentAdded, onClos
     setPendingSlug(entry.slug);
     setError(null);
     try {
-      await api.enableAgent(connection, entry.slug);
+      await api.patchAgent(connection, entry.slug, { enabled: true });
       onAgentAdded();
       onClose();
     } catch (e) {

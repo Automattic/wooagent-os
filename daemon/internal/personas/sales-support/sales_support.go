@@ -51,6 +51,7 @@ type SalesSupport struct{}
 
 func (SalesSupport) Slug() string        { return "sales-support" }
 func (SalesSupport) DisplayName() string { return "Sales Support agent" }
+func (SalesSupport) Addable() bool       { return false }
 
 // Cooldown: order-centric (proposal_target.order_id), with longer windows
 // than the product personas. A customer-facing message carries higher
