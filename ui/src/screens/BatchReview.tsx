@@ -275,6 +275,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   const pendingCount = batch.pending;
   const firstProposal = data.issues[0]?.proposal;
   const isPricingBatch = firstProposal?.type === 'product_price_change';
+  const isColdDraftBatch = firstProposal?.type === 'product_cold_draft';
 
   // Marketing-shape body: KPI strip + per-child variant accordion. Captures
   // component state (selectedVariants, expanded, busy, approveRow, rejectRow).
@@ -310,6 +311,10 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           const target = (proposal?.target ?? {}) as Record<string, unknown>;
           const previousCopy =
             typeof target.previous === 'string' ? target.previous : '';
+          const previousShort =
+            typeof target.previous_short === 'string' ? target.previous_short : '';
+          const previousLong =
+            typeof target.previous_long === 'string' ? target.previous_long : '';
           const productName =
             typeof target.product_name === 'string' ? target.product_name : issue.title;
           const productSku =
@@ -405,21 +410,58 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       >
                         Live on store
                       </Text>
-                      <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                        Description
-                      </span>
-                      <Text
-                        variant="body-sm"
-                        style={{
-                          color: previousCopy
-                            ? 'var(--wpds-color-fg-content-neutral)'
-                            : 'var(--wpds-color-fg-content-neutral-weak)',
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {previousCopy || '— empty —'}
-                      </Text>
+                      {isColdDraftBatch ? (
+                        <>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Short description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousShort
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousShort || '— empty —'}
+                          </Text>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Long description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousLong
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousLong || '— empty —'}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousCopy
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousCopy || '— empty —'}
+                          </Text>
+                        </>
+                      )}
                     </div>
 
                     {/* Variant columns */}
