@@ -390,3 +390,62 @@ func TestVariant_StructuredBody_RoundTrip(t *testing.T) {
 		t.Errorf("body = %q, want empty for cold-draft variant", back.Body)
 	}
 }
+
+func TestPickColdDraftCandidates_ReturnsEmptyFieldsOnly(t *testing.T) {
+	resp := []byte(`{"products":[
+		{"id":1,"name":"P1","status":"publish","description_length":100,"short_description_length":50},
+		{"id":2,"name":"P2","status":"publish","description_length":100,"short_description_length":0},
+		{"id":3,"name":"P3","status":"publish","description_length":0,"short_description_length":50},
+		{"id":4,"name":"P4","status":"publish","description_length":0,"short_description_length":0}
+	]}`)
+	fake := &fakeMCP{listProductsResp: resp}
+	got, err := pickColdDraftCandidates(context.Background(), fake, nil, 10)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	wantIDs := []int{2, 3, 4}
+	if len(got) != len(wantIDs) {
+		t.Fatalf("len = %d, want %d (ids %v)", len(got), len(wantIDs), got)
+	}
+	for i, p := range got {
+		if p.ID != wantIDs[i] {
+			t.Errorf("[%d] id = %d, want %d", i, p.ID, wantIDs[i])
+		}
+	}
+}
+
+func TestPickColdDraftCandidates_HonorsCooldown(t *testing.T) {
+	resp := []byte(`{"products":[
+		{"id":2,"name":"P2","status":"publish","description_length":100,"short_description_length":0},
+		{"id":3,"name":"P3","status":"publish","description_length":0,"short_description_length":50}
+	]}`)
+	fake := &fakeMCP{listProductsResp: resp}
+	skip := map[int]struct{}{2: {}}
+	got, err := pickColdDraftCandidates(context.Background(), fake, skip, 10)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != 3 {
+		t.Errorf("expected only product 3 (P2 in cooldown); got %+v", got)
+	}
+}
+
+func TestPickColdDraftCandidates_RespectsMax(t *testing.T) {
+	// 15 candidates all with empty descriptions; max=10 caps the slice.
+	var items []string
+	for i := 1; i <= 15; i++ {
+		items = append(items, fmt.Sprintf(
+			`{"id":%d,"name":"P%d","status":"publish","description_length":0,"short_description_length":0}`,
+			i, i,
+		))
+	}
+	resp := []byte("{\"products\":[" + strings.Join(items, ",") + "]}")
+	fake := &fakeMCP{listProductsResp: resp}
+	got, err := pickColdDraftCandidates(context.Background(), fake, nil, 10)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	if len(got) != 10 {
+		t.Errorf("len = %d, want 10 (capped)", len(got))
+	}
+}
