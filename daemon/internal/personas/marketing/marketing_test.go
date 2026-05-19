@@ -309,3 +309,30 @@ func (f *fakeMCP) CallTool(ctx context.Context, name string, args any) (mcp.Tool
 	envelope := fmt.Sprintf(`{"success":true,"data":%s}`, string(f.listProductsResp))
 	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
 }
+
+func TestVariant_StructuredBody_RoundTrip(t *testing.T) {
+	v := variant{
+		ID:        "var_a",
+		Label:     "A",
+		BodyShort: "Cozy wool slippers for cold floors.",
+		BodyLong:  "Handcrafted from 100% merino wool ...",
+		CharCount: 100,
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back variant
+	if err := json.Unmarshal(out, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.BodyShort != v.BodyShort {
+		t.Errorf("body_short = %q, want %q", back.BodyShort, v.BodyShort)
+	}
+	if back.BodyLong != v.BodyLong {
+		t.Errorf("body_long = %q, want %q", back.BodyLong, v.BodyLong)
+	}
+	if back.Body != "" {
+		t.Errorf("body = %q, want empty for cold-draft variant", back.Body)
+	}
+}
