@@ -273,6 +273,11 @@ const skillName = "marketing.description-rewrite"
 // so the loop doesn't re-pick the same product.
 const maxDraftAttempts = 3
 
+const (
+	coldDraftMin = 3  // require >= this many empty-copy candidates to emit a batch
+	coldDraftMax = 10 // cap per-tick LLM cost and operator review surface
+)
+
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
 		return personas.Drafted{
@@ -1020,4 +1025,41 @@ func draftColdDraftForProduct(ctx context.Context, deps personas.Deps, candidate
 		Target:          target,
 		DedupKey:        fmt.Sprintf("product:%d", full.ID),
 	}, nil
+}
+
+// draftColdDraftBatch packs successful drafts produced by drafterFn into
+// a single batch. drafterFn is a seam for testing; the production call
+// site passes draftColdDraftForProduct.
+//
+// Per-product errors and skips are logged and dropped; if fewer than
+// coldDraftMin drafts survive, the function returns Skipped:true so the
+// caller falls through to single-rewrite. The first successful draft
+// carries BatchSiblings + BatchTitle + BatchIntent; subsequent successes
+// become siblings.
+func draftColdDraftBatch(ctx context.Context, deps personas.Deps, candidates []productSummary, skillDescription string, drafterFn func(context.Context, personas.Deps, productSummary, string) (personas.Drafted, error)) (personas.Drafted, error) {
+	drafts := make([]personas.Drafted, 0, len(candidates))
+	for _, p := range candidates {
+		d, err := drafterFn(ctx, deps, p, skillDescription)
+		if err != nil {
+			fmt.Printf("marketing(cold_draft): product %d errored (%v); dropping\n", p.ID, err)
+			continue
+		}
+		if d.Skipped {
+			fmt.Printf("marketing(cold_draft): product %d skipped (%s); dropping\n", p.ID, d.SkipReason)
+			continue
+		}
+		drafts = append(drafts, d)
+	}
+	if len(drafts) < coldDraftMin {
+		return personas.Drafted{
+			Skipped: true,
+			SkipReason: fmt.Sprintf(
+				"only %d cold-draft candidates survived parsing (need %d)", len(drafts), coldDraftMin),
+		}, nil
+	}
+	primary := drafts[0]
+	primary.BatchSiblings = drafts[1:]
+	primary.BatchTitle = fmt.Sprintf("Review & approve · %d product descriptions", len(drafts))
+	primary.BatchIntent = "fill_missing_copy"
+	return primary, nil
 }

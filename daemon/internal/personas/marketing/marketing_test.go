@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
 
 func TestParseVariants_Happy(t *testing.T) {
@@ -501,5 +502,95 @@ func TestBuildPromptUserMessage_RewriteMode_Unchanged(t *testing.T) {
 	}
 	if !strings.Contains(msg, "Write the THREE rewrite variants") {
 		t.Errorf("rewrite mode should keep its existing phrasing:\n%s", msg)
+	}
+}
+
+func TestDraftColdDraftBatch_PacksAsSiblings(t *testing.T) {
+	// 4 successful drafts → 1 primary + 3 siblings, title "Review & approve · 4 ..."
+	cands := []productSummary{
+		{ID: 11, Name: "P11"}, {ID: 12, Name: "P12"},
+		{ID: 13, Name: "P13"}, {ID: 14, Name: "P14"},
+	}
+	drafterFn := func(_ context.Context, _ personas.Deps, p productSummary, _ string) (personas.Drafted, error) {
+		return personas.Drafted{
+			Title:        fmt.Sprintf("draft %d", p.ID),
+			ProposalType: "product_cold_draft",
+			DedupKey:     fmt.Sprintf("product:%d", p.ID),
+			Target:       map[string]any{"product_id": p.ID},
+		}, nil
+	}
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill desc", drafterFn)
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if got.BatchTitle != "Review & approve · 4 product descriptions" {
+		t.Errorf("batch_title = %q", got.BatchTitle)
+	}
+	if got.BatchIntent != "fill_missing_copy" {
+		t.Errorf("batch_intent = %q", got.BatchIntent)
+	}
+	if len(got.BatchSiblings) != 3 {
+		t.Errorf("siblings = %d, want 3", len(got.BatchSiblings))
+	}
+}
+
+func TestDraftColdDraftBatch_DropsErrors(t *testing.T) {
+	// 4 candidates; second errors. Expect batch with 3 children.
+	cands := []productSummary{
+		{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4},
+	}
+	drafterFn := func(_ context.Context, _ personas.Deps, p productSummary, _ string) (personas.Drafted, error) {
+		if p.ID == 2 {
+			return personas.Drafted{}, fmt.Errorf("network glitch")
+		}
+		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
+	}
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if got.Skipped {
+		t.Fatalf("expected non-skipped result, got Skipped=%q", got.SkipReason)
+	}
+	total := 1 + len(got.BatchSiblings)
+	if total != 3 {
+		t.Errorf("expected 3 children (1 primary + 2 siblings), got %d total", total)
+	}
+}
+
+func TestDraftColdDraftBatch_DropsSkippedDrafts(t *testing.T) {
+	// 4 candidates; second returns Skipped. Same expected outcome as above.
+	cands := []productSummary{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
+	drafterFn := func(_ context.Context, _ personas.Deps, p productSummary, _ string) (personas.Drafted, error) {
+		if p.ID == 2 {
+			return personas.Drafted{Skipped: true, SkipReason: "race"}, nil
+		}
+		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
+	}
+	got, _ := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	total := 1 + len(got.BatchSiblings)
+	if total != 3 {
+		t.Errorf("expected 3 children, got %d", total)
+	}
+}
+
+func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
+	// 3 candidates, 2 of which error. Only 1 survives → below coldDraftMin=3 → Skipped.
+	cands := []productSummary{{ID: 1}, {ID: 2}, {ID: 3}}
+	drafterFn := func(_ context.Context, _ personas.Deps, p productSummary, _ string) (personas.Drafted, error) {
+		if p.ID != 1 {
+			return personas.Drafted{}, fmt.Errorf("nope")
+		}
+		return personas.Drafted{Title: "d1", ProposalType: "product_cold_draft"}, nil
+	}
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	if err != nil {
+		t.Fatalf("batch: %v", err)
+	}
+	if !got.Skipped {
+		t.Fatalf("expected Skipped=true, got %+v", got)
+	}
+	if !strings.Contains(got.SkipReason, "only 1") || !strings.Contains(got.SkipReason, "need 3") {
+		t.Errorf("SkipReason should explain threshold: %q", got.SkipReason)
 	}
 }
