@@ -136,6 +136,92 @@ func parseVariants(raw string) ([]variant, error) {
 	return out, nil
 }
 
+// llmColdDraftVariant mirrors llmVariant but carries structured body fields
+// for the cold-draft case. Either or both of BodyShort / BodyLong may be
+// populated; the parser validates against the drafting slice the caller
+// provides (e.g. ["short"], ["long"], ["short", "long"]).
+type llmColdDraftVariant struct {
+	Label     string `json:"label"`
+	Angle     string `json:"angle"`
+	BodyShort string `json:"body_short"`
+	BodyLong  string `json:"body_long"`
+	Seo       int    `json:"seo"`
+	Voice     int    `json:"voice"`
+}
+
+type llmColdDraftResp struct {
+	Variants []llmColdDraftVariant `json:"variants"`
+}
+
+// parseColdDraftVariants parses a cold-draft 3-variant LLM response. The
+// drafting slice lists which body fields each variant MUST populate; any
+// missing required field on any variant is an error so the caller falls
+// back rather than persisting a partial proposal. Returns variants ready
+// to persist (BodyShort/BodyLong set, Body left empty).
+func parseColdDraftVariants(raw string, drafting []string) ([]variant, error) {
+	block := jsonObjectRe.FindString(raw)
+	if block == "" {
+		return nil, fmt.Errorf("no JSON object found in LLM output")
+	}
+	var parsed llmColdDraftResp
+	if err := json.Unmarshal([]byte(block), &parsed); err != nil {
+		return nil, fmt.Errorf("decode cold-draft variants JSON: %w", err)
+	}
+	if len(parsed.Variants) != 3 {
+		return nil, fmt.Errorf("expected 3 variants, got %d", len(parsed.Variants))
+	}
+	needShort, needLong := false, false
+	for _, f := range drafting {
+		switch f {
+		case "short":
+			needShort = true
+		case "long":
+			needLong = true
+		default:
+			return nil, fmt.Errorf("unknown drafting field %q (expected short|long)", f)
+		}
+	}
+	if !needShort && !needLong {
+		return nil, fmt.Errorf("drafting list is empty")
+	}
+	out := make([]variant, 0, 3)
+	for i, v := range parsed.Variants {
+		short := strings.TrimSpace(v.BodyShort)
+		long := strings.TrimSpace(v.BodyLong)
+		if needShort && short == "" {
+			return nil, fmt.Errorf("variant %d missing body_short", i)
+		}
+		if needLong && long == "" {
+			return nil, fmt.Errorf("variant %d missing body_long", i)
+		}
+		label := strings.TrimSpace(v.Label)
+		if label == "" {
+			label = string(rune('A' + i))
+		}
+		seo := v.Seo
+		if seo <= 0 || seo > 100 {
+			seo = 0
+		}
+		voice := v.Voice
+		if voice <= 0 || voice > 100 {
+			voice = 0
+		}
+		charCount := len(short) + len(long)
+		out = append(out, variant{
+			ID:          fmt.Sprintf("var_%s", strings.ToLower(label)),
+			Label:       label,
+			BodyShort:   short,
+			BodyLong:    long,
+			CharCount:   charCount,
+			Recommended: i == 0,
+			Angle:       strings.TrimSpace(v.Angle),
+			Seo:         seo,
+			Voice:       voice,
+		})
+	}
+	return out, nil
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"

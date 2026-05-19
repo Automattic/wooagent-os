@@ -310,6 +310,60 @@ func (f *fakeMCP) CallTool(ctx context.Context, name string, args any) (mcp.Tool
 	return mcp.ToolCallResult{Content: []mcp.ContentPart{{Text: envelope}}}, nil
 }
 
+func TestParseColdDraftVariants_BothFields(t *testing.T) {
+	raw := `{"variants":[
+		{"label":"A","angle":"warm","body_short":"Cozy wool slippers.","body_long":"Handcrafted from 100% merino wool...","seo":85,"voice":92},
+		{"label":"B","angle":"informational","body_short":"100% merino wool slippers.","body_long":"Pure merino wool, 100% indoor wear...","seo":80,"voice":85},
+		{"label":"C","angle":"minimal","body_short":"Wool slippers.","body_long":"Merino wool. Indoor.","seo":70,"voice":78}
+	]}`
+	got, err := parseColdDraftVariants(raw, []string{"short", "long"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+	if got[0].BodyShort == "" || got[0].BodyLong == "" {
+		t.Errorf("variant A missing structured body fields: %+v", got[0])
+	}
+	if got[0].Body != "" {
+		t.Errorf("variant A should have empty Body, got %q", got[0].Body)
+	}
+	if !got[0].Recommended {
+		t.Errorf("first variant should have Recommended=true")
+	}
+}
+
+func TestParseColdDraftVariants_LongOnly(t *testing.T) {
+	raw := `{"variants":[
+		{"label":"A","body_long":"Handcrafted...","seo":85,"voice":92},
+		{"label":"B","body_long":"Pure merino...","seo":80,"voice":85},
+		{"label":"C","body_long":"Merino. Indoor.","seo":70,"voice":78}
+	]}`
+	got, err := parseColdDraftVariants(raw, []string{"long"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got[0].BodyShort != "" {
+		t.Errorf("BodyShort should be empty when drafting=[long]; got %q", got[0].BodyShort)
+	}
+	if got[0].BodyLong == "" {
+		t.Errorf("BodyLong should be populated")
+	}
+}
+
+func TestParseColdDraftVariants_MissingDraftedField_Errors(t *testing.T) {
+	raw := `{"variants":[
+		{"label":"A","body_long":"..."},
+		{"label":"B","body_short":"s","body_long":"l"},
+		{"label":"C","body_short":"s","body_long":"l"}
+	]}`
+	_, err := parseColdDraftVariants(raw, []string{"short", "long"})
+	if err == nil {
+		t.Fatalf("expected error for missing body_short on variant A")
+	}
+}
+
 func TestVariant_StructuredBody_RoundTrip(t *testing.T) {
 	v := variant{
 		ID:        "var_a",
