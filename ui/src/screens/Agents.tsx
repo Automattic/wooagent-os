@@ -12,7 +12,6 @@ import {
   SelectControl,
   Snackbar,
   Spinner,
-  Tooltip,
 } from '@wordpress/components';
 import { plus } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
@@ -37,8 +36,9 @@ interface Props {
 // describing each agent's role (the daemon doesn't store them yet); they're
 // kept here as part of the screen's content, not as state. The previous
 // `status` ("running"/"idle") and `lastRun` fields were dropped — those
-// implied live run-state the daemon doesn't track. See `IMPLEMENTED_PERSONAS`
-// below for which agents are actually operational vs. coming soon.
+// implied live run-state the daemon doesn't track. Whether a row is
+// operable (full controls) vs. "Coming soon" comes from the daemon's
+// `implemented` / `addable` flags on each Persona (see `isOperable` below).
 interface PersonaMeta {
   mandate: string;
   systemPrompt: string;
@@ -105,36 +105,14 @@ const ALL_PERSONA_KEYS = [
   'chief',
 ];
 
-// Personas the daemon has actually seeded and wired to ability handlers.
-// Anything outside this set renders as "Coming soon" — the row still appears
-// in the roster, but its controls (enable toggle, model preference, edit)
-// are inert until the daemon learns to drive it. Keep in sync with the
-// `defaultPersonas` list in daemon/internal/cli/init.go.
-const IMPLEMENTED_PERSONAS = new Set<string>([
-  'marketing',
-  'pricing',
-  'sales-support',
-  'reporting',
-]);
-
-// Personas that are built but ship dormant — operator opts in via the Add
-// Agent modal rather than getting them on by default. The roster shows
-// them with the "Coming soon" treatment (no toggle / no Run now) while
-// disabled, so the canonical 7-persona fleet view stays intact; the Add
-// Agent modal is the discovery surface that flips them from addable to
-// active. After enable, the persona graduates into full roster controls.
-// Today: Reporting. Future plugin-gated personas (a Shipping audit
-// persona, etc.) would land here too.
-const ADDABLE_PERSONAS = new Set<string>(['reporting']);
-
 // isOperable: row should render with full controls (model dropdown,
-// toggle, Run now). A persona is operable when it's implemented AND
-// either it's not addable (default-on personas like Marketing) or it
-// has been opted in (enabled=true). Addable + disabled = "Coming soon"
-// treatment until the operator clicks Add agent on it.
+// toggle, Run now). A persona is operable when the daemon reports it's
+// implemented AND either it's not addable (default-on personas like
+// Marketing) or it has been opted in (enabled=true). Addable + disabled =
+// "Coming soon" treatment until the operator clicks Add agent on it.
 function isOperable(p: Persona): boolean {
-  if (!IMPLEMENTED_PERSONAS.has(p.persona)) return false;
-  if (ADDABLE_PERSONAS.has(p.persona) && !p.enabled) return false;
+  if (!p.implemented) return false;
+  if (p.addable && !p.enabled) return false;
   return true;
 }
 
@@ -148,6 +126,8 @@ function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
         name: key,
         enabled: false,
         model_preference: undefined,
+        implemented: false,
+        addable: false,
       } as Persona),
   );
 }
@@ -216,11 +196,13 @@ function MandateCell({ persona }: { persona: Persona }) {
   );
 }
 
-function ModelCell({ persona }: { persona: Persona }) {
-  // Read-only until daemon supports model PATCH. Shows the daemon's current
-  // preference (or the default) without an interactive control that can't
-  // persist its changes. Wire to a real PATCH endpoint and re-enable when
-  // daemon support lands.
+interface ModelCellProps {
+  persona: Persona;
+  busy: boolean;
+  onChange: (value: string) => void;
+}
+
+function ModelCell({ persona, busy, onChange }: ModelCellProps) {
   const current = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
   // Wrapper width keeps the column at ~180px regardless of `table-layout`
   // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
@@ -228,49 +210,38 @@ function ModelCell({ persona }: { persona: Persona }) {
   // the only reliable lever.
   return (
     <div style={{ minWidth: 180 }}>
-      <Tooltip text="Model preference is read-only until operator controls land.">
-        {/* CUSTOM: span wrapper so Tooltip has a non-disabled hover/focus
-            anchor — disabled SelectControl drops pointer events. Same pattern
-            used by the Add agent button in this screen's actions slot. */}
-        <span style={{ display: 'inline-flex', width: '100%' }} tabIndex={0}>
-          <SelectControl
-            __nextHasNoMarginBottom
-            label="Model"
-            hideLabelFromVision
-            value={current}
-            options={modelOptionsFor(current)}
-            disabled
-            aria-disabled="true"
-            onChange={() => {}}
-          />
-        </span>
-      </Tooltip>
+      <SelectControl
+        __nextHasNoMarginBottom
+        label="Model"
+        hideLabelFromVision
+        value={current}
+        options={modelOptionsFor(current)}
+        disabled={busy}
+        onChange={onChange}
+      />
     </div>
   );
 }
 
-function StatusCell({ persona }: { persona: Persona }) {
+interface StatusCellProps {
+  persona: Persona;
+  busy: boolean;
+  onToggle: () => void;
+}
+
+function StatusCell({ persona, busy, onToggle }: StatusCellProps) {
   // Unimplemented personas: the daemon either hasn't seeded them or has no
   // ability handlers wired up. Surface that plainly instead of pretending
-  // they can be enabled. Implemented personas show daemon truth via a
-  // disabled FormToggle — controls land once /v1/agents accepts PATCH.
+  // they can be enabled.
   if (!isOperable(persona)) {
     return <Badge intent="draft">Coming soon</Badge>;
   }
   return (
-    <Tooltip text="Enable / disable lands with daemon operator controls.">
-      {/* CUSTOM: span wrapper to give Tooltip a non-disabled hover/focus
-          anchor (FormToggle disabled drops pointer events). Same pattern as
-          ModelCell and the Add agent button. */}
-      <span style={{ display: 'inline-flex' }} tabIndex={0}>
-        <FormToggle
-          checked={persona.enabled}
-          disabled
-          aria-disabled="true"
-          onChange={() => {}}
-        />
-      </span>
-    </Tooltip>
+    <FormToggle
+      checked={persona.enabled}
+      disabled={busy}
+      onChange={onToggle}
+    />
   );
 }
 
@@ -376,10 +347,67 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     void fetchAgents(signal);
   };
 
-  // Run-now state: tracks which persona is being triggered (busy) and
-  // per-persona error messages (if triggerRun throws).
+  // Run-now state: tracks which persona is being triggered (busy) and the
+  // per-persona outcome surfaced after a non-success terminal status. Skips
+  // (daemon said "won't seed right now") are an info-level outcome, not an
+  // error; failures (request threw, run.status=failed) are error-level.
   const [runBusy, setRunBusy] = useState<string | null>(null);
-  const [runErrors, setRunErrors] = useState<Record<string, string>>({});
+  const [runOutcomes, setRunOutcomes] = useState<
+    Record<string, { message: string; isSkip: boolean }>
+  >({});
+
+  // Patch state: one persona+field can be busy at a time per slug, and
+  // per-slug error strings surface inline on the row that produced them.
+  // Keyed by persona slug; an entry { kind } records which field is in
+  // flight so we can disable just that control without freezing the row.
+  const [patchBusy, setPatchBusy] = useState<
+    Record<string, 'enabled' | 'model'>
+  >({});
+  const [patchErrors, setPatchErrors] = useState<Record<string, string>>({});
+
+  const handlePatch = useCallback(
+    async (
+      persona: Persona,
+      patch: { enabled?: boolean; model_preference?: string },
+      kind: 'enabled' | 'model',
+    ) => {
+      setPatchBusy((prev) => ({ ...prev, [persona.persona]: kind }));
+      setPatchErrors((prev) => {
+        const next = { ...prev };
+        delete next[persona.persona];
+        return next;
+      });
+      try {
+        const updated = await api.patchAgent(connection, persona.persona, patch);
+        // Replace the row in place so the next render reflects the new
+        // canonical state without a refetch round-trip.
+        setPersonas((prev) =>
+          prev
+            ? prev.map((p) => (p.persona === updated.persona ? updated : p))
+            : prev,
+        );
+        // Toggling enabled (especially for an addable persona) can shift
+        // the row between operable and "Coming soon"; ask App to refresh
+        // downstream surfaces (sidebar counts, board) too.
+        if (kind === 'enabled') onChanged?.();
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        setPatchErrors((prev) => ({ ...prev, [persona.persona]: msg }));
+      } finally {
+        setPatchBusy((prev) => {
+          const next = { ...prev };
+          delete next[persona.persona];
+          return next;
+        });
+      }
+    },
+    [connection, onChanged],
+  );
 
   // Stay on /agents through the full run lifecycle. The button's `isBusy`
   // state (driven by runBusy === persona.persona) gives the operator the
@@ -391,7 +419,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     async (persona: Persona) => {
       if (!isOperable(persona)) return;
       setRunBusy(persona.persona);
-      setRunErrors((prev) => {
+      setRunOutcomes((prev) => {
         const next = { ...prev };
         delete next[persona.persona];
         return next;
@@ -408,7 +436,11 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
             : e instanceof Error
               ? e.message
               : String(e);
-        setRunErrors((prev) => ({ ...prev, [persona.persona]: msg }));
+        // Request couldn't even land — that's a real error, not a skip.
+        setRunOutcomes((prev) => ({
+          ...prev,
+          [persona.persona]: { message: msg, isSkip: false },
+        }));
         setRunBusy(null);
         return;
       }
@@ -430,19 +462,27 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
             return;
           }
           // Terminal. On success, ask App to refresh issues so any new
-          // proposal lands on the board. On skip/fail, surface a short
-          // hint inline so the operator knows why the spinner stopped.
+          // proposal lands on the board. On skip the daemon told us why
+          // the run won't produce a proposal (e.g. open-work threshold) —
+          // that's an info-level outcome, not an error. On failure
+          // (failed / failed_permanent), it's a real error.
           if (status === 'succeeded') {
             onChanged?.();
             setToast({ text: 'Proposal created' });
+          } else if (status === 'skipped') {
+            const reason = res.run.skip_reason || 'Run skipped';
+            setRunOutcomes((prev) => ({
+              ...prev,
+              [persona.persona]: { message: reason, isSkip: true },
+            }));
           } else {
             const reason =
-              res.run.skip_reason ||
               res.run.failure_reason ||
+              res.run.skip_reason ||
               `Run ${status}`;
-            setRunErrors((prev) => ({
+            setRunOutcomes((prev) => ({
               ...prev,
-              [persona.persona]: reason,
+              [persona.persona]: { message: reason, isSkip: false },
             }));
           }
           stopPolling(true);
@@ -487,7 +527,13 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         getValue: ({ item }) => item.model_preference ?? '',
         render: ({ item }) => (
           <NoRowClick>
-            <ModelCell persona={item} />
+            <ModelCell
+              persona={item}
+              busy={patchBusy[item.persona] === 'model'}
+              onChange={(value) =>
+                void handlePatch(item, { model_preference: value }, 'model')
+              }
+            />
           </NoRowClick>
         ),
       },
@@ -499,7 +545,13 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
           isOperable(item) ? Boolean(item.enabled) : false,
         render: ({ item }) => (
           <NoRowClick>
-            <StatusCell persona={item} />
+            <StatusCell
+              persona={item}
+              busy={patchBusy[item.persona] === 'enabled'}
+              onToggle={() =>
+                void handlePatch(item, { enabled: !item.enabled }, 'enabled')
+              }
+            />
           </NoRowClick>
         ),
       },
@@ -511,38 +563,23 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         render: ({ item }) => {
           if (!isOperable(item)) return null;
           const isBusy = runBusy === item.persona;
-          const err = runErrors[item.persona];
           return (
             <NoRowClick>
-              <Stack direction="column" gap="xs">
-                <Button
-                  variant="secondary"
-                  __next40pxDefaultSize
-                  isBusy={isBusy}
-                  disabled={isBusy}
-                  onClick={() => void handleRunNow(item)}
-                >
-                  Run now
-                </Button>
-                {err && (
-                  <Text
-                    variant="body-sm"
-                    style={{
-                      fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-warning)',
-                      maxWidth: 160,
-                    }}
-                  >
-                    {err}
-                  </Text>
-                )}
-              </Stack>
+              <Button
+                variant="secondary"
+                __next40pxDefaultSize
+                isBusy={isBusy}
+                disabled={isBusy}
+                onClick={() => void handleRunNow(item)}
+              >
+                Run now
+              </Button>
             </NoRowClick>
           );
         },
       },
     ],
-    [runBusy, runErrors, handleRunNow],
+    [runBusy, handleRunNow, patchBusy, handlePatch],
   );
 
   // Row click drives the edit flow via `onClickItem`. The actions are also
@@ -588,6 +625,64 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   const activeCount = fullRoster.filter((p) => isOperable(p) && p.enabled).length;
   const comingSoonCount = fullRoster.filter((p) => !isOperable(p)).length;
 
+  // Aggregate per-persona outcomes (Run now skips/failures + PATCH failures)
+  // into a list of Notices above the table. Surfacing them inline under
+  // each control widened the column and broke row alignment; lifting them
+  // here keeps the row controls fixed-width and gives each notice room to
+  // breathe with its own dismiss. Intent differentiates Run-now *skips*
+  // (info — daemon said "won't seed right now") from real errors.
+  const errorNotices = useMemo(() => {
+    const out: Array<{
+      key: string;
+      slug: string;
+      kind: 'run' | 'patch';
+      personaName: string;
+      message: string;
+      intent: 'info' | 'error';
+    }> = [];
+    const nameFor = (slug: string) => {
+      const p = fullRoster.find((x) => x.persona === slug);
+      return p ? displayName(p) : slug;
+    };
+    for (const [slug, outcome] of Object.entries(runOutcomes)) {
+      out.push({
+        key: `run:${slug}`,
+        slug,
+        kind: 'run',
+        personaName: nameFor(slug),
+        message: outcome.message,
+        intent: outcome.isSkip ? 'info' : 'error',
+      });
+    }
+    for (const [slug, msg] of Object.entries(patchErrors)) {
+      out.push({
+        key: `patch:${slug}`,
+        slug,
+        kind: 'patch',
+        personaName: nameFor(slug),
+        message: msg,
+        intent: 'error',
+      });
+    }
+    return out;
+  }, [runOutcomes, patchErrors, fullRoster]);
+
+  const dismissError = useCallback((kind: 'run' | 'patch', slug: string) => {
+    if (kind === 'run') {
+      setRunOutcomes((prev) => {
+        const next = { ...prev };
+        delete next[slug];
+        return next;
+      });
+    } else {
+      setPatchErrors((prev) => {
+        const next = { ...prev };
+        delete next[slug];
+        return next;
+      });
+    }
+  }, []);
+
   // Subtitle is honest about what the daemon actually knows: how many
   // implemented personas are enabled, and how many are still coming soon.
   // When personas are null we still display the canonical fleet size (7);
@@ -601,6 +696,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     <Page
       title="Agents"
       subTitle={subTitle}
+      hasPadding
       actions={
         <Stack direction="row" align="center" gap="md">
           <Button
@@ -633,6 +729,31 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         </Stack>
       ) : (
         <>
+          {errorNotices.length > 0 && (
+            <Stack
+              direction="column"
+              gap="sm"
+              style={{ marginBottom: 'var(--wpds-dimension-padding-md)' }}
+            >
+              {errorNotices.map(
+                ({ key, slug, kind, personaName, message, intent }) => (
+                  <Notice.Root key={key} intent={intent}>
+                    <Notice.Description>
+                      {kind === 'run'
+                        ? intent === 'info'
+                          ? `${personaName} skipped this run: ${message}`
+                          : `${personaName} run didn't land: ${message}`
+                        : `Couldn't update ${personaName}: ${message}`}
+                    </Notice.Description>
+                    <Notice.CloseIcon
+                      label="Dismiss notice"
+                      onClick={() => dismissError(kind, slug)}
+                    />
+                  </Notice.Root>
+                ),
+              )}
+            </Stack>
+          )}
           <DataViews<Persona>
             view={view}
             onChangeView={setView}
