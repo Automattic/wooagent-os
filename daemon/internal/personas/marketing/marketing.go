@@ -316,6 +316,25 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		}, nil
 	}
 
+	// Cold-draft batch path: if enough products have empty short/long
+	// descriptions out of cooldown, draft them in one batch this tick
+	// instead of the single-rewrite loop. Operator-targeted runs
+	// (ProductIDOverride) already bypassed this above.
+	// See docs/specs/2026-05-18-marketing-cold-draft-batch-design.md.
+	candidates, err := pickColdDraftCandidates(ctx, deps.MCP, skip, coldDraftMax)
+	if err != nil {
+		fmt.Printf("marketing: cold-draft candidate scan errored (%v); falling back to single-rewrite\n", err)
+	} else if len(candidates) >= coldDraftMin {
+		batch, err := draftColdDraftBatch(ctx, deps, candidates, skill.Description, draftColdDraftForProduct)
+		if err != nil {
+			return personas.Drafted{}, err
+		}
+		if !batch.Skipped {
+			return batch, nil
+		}
+		fmt.Printf("marketing: cold-draft batch skipped (%s); falling back to single-rewrite\n", batch.SkipReason)
+	}
+
 	// Within-run iteration: if the LLM can't draft for a product (returns
 	// no_proposal / empty rewrite), add it to the run-local skip set and
 	// try the next eligible product. Up to maxDraftAttempts.
