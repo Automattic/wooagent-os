@@ -293,7 +293,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           label="Brand voice match"
           value="96%"
           score={96}
-          hint="vs. your existing copy"
+          hint={isColdDraftBatch ? 'vs. your voice model' : 'vs. your existing copy'}
         />
         <Kpi
           label="SEO score"
@@ -315,6 +315,20 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             typeof target.previous_short === 'string' ? target.previous_short : '';
           const previousLong =
             typeof target.previous_long === 'string' ? target.previous_long : '';
+          const draftingFields: string[] = Array.isArray((target as any).drafting)
+            ? ((target as any).drafting as unknown[]).filter(
+                (f): f is string => typeof f === 'string',
+              )
+            : [];
+          const applyTargetParts = draftingFields.reduce<string[]>((acc, f) => {
+            if (f === 'short') acc.push('product.short_description');
+            else if (f === 'long') acc.push('product.description');
+            return acc;
+          }, []);
+          const applyHint =
+            isColdDraftBatch && applyTargetParts.length > 0
+              ? ` — will write ${applyTargetParts.join(' + ')} on approve`
+              : '';
           const productName =
             typeof target.product_name === 'string' ? target.product_name : issue.title;
           const productSku =
@@ -620,7 +634,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       {!reviewable
                         ? `Already ${issue.status === 'done' ? 'approved' : issue.status}`
                         : selectedVariantID
-                          ? `Variant ${selectedVariantID} selected`
+                          ? `Variant ${selectedVariantID} selected${applyHint}`
                           : 'No variant selected yet — click a column above to choose'}
                     </Text>
                     <div className="wa-batch-row__footer-actions">
