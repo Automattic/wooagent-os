@@ -34,15 +34,16 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
-// variant is the shape the UI's variantsFromProposal expects to find under
-// proposal.target.variants. Keep field names in sync with
-// ui/src/api/client.ts:282 — id, body required; label/charCount/recommended
-// optional; seo/voice optional (omitempty → UI distinguishes "absent" from
-// "real 0" and renders '—' on absent).
+// variant is the persisted shape. label/seo/voice optional; Body is the
+// single-body case (rewrite + fallback); BodyShort/BodyLong populated for
+// cold-draft variants where the agent fills missing description fields.
+// Exactly one of (Body) or (BodyShort | BodyLong) is set per variant.
 type variant struct {
 	ID          string `json:"id"`
 	Label       string `json:"label,omitempty"`
-	Body        string `json:"body"`
+	Body        string `json:"body,omitempty"`
+	BodyShort   string `json:"body_short,omitempty"`
+	BodyLong    string `json:"body_long,omitempty"`
 	CharCount   int    `json:"charCount,omitempty"`
 	Recommended bool   `json:"recommended,omitempty"`
 	Angle       string `json:"angle,omitempty"`
