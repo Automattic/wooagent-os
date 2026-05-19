@@ -74,6 +74,12 @@ type Persona interface {
 	DisplayName() string
 	Cooldown() CooldownPolicy
 	Draft(ctx context.Context, deps Deps) (Drafted, error)
+	// Addable reports whether this persona ships dormant — i.e. it's
+	// implemented but not enabled by default. Operators opt addable
+	// personas in via the Add Agent modal. Default-on personas
+	// (Marketing, Pricing, Sales Support) return false; personas that
+	// need explicit opt-in (Reporting today) return true.
+	Addable() bool
 }
 
 // CooldownPolicy is the per-persona dedup config consumed by
@@ -432,8 +438,8 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 	if openCount >= OpenProposalSkipThreshold {
 		res.Skipped = true
 		res.SkipReason = fmt.Sprintf(
-			"persona already has %d open proposals (threshold %d); not seeding to avoid duplicates",
-			openCount, OpenProposalSkipThreshold,
+			"%d proposals already waiting for review",
+			openCount,
 		)
 		return res, nil
 	}

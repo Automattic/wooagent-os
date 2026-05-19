@@ -150,6 +150,21 @@ export interface Persona {
   max_attempts?: number;
   last_run_at?: string | null;
   next_run_at?: string | null;
+  /** True when the daemon has a Go-side persona registered for this slug.
+   *  Unimplemented slugs render as "Coming soon" with inert controls. */
+  implemented?: boolean;
+  /** True when the persona ships dormant (operator opts in via Add Agent
+   *  modal). Addable + disabled rows do not show full roster controls
+   *  until the operator turns them on. */
+  addable?: boolean;
+}
+
+/** PATCH /v1/agents/:slug body. All fields optional; only the keys present
+ *  are written on the daemon side. */
+export interface PatchAgentRequest {
+  enabled?: boolean;
+  model_preference?: string;
+  cadence_seconds?: number;
 }
 
 // Run domain — scheduler activity feed. See daemon/internal/scheduler/*.
@@ -619,9 +634,10 @@ export interface Ability {
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
-  enableAgent: (c: Connection, slug: string) =>
-    request<Persona>(c, `/v1/agents/${encodeURIComponent(slug)}/enable`, {
-      method: 'POST',
+  patchAgent: (c: Connection, slug: string, patch: PatchAgentRequest) =>
+    request<Persona>(c, `/v1/agents/${encodeURIComponent(slug)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
     }),
   runs: {
     list: (

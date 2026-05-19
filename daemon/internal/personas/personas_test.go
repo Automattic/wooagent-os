@@ -26,6 +26,7 @@ type fakePersona struct {
 
 func (f fakePersona) Slug() string                                  { return f.slug }
 func (f fakePersona) DisplayName() string                           { return "fake " + f.slug }
+func (f fakePersona) Addable() bool                                 { return false }
 func (f fakePersona) Cooldown() CooldownPolicy {
 	// fakePersona's Draft doesn't pick a target, so the policy is unused
 	// by the registry/lifecycle tests. Return a non-zero policy so any
@@ -835,6 +836,7 @@ type queuePersona struct {
 
 func (q *queuePersona) Slug() string        { return q.slug }
 func (q *queuePersona) DisplayName() string { return "queue " + q.slug }
+func (q *queuePersona) Addable() bool       { return false }
 func (q *queuePersona) Cooldown() CooldownPolicy {
 	return CooldownPolicy{
 		TargetKey: "product_id",
