@@ -332,7 +332,11 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           const productName =
             typeof target.product_name === 'string' ? target.product_name : issue.title;
           const productSku =
-            typeof target.sku === 'string' ? target.sku : issue.id.slice(0, 8);
+            typeof target.product_sku === 'string'
+              ? target.product_sku
+              : typeof target.sku === 'string'
+                ? target.sku
+                : issue.id.slice(0, 8);
           const isExpanded = expanded[issue.id] ?? false;
           const selectedVariantID = selectedVariants[issue.id];
           const selectedVariant = variants?.find((v) => v.id === selectedVariantID) ?? null;

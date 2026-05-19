@@ -926,40 +926,9 @@ func (s *Server) handleDismissIssue(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// resolveVariantBody finds a variant by id inside target.variants[] and
-// returns its body text. The shape mirrors the prototype's Variant type:
-// each entry is a map with at least {id: string, body: string}.
-func resolveVariantBody(target map[string]any, variantID string) (string, error) {
-	raw, ok := target["variants"]
-	if !ok {
-		return "", fmt.Errorf("proposal target has no variants array")
-	}
-	list, ok := raw.([]any)
-	if !ok {
-		return "", fmt.Errorf("variants is not an array")
-	}
-	for _, v := range list {
-		m, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		idStr, _ := m["id"].(string)
-		if idStr != variantID {
-			continue
-		}
-		body, ok := m["body"].(string)
-		if !ok || body == "" {
-			return "", fmt.Errorf("variant %s has no body", variantID)
-		}
-		return body, nil
-	}
-	return "", fmt.Errorf("variant_id %s not found in proposal target", variantID)
-}
-
 // resolveSelectedVariant finds the variant by id inside target.variants[]
-// and returns its full map. Sibling of resolveVariantBody — cold-draft
-// dispatch needs the structured body_short/body_long fields, not just a
-// single body string.
+// and returns its full map. Cold-draft dispatch needs the structured
+// body_short/body_long fields, not just a single body string.
 func resolveSelectedVariant(target map[string]any, variantID string) (map[string]any, error) {
 	raw, ok := target["variants"]
 	if !ok {
