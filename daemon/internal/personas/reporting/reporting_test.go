@@ -2,7 +2,6 @@ package reporting
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
@@ -32,106 +31,18 @@ func TestReporting_Cooldown_IsZeroValue(t *testing.T) {
 	}
 }
 
-func TestReporting_Draft_NoMCP_SkippedWithReason(t *testing.T) {
-	res, err := Reporting{}.Draft(context.Background(), personas.Deps{})
+// Draft is a dormant stub until a real reporting skill lands.
+// Confirm it returns Skipped:true with a non-empty SkipReason under all
+// conditions — even with a nil MCP client (deps is zero-value here).
+func TestDraft_ReturnsSkipped(t *testing.T) {
+	got, err := (Reporting{}).Draft(context.Background(), personas.Deps{})
 	if err != nil {
-		t.Fatalf("Draft: %v", err)
+		t.Fatalf("draft: %v", err)
 	}
-	if !res.Skipped {
-		t.Errorf("expected Skipped when MCP is nil; got %+v", res)
+	if !got.Skipped {
+		t.Errorf("expected Skipped=true, got %+v", got)
 	}
-	if !strings.Contains(res.SkipReason, "MCP") {
-		t.Errorf("SkipReason should mention MCP; got %q", res.SkipReason)
-	}
-}
-
-// The data-issue detection is pure-function and exercised here without
-// MCP. dataIssuesFor is the heart of the persona: it decides what counts
-// as "needs attention." Test that the two checks fire independently and
-// that a fully-filled product produces an empty issue list.
-func TestDataIssuesFor_BothMissing(t *testing.T) {
-	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish"})
-	if len(issues) != 2 {
-		t.Errorf("expected 2 issues for zero-length descriptions; got %v", issues)
-	}
-}
-
-func TestDataIssuesFor_LongOnly(t *testing.T) {
-	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish", ShortDescriptionLength: 50})
-	if len(issues) != 1 || !strings.Contains(issues[0], "long description") {
-		t.Errorf("expected just \"missing long description\"; got %v", issues)
-	}
-}
-
-func TestDataIssuesFor_ShortOnly(t *testing.T) {
-	issues := dataIssuesFor(productSummary{ID: 1, Name: "X", Status: "publish", DescriptionLength: 200})
-	if len(issues) != 1 || !strings.Contains(issues[0], "short description") {
-		t.Errorf("expected just \"missing short description\"; got %v", issues)
-	}
-}
-
-func TestDataIssuesFor_AllPresent_NoIssues(t *testing.T) {
-	issues := dataIssuesFor(productSummary{
-		ID: 1, Name: "X", Status: "publish",
-		DescriptionLength: 200, ShortDescriptionLength: 50,
-	})
-	if len(issues) != 0 {
-		t.Errorf("expected zero issues for a fully-filled product; got %v", issues)
-	}
-}
-
-// DedupKey on the Drafted is the system-wide guard's hook — without it,
-// two scheduler ticks (or two operator "Run Now" clicks) race straight
-// through RunAndPersist and produce identical digest cards. See
-// docs/specs/2026-05-18-agent-proposal-dedup-design.md.
-func TestBuildDataIssuesDigest_SetsDedupKey(t *testing.T) {
-	matches := []productMatch{
-		{ProductID: 1, Name: "X", Issues: []string{"missing long description"}},
-	}
-	d := buildDataIssuesDigest(matches, 1, false)
-	if d.DedupKey != "digest:data_issues" {
-		t.Errorf("DedupKey = %q, want %q", d.DedupKey, "digest:data_issues")
-	}
-}
-
-func TestRenderDigest_NotTruncated(t *testing.T) {
-	matches := []productMatch{
-		{ProductID: 1, Name: "Cashmere Scarf", Issues: []string{"missing long description"}},
-		{ProductID: 2, Name: "Wool Cardigan", Issues: []string{"missing short description"}},
-	}
-	body := renderDigest(matches, 2, false)
-	if !strings.Contains(body, "**2 products:**") {
-		t.Errorf("body should say \"2 products\" when total equals preview length; got:\n%s", body)
-	}
-	if !strings.Contains(body, "Cashmere Scarf") || !strings.Contains(body, "product #1") {
-		t.Errorf("body should include product name + ID; got:\n%s", body)
-	}
-	if !strings.Contains(body, "missing long description") {
-		t.Errorf("body should include the issue text; got:\n%s", body)
-	}
-}
-
-func TestRenderDigest_Truncated(t *testing.T) {
-	matches := []productMatch{
-		{ProductID: 1, Name: "Cashmere Scarf", Issues: []string{"missing long description"}},
-		{ProductID: 2, Name: "Wool Cardigan", Issues: []string{"missing short description"}},
-	}
-	body := renderDigest(matches, 47, true)
-	if !strings.Contains(body, "**47 total matches**") {
-		t.Errorf("body should call out the truncated total; got:\n%s", body)
-	}
-	if !strings.Contains(body, "showing the first 2") {
-		t.Errorf("body should mention how many are previewed; got:\n%s", body)
-	}
-}
-
-func TestPlural(t *testing.T) {
-	if plural(1) != "" {
-		t.Errorf("plural(1) should be empty; got %q", plural(1))
-	}
-	for _, n := range []int{0, 2, 5, 100} {
-		if plural(n) != "s" {
-			t.Errorf("plural(%d) should be \"s\"; got %q", n, plural(n))
-		}
+	if got.SkipReason == "" {
+		t.Errorf("SkipReason should be non-empty")
 	}
 }
