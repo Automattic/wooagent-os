@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -241,7 +242,7 @@ func TestBuildPromptUserMessage_IncludesProductAndCorpus(t *testing.T) {
 		{Name: "Stoneware Mug", Body: "Body fired in our wood kiln. Holds 12oz. Hand-thrown."},
 		{Name: "Cashmere Scarf", Body: "Plate-loomed in the Loire valley. 200g of two-ply yarn."},
 	}
-	msg := buildPromptUserMessage(p, corpus)
+	msg := buildPromptUserMessage(p, corpus, draftOpts{})
 
 	// Product fields appear.
 	for _, want := range []string{"Indigo Throw Pillow", "PIL-IND-22", "Existing thin description."} {
@@ -270,7 +271,7 @@ func TestBuildPromptUserMessage_IncludesProductAndCorpus(t *testing.T) {
 
 func TestBuildPromptUserMessage_EmptyCorpus(t *testing.T) {
 	p := product{Name: "New Store Product", SKU: "NEW-1", Description: "hi"}
-	msg := buildPromptUserMessage(p, nil)
+	msg := buildPromptUserMessage(p, nil, draftOpts{})
 	// Empty corpus → prompt instructs the LLM to emit null for voice.
 	if !strings.Contains(msg, "Voice corpus: (none available") {
 		t.Errorf("empty-corpus message should mark the gap explicitly\n---\n%s", msg)
@@ -287,7 +288,7 @@ func TestBuildPromptUserMessage_EmptyDescription(t *testing.T) {
 	// marketing's job kicks in).
 	p := product{Name: "Blank Product", SKU: "BLANK-1", Description: ""}
 	corpus := []corpusSample{{Name: "Example", Body: "An existing description."}}
-	msg := buildPromptUserMessage(p, corpus)
+	msg := buildPromptUserMessage(p, corpus, draftOpts{})
 
 	if !strings.Contains(msg, "Current description: \n") {
 		t.Errorf("empty description should still surface the label with an empty value\n---\n%s", msg)
@@ -447,5 +448,58 @@ func TestPickColdDraftCandidates_RespectsMax(t *testing.T) {
 	}
 	if len(got) != 10 {
 		t.Errorf("len = %d, want 10 (capped)", len(got))
+	}
+}
+
+func TestComputeDrafting(t *testing.T) {
+	cases := []struct {
+		name     string
+		p        product
+		expected []string
+	}{
+		{"both empty", product{ShortDesc: "", Description: ""}, []string{"short", "long"}},
+		{"short only", product{ShortDesc: "", Description: "filled"}, []string{"short"}},
+		{"long only", product{ShortDesc: "filled", Description: ""}, []string{"long"}},
+		{"neither", product{ShortDesc: "s", Description: "l"}, []string{}},
+		{"whitespace counts as empty", product{ShortDesc: "  ", Description: "\n\t"}, []string{"short", "long"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := computeDrafting(tc.p)
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Errorf("got %v, want %v", got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestBuildPromptUserMessage_ColdDraftMode(t *testing.T) {
+	p := product{
+		Name: "Wool Slippers", SKU: "wool-slippers",
+		ShortDesc: "", Description: "",
+	}
+	msg := buildPromptUserMessage(p, nil, draftOpts{Mode: "cold_draft", Drafting: []string{"short", "long"}})
+	if !strings.Contains(msg, "Current short description:") {
+		t.Errorf("cold-draft message should label short/long current separately:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Drafting fields: short, long") {
+		t.Errorf("cold-draft message should declare which fields to draft:\n%s", msg)
+	}
+	if strings.Contains(msg, "Write the THREE rewrite variants") {
+		t.Errorf("cold-draft message should not use rewrite phrasing:\n%s", msg)
+	}
+}
+
+func TestBuildPromptUserMessage_RewriteMode_Unchanged(t *testing.T) {
+	p := product{
+		Name: "Wool Slippers", SKU: "wool-slippers",
+		Description: "Existing description.",
+	}
+	msg := buildPromptUserMessage(p, nil, draftOpts{})
+	if !strings.Contains(msg, "Current description: Existing description.") {
+		t.Errorf("rewrite mode should use the single-current-description format:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Write the THREE rewrite variants") {
+		t.Errorf("rewrite mode should keep its existing phrasing:\n%s", msg)
 	}
 }
