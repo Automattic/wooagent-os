@@ -545,15 +545,54 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                               </span>
                             </span>
                           </div>
-                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                            Description
-                          </span>
-                          <Text
-                            variant="body-sm"
-                            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
-                          >
-                            {v.body}
-                          </Text>
+                          {isColdDraftBatch ? (
+                            <>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Short description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{
+                                  color: v.body_short
+                                    ? 'var(--wpds-color-fg-content-neutral)'
+                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                  textAlign: 'left',
+                                }}
+                              >
+                                {v.body_short || 'no change'}
+                              </Text>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Long description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{
+                                  color: v.body_long
+                                    ? 'var(--wpds-color-fg-content-neutral)'
+                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                  textAlign: 'left',
+                                }}
+                              >
+                                {v.body_long || 'no change'}
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
+                              >
+                                {v.body}
+                              </Text>
+                            </>
+                          )}
                           {v.note && (
                             <div
                               style={{
