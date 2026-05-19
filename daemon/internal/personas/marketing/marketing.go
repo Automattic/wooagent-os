@@ -498,6 +498,60 @@ func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{
 	return 0, fmt.Errorf("no published products in store")
 }
 
+// pickColdDraftCandidates returns up to max published products where
+// short_description OR long_description is empty, excluding products in
+// skip. Order matches the underlying list call (date_modified asc) so
+// the stalest products surface first — same intuition as
+// pickFirstPublished's data_issues bias, but returning a slice. Takes
+// mcpLister (not *mcp.Client) so tests can pass fakeMCP; see the NOTE
+// near fetchVoiceCorpus on why callAbilityInner can't be shared yet.
+func pickColdDraftCandidates(ctx context.Context, c mcpLister, skip map[int]struct{}, max int) ([]productSummary, error) {
+	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
+		"ability_name": "wooagent-products/list",
+		"parameters": map[string]any{
+			"per_page": 100,
+			"orderby":  "date_modified",
+			"order":    "asc",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list products: %w", err)
+	}
+	if len(res.Content) == 0 {
+		return nil, fmt.Errorf("list products: empty content")
+	}
+	var env abilityEnvelope
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &env); err != nil {
+		return nil, fmt.Errorf("decode list envelope: %w", err)
+	}
+	if !env.Success {
+		return nil, fmt.Errorf("list ability failed: %s", env.Error)
+	}
+	var out struct {
+		Products []productSummary `json:"products"`
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		return nil, fmt.Errorf("decode list data: %w", err)
+	}
+
+	candidates := make([]productSummary, 0, max)
+	for _, p := range out.Products {
+		if len(candidates) >= max {
+			break
+		}
+		if p.Status != "publish" && p.Status != "" {
+			continue
+		}
+		if _, inCooldown := skip[p.ID]; inCooldown {
+			continue
+		}
+		if p.DescriptionLength == 0 || p.ShortDescriptionLength == 0 {
+			candidates = append(candidates, p)
+		}
+	}
+	return candidates, nil
+}
+
 // corpusSample is one product-description sample passed into the marketing
 // prompt as a voice reference. Per the design spec, the corpus is the
 // store's existing longest published descriptions (excluding the product
