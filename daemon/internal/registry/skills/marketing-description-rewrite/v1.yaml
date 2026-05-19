@@ -23,8 +23,8 @@ description: |
      not repeat it more than twice.
   2. Natural placement: the keyphrase appears in the first or second
      sentence, not deferred to the last sentence alone.
-  3. Length adequacy: 140–220 characters (same character cap as the
-     variant constraints below). A variant that is too short or too
+  3. Length adequacy: the body fits the per-mode length range documented
+     in the "Body fields" section below. A variant that is too short or too
      long fails this check.
   4. Benefit-led opener: first sentence leads with what the product does
      for the customer or its standout property, not the product's name or
