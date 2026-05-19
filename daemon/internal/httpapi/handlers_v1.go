@@ -405,15 +405,20 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 // and (b) a function that builds the ability's parameters from the proposal
 // content + target. Adding new proposal types is purely additive — register a
 // new dispatcher here, and the approve handler picks it up.
+//
+// selectedVariant is the full variant map chosen by the operator (nil when
+// no variant_id was supplied). Dispatchers that only need the content string
+// (rewrite, price-change, customer-reply) ignore it; cold-draft reads
+// body_short/body_long from it.
 type approveDispatch struct {
 	ability    string
-	buildParams func(content string, target map[string]any) (map[string]any, error)
+	buildParams func(content string, selectedVariant map[string]any, target map[string]any) (map[string]any, error)
 }
 
 var approveDispatchByType = map[string]approveDispatch{
 	"product_description_rewrite": {
 		ability: "wooagent-products/update",
-		buildParams: func(content string, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
 				return nil, err
@@ -431,7 +436,7 @@ var approveDispatchByType = map[string]approveDispatch{
 	// fields-shipped subset is the only difference.
 	"product_price_change": {
 		ability: "wooagent-products/update",
-		buildParams: func(_ string, target map[string]any) (map[string]any, error) {
+		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
 				return nil, err
@@ -453,7 +458,7 @@ var approveDispatchByType = map[string]approveDispatch{
 	// off so it shows only in wp-admin.
 	"customer_reply_draft": {
 		ability: "wooagent-orders/add-note",
-		buildParams: func(content string, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
 			oid, err := requireIntFromTarget(target, "order_id")
 			if err != nil {
 				return nil, err
@@ -473,6 +478,55 @@ var approveDispatchByType = map[string]approveDispatch{
 				"note":             note,
 				"is_customer_note": isCustomer,
 			}, nil
+		},
+	},
+	// Marketing persona — cold-draft path. proposal.target.drafting lists
+	// which description fields to fill ("short" and/or "long"); the selected
+	// variant carries body_short and/or body_long. The payload writes only
+	// the previously-empty fields; existing copy in non-drafted fields is
+	// preserved because we only include keys named in drafting.
+	"product_cold_draft": {
+		ability: "wooagent-products/update",
+		buildParams: func(_ string, selectedVariant map[string]any, target map[string]any) (map[string]any, error) {
+			pid, err := requireIntFromTarget(target, "product_id")
+			if err != nil {
+				return nil, err
+			}
+			if selectedVariant == nil {
+				return nil, fmt.Errorf("cold-draft approval requires a variant_id")
+			}
+			rawDrafting, ok := target["drafting"]
+			if !ok {
+				return nil, fmt.Errorf("missing drafting in proposal target")
+			}
+			drafting, ok := rawDrafting.([]any)
+			if !ok {
+				return nil, fmt.Errorf("drafting is not an array")
+			}
+			params := map[string]any{"id": pid}
+			for _, f := range drafting {
+				field, ok := f.(string)
+				if !ok {
+					return nil, fmt.Errorf("drafting entry %v is not a string", f)
+				}
+				switch field {
+				case "short":
+					short, ok := selectedVariant["body_short"].(string)
+					if !ok || short == "" {
+						return nil, fmt.Errorf("variant missing body_short (drafting requires it)")
+					}
+					params["short_description"] = short
+				case "long":
+					long, ok := selectedVariant["body_long"].(string)
+					if !ok || long == "" {
+						return nil, fmt.Errorf("variant missing body_long (drafting requires it)")
+					}
+					params["description"] = long
+				default:
+					return nil, fmt.Errorf("unknown drafting field %q (expected short|long)", field)
+				}
+			}
+			return params, nil
 		},
 	},
 }
@@ -562,15 +616,22 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 	}
 
 	contentToShip := proposalContent
+	var selectedVariant map[string]any
 	if variantID != "" {
-		body, err := resolveVariantBody(target, variantID)
+		v, err := resolveSelectedVariant(target, variantID)
 		if err != nil {
 			return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_variant_id", Message: err.Error()}
 		}
-		contentToShip = body
+		selectedVariant = v
+		// For legacy variants (have body), keep populating contentToShip so
+		// existing dispatchers (rewrite, customer-reply) continue to receive
+		// the variant's body string unchanged.
+		if body, ok := v["body"].(string); ok && body != "" {
+			contentToShip = body
+		}
 	}
 
-	params, err := dispatch.buildParams(contentToShip, target)
+	params, err := dispatch.buildParams(contentToShip, selectedVariant, target)
 	if err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_proposal_target", Message: err.Error()}
 	}
@@ -865,34 +926,28 @@ func (s *Server) handleDismissIssue(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// resolveVariantBody finds a variant by id inside target.variants[] and
-// returns its body text. The shape mirrors the prototype's Variant type:
-// each entry is a map with at least {id: string, body: string}.
-func resolveVariantBody(target map[string]any, variantID string) (string, error) {
+// resolveSelectedVariant finds the variant by id inside target.variants[]
+// and returns its full map. Cold-draft dispatch needs the structured
+// body_short/body_long fields, not just a single body string.
+func resolveSelectedVariant(target map[string]any, variantID string) (map[string]any, error) {
 	raw, ok := target["variants"]
 	if !ok {
-		return "", fmt.Errorf("proposal target has no variants array")
+		return nil, fmt.Errorf("proposal target has no variants array")
 	}
 	list, ok := raw.([]any)
 	if !ok {
-		return "", fmt.Errorf("variants is not an array")
+		return nil, fmt.Errorf("variants is not an array")
 	}
 	for _, v := range list {
 		m, ok := v.(map[string]any)
 		if !ok {
 			continue
 		}
-		idStr, _ := m["id"].(string)
-		if idStr != variantID {
-			continue
+		if idStr, _ := m["id"].(string); idStr == variantID {
+			return m, nil
 		}
-		body, ok := m["body"].(string)
-		if !ok || body == "" {
-			return "", fmt.Errorf("variant %s has no body", variantID)
-		}
-		return body, nil
 	}
-	return "", fmt.Errorf("variant_id %s not found in proposal target", variantID)
+	return nil, fmt.Errorf("variant_id %s not found in proposal target", variantID)
 }
 
 // requireIntFromTarget reads an integer value out of a JSON-decoded target

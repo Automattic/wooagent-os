@@ -279,10 +279,16 @@ export interface BatchOperationResult {
   }>;
 }
 
+/** Copy variant from an agent proposal. Carries exactly one of (body) or
+ *  (body_short/body_long) — legacy rewrites populate body; cold-draft variants
+ *  populate body_short/body_long. The empty-string default for body is safe
+ *  for call sites that treat it as content-neutral. */
 export interface Variant {
   id: string;
   label: string;
   body: string;
+  body_short?: string;
+  body_long?: string;
   seo?: number;
   voice?: number;
   charCount: number;
@@ -310,6 +316,8 @@ export interface Proposal {
 // Pull a typed variants list out of proposal.target.variants. Returns null
 // when the proposal is single-shot (no variants array). Filters out
 // malformed entries so the UI never has to defensively check shape.
+// Accepts variants with body (legacy rewrites) or body_short/body_long
+// (cold-draft). At least one copy source must be present.
 export function variantsFromProposal(p: Proposal | null | undefined): Variant[] | null {
   if (!p?.target) return null;
   const raw = (p.target as Record<string, unknown>).variants;
@@ -318,15 +326,28 @@ export function variantsFromProposal(p: Proposal | null | undefined): Variant[] 
   for (const v of raw) {
     if (!v || typeof v !== 'object') continue;
     const r = v as Record<string, unknown>;
-    if (typeof r.id !== 'string' || typeof r.body !== 'string') continue;
+    if (typeof r.id !== 'string') continue;
+
+    const body = typeof r.body === 'string' ? r.body : '';
+    const bodyShort = typeof r.body_short === 'string' ? r.body_short : undefined;
+    const bodyLong = typeof r.body_long === 'string' ? r.body_long : undefined;
+
+    // Need at least one body source — guards against malformed entries
+    // that have an id but no copy at all.
+    if (body === '' && !bodyShort && !bodyLong) continue;
+
     out.push({
       id: r.id,
       label: typeof r.label === 'string' ? r.label : r.id,
-      body: r.body,
+      body,
+      body_short: bodyShort,
+      body_long: bodyLong,
       seo: typeof r.seo === 'number' ? r.seo : undefined,
       voice: typeof r.voice === 'number' ? r.voice : undefined,
       charCount:
-        typeof r.charCount === 'number' ? r.charCount : r.body.length,
+        typeof r.charCount === 'number'
+          ? r.charCount
+          : body.length + (bodyShort?.length ?? 0) + (bodyLong?.length ?? 0),
       recommended: r.recommended === true,
       note: typeof r.note === 'string' ? r.note : undefined,
       angle: typeof r.angle === 'string' ? r.angle : undefined,

@@ -275,6 +275,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   const pendingCount = batch.pending;
   const firstProposal = data.issues[0]?.proposal;
   const isPricingBatch = firstProposal?.type === 'product_price_change';
+  const isColdDraftBatch = firstProposal?.type === 'product_cold_draft';
 
   // Marketing-shape body: KPI strip + per-child variant accordion. Captures
   // component state (selectedVariants, expanded, busy, approveRow, rejectRow).
@@ -292,7 +293,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           label="Brand voice match"
           value="96%"
           score={96}
-          hint="vs. your existing copy"
+          hint={isColdDraftBatch ? 'vs. your voice model' : 'vs. your existing copy'}
         />
         <Kpi
           label="SEO score"
@@ -310,10 +311,32 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           const target = (proposal?.target ?? {}) as Record<string, unknown>;
           const previousCopy =
             typeof target.previous === 'string' ? target.previous : '';
+          const previousShort =
+            typeof target.previous_short === 'string' ? target.previous_short : '';
+          const previousLong =
+            typeof target.previous_long === 'string' ? target.previous_long : '';
+          const draftingFields: string[] = Array.isArray((target as any).drafting)
+            ? ((target as any).drafting as unknown[]).filter(
+                (f): f is string => typeof f === 'string',
+              )
+            : [];
+          const applyTargetParts = draftingFields.reduce<string[]>((acc, f) => {
+            if (f === 'short') acc.push('product.short_description');
+            else if (f === 'long') acc.push('product.description');
+            return acc;
+          }, []);
+          const applyHint =
+            isColdDraftBatch && applyTargetParts.length > 0
+              ? ` — will write ${applyTargetParts.join(' + ')} on approve`
+              : '';
           const productName =
             typeof target.product_name === 'string' ? target.product_name : issue.title;
           const productSku =
-            typeof target.sku === 'string' ? target.sku : issue.id.slice(0, 8);
+            typeof target.product_sku === 'string'
+              ? target.product_sku
+              : typeof target.sku === 'string'
+                ? target.sku
+                : issue.id.slice(0, 8);
           const isExpanded = expanded[issue.id] ?? false;
           const selectedVariantID = selectedVariants[issue.id];
           const selectedVariant = variants?.find((v) => v.id === selectedVariantID) ?? null;
@@ -405,21 +428,58 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       >
                         Live on store
                       </Text>
-                      <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                        Description
-                      </span>
-                      <Text
-                        variant="body-sm"
-                        style={{
-                          color: previousCopy
-                            ? 'var(--wpds-color-fg-content-neutral)'
-                            : 'var(--wpds-color-fg-content-neutral-weak)',
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {previousCopy || '— empty —'}
-                      </Text>
+                      {isColdDraftBatch ? (
+                        <>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Short description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousShort
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousShort || '— empty —'}
+                          </Text>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Long description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousLong
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousLong || '— empty —'}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                            Description
+                          </span>
+                          <Text
+                            variant="body-sm"
+                            style={{
+                              color: previousCopy
+                                ? 'var(--wpds-color-fg-content-neutral)'
+                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                              whiteSpace: 'pre-wrap',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {previousCopy || '— empty —'}
+                          </Text>
+                        </>
+                      )}
                     </div>
 
                     {/* Variant columns */}
@@ -503,15 +563,54 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                               </span>
                             </span>
                           </div>
-                          <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
-                            Description
-                          </span>
-                          <Text
-                            variant="body-sm"
-                            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
-                          >
-                            {v.body}
-                          </Text>
+                          {isColdDraftBatch ? (
+                            <>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Short description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{
+                                  color: v.body_short
+                                    ? 'var(--wpds-color-fg-content-neutral)'
+                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                  textAlign: 'left',
+                                }}
+                              >
+                                {v.body_short || 'no change'}
+                              </Text>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Long description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{
+                                  color: v.body_long
+                                    ? 'var(--wpds-color-fg-content-neutral)'
+                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                  textAlign: 'left',
+                                }}
+                              >
+                                {v.body_long || 'no change'}
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <span className="wa-eyebrow" style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
+                                Description
+                              </span>
+                              <Text
+                                variant="body-sm"
+                                style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5, textAlign: 'left' }}
+                              >
+                                {v.body}
+                              </Text>
+                            </>
+                          )}
                           {v.note && (
                             <div
                               style={{
@@ -539,7 +638,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       {!reviewable
                         ? `Already ${issue.status === 'done' ? 'approved' : issue.status}`
                         : selectedVariantID
-                          ? `Variant ${selectedVariantID} selected`
+                          ? `Variant ${selectedVariantID} selected${applyHint}`
                           : 'No variant selected yet — click a column above to choose'}
                     </Text>
                     <div className="wa-batch-row__footer-actions">

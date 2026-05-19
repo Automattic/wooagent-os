@@ -34,15 +34,26 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
-// variant is the shape the UI's variantsFromProposal expects to find under
-// proposal.target.variants. Keep field names in sync with
-// ui/src/api/client.ts:282 — id, body required; label/charCount/recommended
-// optional; seo/voice optional (omitempty → UI distinguishes "absent" from
-// "real 0" and renders '—' on absent).
+// draftOpts threads per-call options through the LLM call stack. Zero
+// value (Mode=="") defaults to the rewrite path for back-compat with
+// callers that don't care.
+type draftOpts struct {
+	Mode     string   // "" or "rewrite" → rewrite path; "cold_draft" → cold-draft path
+	Drafting []string // for cold_draft: which fields to fill ("short", "long")
+}
+
+func (o draftOpts) isColdDraft() bool { return o.Mode == "cold_draft" }
+
+// variant is the persisted shape. label/seo/voice optional; Body is the
+// single-body case (rewrite + fallback); BodyShort/BodyLong populated for
+// cold-draft variants where the agent fills missing description fields.
+// Exactly one of (Body) or (BodyShort | BodyLong) is set per variant.
 type variant struct {
 	ID          string `json:"id"`
 	Label       string `json:"label,omitempty"`
-	Body        string `json:"body"`
+	Body        string `json:"body,omitempty"`
+	BodyShort   string `json:"body_short,omitempty"`
+	BodyLong    string `json:"body_long,omitempty"`
 	CharCount   int    `json:"charCount,omitempty"`
 	Recommended bool   `json:"recommended,omitempty"`
 	Angle       string `json:"angle,omitempty"`
@@ -135,6 +146,92 @@ func parseVariants(raw string) ([]variant, error) {
 	return out, nil
 }
 
+// llmColdDraftVariant mirrors llmVariant but carries structured body fields
+// for the cold-draft case. Either or both of BodyShort / BodyLong may be
+// populated; the parser validates against the drafting slice the caller
+// provides (e.g. ["short"], ["long"], ["short", "long"]).
+type llmColdDraftVariant struct {
+	Label     string `json:"label"`
+	Angle     string `json:"angle"`
+	BodyShort string `json:"body_short"`
+	BodyLong  string `json:"body_long"`
+	Seo       int    `json:"seo"`
+	Voice     int    `json:"voice"`
+}
+
+type llmColdDraftResp struct {
+	Variants []llmColdDraftVariant `json:"variants"`
+}
+
+// parseColdDraftVariants parses a cold-draft 3-variant LLM response. The
+// drafting slice lists which body fields each variant MUST populate; any
+// missing required field on any variant is an error so the caller falls
+// back rather than persisting a partial proposal. Returns variants ready
+// to persist (BodyShort/BodyLong set, Body left empty).
+func parseColdDraftVariants(raw string, drafting []string) ([]variant, error) {
+	block := jsonObjectRe.FindString(raw)
+	if block == "" {
+		return nil, fmt.Errorf("no JSON object found in LLM output")
+	}
+	var parsed llmColdDraftResp
+	if err := json.Unmarshal([]byte(block), &parsed); err != nil {
+		return nil, fmt.Errorf("decode cold-draft variants JSON: %w", err)
+	}
+	if len(parsed.Variants) != 3 {
+		return nil, fmt.Errorf("expected 3 variants, got %d", len(parsed.Variants))
+	}
+	needShort, needLong := false, false
+	for _, f := range drafting {
+		switch f {
+		case "short":
+			needShort = true
+		case "long":
+			needLong = true
+		default:
+			return nil, fmt.Errorf("unknown drafting field %q (expected short|long)", f)
+		}
+	}
+	if !needShort && !needLong {
+		return nil, fmt.Errorf("drafting list is empty")
+	}
+	out := make([]variant, 0, 3)
+	for i, v := range parsed.Variants {
+		short := strings.TrimSpace(v.BodyShort)
+		long := strings.TrimSpace(v.BodyLong)
+		if needShort && short == "" {
+			return nil, fmt.Errorf("variant %d missing body_short", i)
+		}
+		if needLong && long == "" {
+			return nil, fmt.Errorf("variant %d missing body_long", i)
+		}
+		label := strings.TrimSpace(v.Label)
+		if label == "" {
+			label = string(rune('A' + i))
+		}
+		seo := v.Seo
+		if seo <= 0 || seo > 100 {
+			seo = 0
+		}
+		voice := v.Voice
+		if voice <= 0 || voice > 100 {
+			voice = 0
+		}
+		charCount := len(short) + len(long)
+		out = append(out, variant{
+			ID:          fmt.Sprintf("var_%s", strings.ToLower(label)),
+			Label:       label,
+			BodyShort:   short,
+			BodyLong:    long,
+			CharCount:   charCount,
+			Recommended: i == 0,
+			Angle:       strings.TrimSpace(v.Angle),
+			Seo:         seo,
+			Voice:       voice,
+		})
+	}
+	return out, nil
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
@@ -176,6 +273,11 @@ const skillName = "marketing.description-rewrite"
 // so the loop doesn't re-pick the same product.
 const maxDraftAttempts = 3
 
+const (
+	coldDraftMin = 3  // require >= this many empty-copy candidates to emit a batch
+	coldDraftMax = 10 // cap per-tick LLM cost and operator review surface
+)
+
 func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	if deps.MCP == nil {
 		return personas.Drafted{
@@ -214,6 +316,32 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		}, nil
 	}
 
+	// Cold-draft batch path: if enough products have empty short/long
+	// descriptions out of cooldown, draft them in one batch this tick
+	// instead of the single-rewrite loop. Operator-targeted runs
+	// (ProductIDOverride) already bypassed this above.
+	// See docs/specs/2026-05-18-marketing-cold-draft-batch-design.md.
+	candidates, err := pickColdDraftCandidates(ctx, deps.MCP, skip, coldDraftMax)
+	if err != nil {
+		fmt.Printf("marketing: cold-draft candidate scan errored (%v); falling back to single-rewrite\n", err)
+	} else if len(candidates) >= coldDraftMin {
+		ids := make([]int, 0, len(candidates))
+		for _, c := range candidates {
+			ids = append(ids, c.ID)
+		}
+		fmt.Printf("marketing: cold-draft scan found %d candidates (ids: %v); drafting batch\n", len(candidates), ids)
+		batch, err := draftColdDraftBatch(ctx, deps, candidates, skill.Description, draftColdDraftForProduct)
+		if err != nil {
+			return personas.Drafted{}, err
+		}
+		if !batch.Skipped {
+			return batch, nil
+		}
+		fmt.Printf("marketing: cold-draft batch skipped (%s); falling back to single-rewrite\n", batch.SkipReason)
+	} else {
+		fmt.Printf("marketing: cold-draft scan found %d candidates (need %d); falling back to single-rewrite\n", len(candidates), coldDraftMin)
+	}
+
 	// Within-run iteration: if the LLM can't draft for a product (returns
 	// no_proposal / empty rewrite), add it to the run-local skip set and
 	// try the next eligible product. Up to maxDraftAttempts.
@@ -244,7 +372,7 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 		corpus = nil
 	}
 
-	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus)
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus, draftOpts{})
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -411,6 +539,60 @@ func pickFirstPublished(ctx context.Context, c *mcp.Client, skip map[int]struct{
 	return 0, fmt.Errorf("no published products in store")
 }
 
+// pickColdDraftCandidates returns up to max published products where
+// short_description OR long_description is empty, excluding products in
+// skip. Order matches the underlying list call (date_modified asc) so
+// the stalest products surface first — same intuition as
+// pickFirstPublished's data_issues bias, but returning a slice. Takes
+// mcpLister (not *mcp.Client) so tests can pass fakeMCP; see the NOTE
+// near fetchVoiceCorpus on why callAbilityInner can't be shared yet.
+func pickColdDraftCandidates(ctx context.Context, c mcpLister, skip map[int]struct{}, max int) ([]productSummary, error) {
+	res, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
+		"ability_name": "wooagent-products/list",
+		"parameters": map[string]any{
+			"per_page": 100,
+			"orderby":  "date_modified",
+			"order":    "asc",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list products: %w", err)
+	}
+	if len(res.Content) == 0 {
+		return nil, fmt.Errorf("list products: empty content")
+	}
+	var env abilityEnvelope
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &env); err != nil {
+		return nil, fmt.Errorf("decode list envelope: %w", err)
+	}
+	if !env.Success {
+		return nil, fmt.Errorf("list ability failed: %s", env.Error)
+	}
+	var out struct {
+		Products []productSummary `json:"products"`
+	}
+	if err := json.Unmarshal(env.Data, &out); err != nil {
+		return nil, fmt.Errorf("decode list data: %w", err)
+	}
+
+	candidates := make([]productSummary, 0, max)
+	for _, p := range out.Products {
+		if len(candidates) >= max {
+			break
+		}
+		if p.Status != "publish" && p.Status != "" {
+			continue
+		}
+		if _, inCooldown := skip[p.ID]; inCooldown {
+			continue
+		}
+		if p.DescriptionLength == 0 || p.ShortDescriptionLength == 0 {
+			candidates = append(candidates, p)
+		}
+	}
+	return candidates, nil
+}
+
 // corpusSample is one product-description sample passed into the marketing
 // prompt as a voice reference. Per the design spec, the corpus is the
 // store's existing longest published descriptions (excluding the product
@@ -535,6 +717,19 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 	return p, nil
 }
 
+// computeDrafting returns which description fields are empty on this
+// product — the cold-draft path passes this slice to the LLM.
+func computeDrafting(p product) []string {
+	out := []string{}
+	if strings.TrimSpace(p.ShortDesc) == "" {
+		out = append(out, "short")
+	}
+	if strings.TrimSpace(p.Description) == "" {
+		out = append(out, "long")
+	}
+	return out
+}
+
 // ---- LLM ----
 
 // buildPromptUserMessage assembles the per-product user message for the
@@ -546,10 +741,23 @@ func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
 // Empty corpus is supported (new stores, all-thin descriptions). In that
 // case the prompt tells the LLM to emit null for the voice field — the
 // Go validator clears anything ≤ 0 anyway, so this is belt-and-suspenders.
-func buildPromptUserMessage(p product, corpus []corpusSample) string {
+//
+// opts.isColdDraft() switches to a separate preamble that surfaces both
+// description fields individually and instructs the LLM to fill only the
+// empty ones (declared in opts.Drafting).
+func buildPromptUserMessage(p product, corpus []corpusSample, opts draftOpts) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Product: %s\nSKU: %s\nCurrent description: %s\n\n",
-		p.Name, p.SKU, strings.TrimSpace(p.Description))
+	if opts.isColdDraft() {
+		fmt.Fprintf(&b, "Product: %s\nSKU: %s\n", p.Name, p.SKU)
+		fmt.Fprintf(&b, "Current short description: %s\n", strings.TrimSpace(p.ShortDesc))
+		fmt.Fprintf(&b, "Current long description: %s\n\n", strings.TrimSpace(p.Description))
+		fmt.Fprintf(&b, "Drafting fields: %s. Emit body_%s on each variant. Leave Body empty.\n\n",
+			strings.Join(opts.Drafting, ", "),
+			strings.Join(opts.Drafting, " and body_"))
+	} else {
+		fmt.Fprintf(&b, "Product: %s\nSKU: %s\nCurrent description: %s\n\n",
+			p.Name, p.SKU, strings.TrimSpace(p.Description))
+	}
 	if len(corpus) == 0 {
 		b.WriteString("Voice corpus: (none available — this store has no other long-form published descriptions to compare against. Emit null for `voice` on each variant; score SEO as normal.)\n\n")
 	} else {
@@ -559,21 +767,26 @@ func buildPromptUserMessage(p product, corpus []corpusSample) string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 1–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
+	if opts.isColdDraft() {
+		b.WriteString("Draft THREE variants. Return JSON only with the body_short/body_long fields you were asked to fill plus seo and voice scores.")
+	} else {
+		b.WriteString("Write the THREE rewrite variants per the system instructions. Score each variant 1–100 for `seo` and `voice` using the rubrics in the system prompt. Return JSON only.")
+	}
 	return b.String()
 }
 
 // draftWithFallback prefers Anthropic when AnthropicAPIKey is set, and
 // falls back to the OpenAI-compatible endpoint (LM Studio by default)
 // otherwise. Returns (rewrite, skipReason, err): a non-empty skipReason
-// means the caller should mark the run Skipped.
-func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string, corpus []corpusSample) (string, string, error) {
+// means the caller should mark the run Skipped. opts is threaded through
+// to buildPromptUserMessage to switch between rewrite and cold-draft mode.
+func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDescription string, corpus []corpusSample, opts draftOpts) (string, string, error) {
 	if strings.TrimSpace(env.AnthropicAPIKey) != "" {
 		model := env.AnthropicModel
 		if model == "" {
 			model = defaultAnthropicModel
 		}
-		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription, corpus)
+		rewrite, err := draftRewriteAnthropic(ctx, env.AnthropicAPIKey, model, p, skillDescription, corpus, opts)
 		if err != nil {
 			return "", fmt.Sprintf("Claude API errored: %v", err), nil
 		}
@@ -595,7 +808,7 @@ func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDe
 	if apiKey == "" {
 		apiKey = defaultOpenAIKey
 	}
-	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription, corpus)
+	rewrite, err := draftRewriteOpenAI(ctx, base, apiKey, model, p, skillDescription, corpus, opts)
 	if err != nil {
 		return "", fmt.Sprintf("LLM endpoint at %s unreachable or errored: %v", base, err), nil
 	}
@@ -636,8 +849,8 @@ type anthropicResp struct {
 	} `json:"error,omitempty"`
 }
 
-func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string, corpus []corpusSample) (string, error) {
-	user := buildPromptUserMessage(p, corpus)
+func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string, corpus []corpusSample, opts draftOpts) (string, error) {
+	user := buildPromptUserMessage(p, corpus, opts)
 
 	body, _ := json.Marshal(anthropicReq{
 		Model:     model,
@@ -718,8 +931,9 @@ func draftRewriteOpenAI(
 	p product,
 	skillDescription string,
 	corpus []corpusSample,
+	opts draftOpts,
 ) (string, error) {
-	user := buildPromptUserMessage(p, corpus)
+	user := buildPromptUserMessage(p, corpus, opts)
 	body, _ := json.Marshal(chatReq{
 		Model: model,
 		Messages: []chatMsg{
@@ -762,4 +976,116 @@ func draftRewriteOpenAI(
 		})
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+// draftColdDraftForProduct does the per-product cold-draft work: fetch
+// the product, determine which fields are empty, call the LLM in
+// cold_draft mode, parse the structured response, and return a Drafted
+// with ProposalType "product_cold_draft" and target.drafting indicating
+// which fields the variants will write to. Sibling of draftForProduct;
+// the batch wrapper in T5 calls this N times.
+func draftColdDraftForProduct(ctx context.Context, deps personas.Deps, candidate productSummary, skillDescription string) (personas.Drafted, error) {
+	full, err := getProduct(ctx, deps.MCP, candidate.ID)
+	if err != nil {
+		return personas.Drafted{}, fmt.Errorf("get product %d: %w", candidate.ID, err)
+	}
+
+	drafting := computeDrafting(full)
+	if len(drafting) == 0 {
+		// Race: by the time we fetched the full product, it had non-empty
+		// fields. Skip — the single-rewrite path will handle it later.
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("product %d no longer has empty fields", full.ID),
+		}, nil
+	}
+
+	corpus, corpusErr := fetchVoiceCorpus(ctx, deps.MCP, full.ID)
+	if corpusErr != nil {
+		fmt.Printf("marketing(cold_draft): voice corpus fetch errored (%v); proceeding with empty corpus\n", corpusErr)
+		corpus = nil
+	}
+
+	opts := draftOpts{Mode: "cold_draft", Drafting: drafting}
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, full, skillDescription, corpus, opts)
+	if err != nil {
+		return personas.Drafted{}, err
+	}
+	if skipReason != "" {
+		return personas.Drafted{Skipped: true, SkipReason: skipReason}, nil
+	}
+
+	variants, parseErr := parseColdDraftVariants(rawOutput, drafting)
+	if parseErr != nil {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("parse cold-draft variants: %v", parseErr),
+		}, nil
+	}
+
+	target := map[string]any{
+		"product_id":     full.ID,
+		"product_name":   full.Name,
+		"product_sku":    full.SKU,
+		"previous_short": full.ShortDesc,
+		"previous_long":  full.Description,
+		"image_url":      full.ImageURL,
+		"image_alt":      full.ImageAlt,
+		"variants":       variants,
+		"drafting":       drafting,
+	}
+
+	// ProposalContent surfaces in run-log / archive views. Prefer long
+	// body, fall back to short, fall back to empty.
+	content := variants[0].BodyLong
+	if content == "" {
+		content = variants[0].BodyShort
+	}
+
+	return personas.Drafted{
+		Title:           fmt.Sprintf("Product description rewrite · %s", full.Name),
+		Description:     fmt.Sprintf("Cold-drafted by Marketing agent for product #%d (%s).", full.ID, full.SKU),
+		Priority:        "medium",
+		ProposalType:    "product_cold_draft",
+		ProposalContent: content,
+		Target:          target,
+		DedupKey:        fmt.Sprintf("product:%d", full.ID),
+	}, nil
+}
+
+// draftColdDraftBatch packs successful drafts produced by drafterFn into
+// a single batch. drafterFn is a seam for testing; the production call
+// site passes draftColdDraftForProduct.
+//
+// Per-product errors and skips are logged and dropped; if fewer than
+// coldDraftMin drafts survive, the function returns Skipped:true so the
+// caller falls through to single-rewrite. The first successful draft
+// carries BatchSiblings + BatchTitle + BatchIntent; subsequent successes
+// become siblings.
+func draftColdDraftBatch(ctx context.Context, deps personas.Deps, candidates []productSummary, skillDescription string, drafterFn func(context.Context, personas.Deps, productSummary, string) (personas.Drafted, error)) (personas.Drafted, error) {
+	drafts := make([]personas.Drafted, 0, len(candidates))
+	for _, p := range candidates {
+		d, err := drafterFn(ctx, deps, p, skillDescription)
+		if err != nil {
+			fmt.Printf("marketing(cold_draft): product %d errored (%v); dropping\n", p.ID, err)
+			continue
+		}
+		if d.Skipped {
+			fmt.Printf("marketing(cold_draft): product %d skipped (%s); dropping\n", p.ID, d.SkipReason)
+			continue
+		}
+		drafts = append(drafts, d)
+	}
+	if len(drafts) < coldDraftMin {
+		return personas.Drafted{
+			Skipped: true,
+			SkipReason: fmt.Sprintf(
+				"only %d cold-draft candidates survived parsing (need %d)", len(drafts), coldDraftMin),
+		}, nil
+	}
+	primary := drafts[0]
+	primary.BatchSiblings = drafts[1:]
+	primary.BatchTitle = fmt.Sprintf("Review & approve · %d product descriptions", len(drafts))
+	primary.BatchIntent = "fill_missing_copy"
+	return primary, nil
 }
