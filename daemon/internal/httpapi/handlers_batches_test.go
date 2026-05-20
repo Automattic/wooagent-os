@@ -543,6 +543,75 @@ func TestApproveBatch_NotInBatch(t *testing.T) {
 	}
 }
 
+// PEP returns ReasonSchemaCompileError when the cached schema_json is
+// unparseable as a JSON Schema. handlers_v1.writePEPDenial must map that
+// to HTTP 500 with code=schema_compile_error and the "re-discover abilities"
+// hint. Regression guard: a writePEPDenial switch that drops this case or
+// flips it to 422 alongside ReasonInvalidArguments would silently downgrade
+// an infra failure to a caller-mistake response.
+func TestApprove_SchemaCompileError_Returns500(t *testing.T) {
+	mcpc := &fakeMCP{result: mcpSuccessResult()}
+	_, ts, st := newTestRig(t, mcpc)
+
+	// Cache rot: well-formed envelope, but the input_schema has a type the
+	// jsonschema compiler rejects. Seed the parent store first (FK).
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := st.DB.Exec(
+		`INSERT INTO stores(id, url, mcp_endpoint, status, created_at, updated_at)
+		 VALUES('store_test', 'https://test.local', 'https://test.local/wp-json/mcp/v1', 'paired', ?, ?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
+	if _, err := st.DB.Exec(
+		`INSERT INTO abilities(id, store_id, name, schema_json, schema_hash, trust_state, last_seen_at, created_at, updated_at)
+		 VALUES('ab_cache_rot', 'store_test', ?, ?, 'h1', 'trusted', ?, ?, ?)`,
+		"wooagent-products/update",
+		`{"name":"wooagent-products/update","input_schema":{"type":"not-a-real-type"}}`,
+		now, now, now,
+	); err != nil {
+		t.Fatalf("seed malformed schema: %v", err)
+	}
+
+	// Stage an in_review issue with the matching proposal_type so approveOne
+	// dispatches against the malformed-schema ability.
+	created := decode[struct {
+		Issue Issue `json:"issue"`
+	}](t, httpPostJSON(t, ts.URL+"/v1/issues", map[string]any{
+		"title": "schema cache rot", "persona": "marketing", "status": "in_review", "priority": "medium",
+		"proposal": map[string]any{
+			"type":    "product_description_rewrite",
+			"content": "body text",
+			"target":  map[string]any{"product_id": 42},
+		},
+	}))
+
+	res := httpPostJSON(t, ts.URL+"/v1/issues/"+created.Issue.ID+"/approve", map[string]any{})
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", res.StatusCode)
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Error.Code != "schema_compile_error" {
+		t.Errorf("code = %q, want schema_compile_error", body.Error.Code)
+	}
+	if !strings.Contains(body.Error.Message, "schema cache") {
+		t.Errorf("message = %q, want it to mention the schema cache", body.Error.Message)
+	}
+	if mcpc.calls != 0 {
+		t.Errorf("MCP should not be called on a denied approve, got %d calls", mcpc.calls)
+	}
+}
+
 func TestServer_BatchRoutesRegistered(t *testing.T) {
 	// Sanity: confirm the production buildRouter wires the new routes (not
 	// just our test rig). Without auth.Manager New panics, so we construct

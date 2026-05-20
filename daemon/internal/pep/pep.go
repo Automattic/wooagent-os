@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
+
+	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
@@ -27,6 +30,10 @@ type PEP struct {
 	db       *sql.DB
 	schemas  *schemaCache
 	budget   *BudgetGate
+	// logger captures schema-validation diagnostics that we deliberately
+	// do not propagate to audit rows or HTTP responses (the rejected values
+	// may contain PII). Defaults to slog.Default(); tests overwrite directly.
+	logger *slog.Logger
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
@@ -41,6 +48,7 @@ func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB, budget *BudgetGate
 		db:       db,
 		schemas:  &schemaCache{},
 		budget:   budget,
+		logger:   slog.Default(),
 	}
 }
 
@@ -232,9 +240,51 @@ func (p *PEP) checkSchema(ctx context.Context, req Request) ReasonCode {
 		return ""
 	}
 	if err := s.Validate(req.Args); err != nil {
+		p.logSchemaValidationFailure(req.Ability, err)
 		return ReasonInvalidArguments
 	}
 	return ""
+}
+
+// logSchemaValidationFailure emits a Warn log with the failing JSON Pointer
+// paths so operators have something actionable when triaging a denied call.
+// Per the schema-scope design, rejected *values* never reach the log (PII);
+// only the count + paths are logged, since paths come from the schema, not
+// the args.
+func (p *PEP) logSchemaValidationFailure(ability string, err error) {
+	if p.logger == nil {
+		return
+	}
+	paths := schemaErrorPaths(err)
+	p.logger.Warn("pep schema validation rejected call",
+		"ability", ability,
+		"reason", string(ReasonInvalidArguments),
+		"failures", len(paths),
+		"paths", paths,
+	)
+}
+
+// schemaErrorPaths flattens a *jsonschema.ValidationError tree into the leaf
+// InstanceLocation strings. Returns nil for non-validation errors so callers
+// can still log a coarse "failures: 0" entry.
+func schemaErrorPaths(err error) []string {
+	var ve *jsonschema.ValidationError
+	if !errors.As(err, &ve) {
+		return nil
+	}
+	var paths []string
+	var walk func(*jsonschema.ValidationError)
+	walk = func(v *jsonschema.ValidationError) {
+		if len(v.Causes) == 0 {
+			paths = append(paths, v.InstanceLocation)
+			return
+		}
+		for _, c := range v.Causes {
+			walk(c)
+		}
+	}
+	walk(ve)
+	return paths
 }
 
 // checkPolicy — Check 4. Phase 2 will evaluate operator-configured

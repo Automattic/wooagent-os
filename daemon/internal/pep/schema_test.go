@@ -56,6 +56,31 @@ func TestSchemaCache_ErrorsOnMalformedSchema(t *testing.T) {
 	}
 }
 
+// Sentinel: after the first call on an envelope without input_schema, mutate
+// the envelope JSON for subsequent calls (same key). The second call should
+// still return (nil, nil) and ignore the mutated payload — proving the nil
+// result is cached and the JSON envelope is not re-unmarshaled.
+func TestSchemaCache_CachesNilResultForEnvelopeWithoutInputSchema(t *testing.T) {
+	c := &schemaCache{}
+	s, err := c.compileOrGet("test/ability", "h1", envelopeWithoutInputSchema)
+	if err != nil {
+		t.Fatalf("first compileOrGet: %v", err)
+	}
+	if s != nil {
+		t.Fatalf("expected nil schema on first call, got %#v", s)
+	}
+	// Second call with the same key but a malformed payload — if the function
+	// re-entered the parse path it would return an error. Cached nil short-
+	// circuits before unmarshal.
+	s2, err := c.compileOrGet("test/ability", "h1", "{ this is not valid json")
+	if err != nil {
+		t.Fatalf("second compileOrGet hit parse path; expected cached nil: %v", err)
+	}
+	if s2 != nil {
+		t.Errorf("expected nil schema on cached call, got %#v", s2)
+	}
+}
+
 func TestSchemaCache_CachesByNameAndHash(t *testing.T) {
 	c := &schemaCache{}
 	s1, err := c.compileOrGet("test/ability", "h1", validEnvelope)

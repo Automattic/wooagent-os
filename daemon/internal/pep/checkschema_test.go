@@ -1,8 +1,11 @@
 package pep
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
@@ -186,6 +189,86 @@ func TestCheckSchema_DeniesOnCompileFailure(t *testing.T) {
 	}
 	if mcpc.calls != 0 {
 		t.Errorf("denied call should not reach mcp, got %d calls", mcpc.calls)
+	}
+}
+
+// captureWarnLog wires a buffered slog handler at Warn level onto the PEP so
+// the test can assert on emitted log lines. Returns the buffer.
+func captureWarnLog(t *testing.T, p *PEP) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	p.logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	return &buf
+}
+
+func TestCheckSchema_WarnLogsOnMissingRequired(t *testing.T) {
+	mcpc := &fakeMCP{}
+	p, db := newTestPEP(t, mcpc)
+	logBuf := captureWarnLog(t, p)
+	insertAbility(t, db, "wooagent-products/update", "trusted", schemaEnvelopeRequiringID, "h1")
+
+	dec, _, err := p.Invoke(context.Background(), Request{
+		Persona: manifest.PersonaMarketing,
+		Ability: "wooagent-products/update",
+		Args:    map[string]any{"description": "no id here"},
+		Intent:  IntentApply,
+		Source:  SourceOperator,
+	})
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if dec.Allowed {
+		t.Fatal("expected denied for missing required field")
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, "pep schema validation rejected call") {
+		t.Errorf("missing warn-log line; got: %q", logged)
+	}
+	if !strings.Contains(logged, "ability=wooagent-products/update") {
+		t.Errorf("warn-log missing ability key; got: %q", logged)
+	}
+	if !strings.Contains(logged, "reason=invalid_arguments") {
+		t.Errorf("warn-log missing reason key; got: %q", logged)
+	}
+	// The redaction commitment: rejected values must NOT appear in the log.
+	if strings.Contains(logged, "no id here") {
+		t.Errorf("warn-log leaked rejected argument value; got: %q", logged)
+	}
+}
+
+func TestCheckSchema_WarnLogsOnWrongType(t *testing.T) {
+	mcpc := &fakeMCP{}
+	p, db := newTestPEP(t, mcpc)
+	logBuf := captureWarnLog(t, p)
+	insertAbility(t, db, "wooagent-products/update", "trusted", schemaEnvelopeRequiringID, "h1")
+
+	dec, _, err := p.Invoke(context.Background(), Request{
+		Persona: manifest.PersonaMarketing,
+		Ability: "wooagent-products/update",
+		Args:    map[string]any{"id": "not-an-integer"},
+		Intent:  IntentApply,
+		Source:  SourceOperator,
+	})
+	if err != nil {
+		t.Fatalf("invoke: %v", err)
+	}
+	if dec.Allowed {
+		t.Fatal("expected denied for wrong type")
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, "pep schema validation rejected call") {
+		t.Errorf("missing warn-log line; got: %q", logged)
+	}
+	// Path-level diagnostic: the failing field's JSON Pointer should appear
+	// (santhosh-tekuri reports `/id` for a top-level field). Schema-derived,
+	// not value-derived.
+	if !strings.Contains(logged, "/id") {
+		t.Errorf("warn-log missing failing path /id; got: %q", logged)
+	}
+	if strings.Contains(logged, "not-an-integer") {
+		t.Errorf("warn-log leaked rejected argument value; got: %q", logged)
 	}
 }
 

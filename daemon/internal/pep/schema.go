@@ -25,10 +25,12 @@ type schemaCache struct {
 // is the full canonicalized envelope from abilities.schema_json — the
 // function extracts the "input_schema" sub-document before compiling.
 // Returns (nil, nil) when the envelope has no input_schema (caller should
-// pass through validation).
+// pass through validation). The nil result is cached too so subsequent calls
+// for the same key skip the envelope unmarshal.
 func (c *schemaCache) compileOrGet(name, hash, schemaJSON string) (*jsonschema.Schema, error) {
 	key := name + ":" + hash
 	if v, ok := c.entries.Load(key); ok {
+		// Typed-nil pointer stored when the envelope had no input_schema.
 		return v.(*jsonschema.Schema), nil
 	}
 	var envelope struct {
@@ -38,6 +40,7 @@ func (c *schemaCache) compileOrGet(name, hash, schemaJSON string) (*jsonschema.S
 		return nil, fmt.Errorf("decode schema envelope: %w", err)
 	}
 	if len(envelope.InputSchema) == 0 {
+		c.entries.Store(key, (*jsonschema.Schema)(nil))
 		return nil, nil
 	}
 	compiler := jsonschema.NewCompiler()
