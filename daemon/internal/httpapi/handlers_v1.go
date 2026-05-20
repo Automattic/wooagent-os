@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -179,7 +180,18 @@ type patchAgentRequest struct {
 	Name            *string `json:"name,omitempty"`
 	ModelPreference *string `json:"model_preference,omitempty"`
 	CadenceSeconds  *int    `json:"cadence_seconds,omitempty"`
+	// ApplyHoursStart and ApplyHoursEnd are HH:MM 24-hour strings that gate
+	// when the agent may run. Both must be set together or both unset
+	// (XOR is rejected). See DSGWOO-1282.
+	ApplyHoursStart *string `json:"apply_hours_start,omitempty"`
+	ApplyHoursEnd   *string `json:"apply_hours_end,omitempty"`
 }
+
+// validHoursRe matches a valid "HH:MM" 24-hour time string.
+// Must stay in sync with pep/policy_hours.go hhmmRe.
+var validHoursRe = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
+func validHHMM(s string) bool { return validHoursRe.MatchString(s) }
 
 // handlePatchAgent applies a partial update to the agents row for the slug
 // in the URL. The persona must be registered in the runtime registry —
@@ -204,6 +216,27 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 				fmt.Sprintf("invalid JSON body: %v", err))
 			return
 		}
+	}
+
+	// Apply-hours validation: both must be HH:MM 24-hour or both unset.
+	// XOR is rejected. policy_hours.go re-validates as defense-in-depth;
+	// this surfaces the error to the operator at write time.
+	hasStart := req.ApplyHoursStart != nil && *req.ApplyHoursStart != ""
+	hasEnd := req.ApplyHoursEnd != nil && *req.ApplyHoursEnd != ""
+	if hasStart != hasEnd {
+		writeError(w, http.StatusBadRequest, "invalid_apply_hours",
+			"both apply_hours_start and apply_hours_end must be set, or both unset")
+		return
+	}
+	if hasStart && !validHHMM(*req.ApplyHoursStart) {
+		writeError(w, http.StatusBadRequest, "invalid_apply_hours_start",
+			"apply_hours_start must be HH:MM 24-hour format")
+		return
+	}
+	if hasEnd && !validHHMM(*req.ApplyHoursEnd) {
+		writeError(w, http.StatusBadRequest, "invalid_apply_hours_end",
+			"apply_hours_end must be HH:MM 24-hour format")
+		return
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -262,6 +295,12 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 	if req.CadenceSeconds != nil {
 		setParts = append(setParts, "cadence_seconds = ?")
 		args = append(args, *req.CadenceSeconds)
+	}
+	if hasStart {
+		setParts = append(setParts, "apply_hours_start = ?")
+		args = append(args, *req.ApplyHoursStart)
+		setParts = append(setParts, "apply_hours_end = ?")
+		args = append(args, *req.ApplyHoursEnd)
 	}
 	args = append(args, slug)
 
