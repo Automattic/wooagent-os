@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner } from '@wordpress/components';
+import { Button, Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { api, type Connection, type Run } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
+
+const PAGE_SIZE = 50;
 
 interface Props {
   connection: Connection;
@@ -51,14 +53,24 @@ function personaDisplayName(slug: string): string {
 export default function Runs({ connection, onAskAgent }: Props) {
   const navigate = useNavigate();
   const [runs, setRuns] = useState<Run[] | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // paginated flips true the first time the operator clicks Load more. Auto-
+  // refresh pauses while paginated — refreshing only page 1 would either
+  // drop the appended tail or require merge logic that this view doesn't
+  // need. A manual Refresh resets to page 1 and re-enables auto-refresh.
+  const [paginated, setPaginated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchRuns = useCallback(
+  const fetchFirstPage = useCallback(
     async (signal: { cancelled: boolean }) => {
       try {
-        const res = await api.runs.list(connection, { limit: 50 });
-        if (!signal.cancelled) setRuns(res.runs);
+        const res = await api.runs.list(connection, { limit: PAGE_SIZE });
+        if (!signal.cancelled) {
+          setRuns(res.runs);
+          setNextCursor(res.next_cursor);
+        }
       } catch (e) {
         if (!signal.cancelled) {
           setError(e instanceof Error ? e.message : String(e));
@@ -68,14 +80,38 @@ export default function Runs({ connection, onAskAgent }: Props) {
     [connection],
   );
 
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setPaginated(true);
+    try {
+      const res = await api.runs.list(connection, {
+        limit: PAGE_SIZE,
+        cursor: nextCursor,
+      });
+      setRuns((prev) => (prev ? [...prev, ...res.runs] : res.runs));
+      setNextCursor(res.next_cursor);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [connection, nextCursor, loadingMore]);
+
+  const refreshFromTop = useCallback(() => {
+    setPaginated(false);
+    void fetchFirstPage({ cancelled: false });
+  }, [fetchFirstPage]);
+
   useEffect(() => {
     const signal = { cancelled: false };
-    void fetchRuns(signal);
+    void fetchFirstPage(signal);
 
-    // Auto-refresh every 5s while the tab is visible.
+    // Auto-refresh every 5s while the tab is visible. Suspended once the
+    // operator clicks Load more (see `paginated`).
     intervalRef.current = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        void fetchRuns(signal);
+      if (document.visibilityState === 'visible' && !paginated) {
+        void fetchFirstPage(signal);
       }
     }, 5_000);
 
@@ -83,7 +119,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
       signal.cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchRuns]);
+  }, [fetchFirstPage, paginated]);
 
   if (error) {
     return (
@@ -271,6 +307,46 @@ export default function Runs({ connection, onAskAgent }: Props) {
               </button>
             );
           })}
+          {(nextCursor || paginated) && (
+            <Stack
+              direction="column"
+              gap="xs"
+              align="center"
+              style={{ paddingTop: 'var(--wpds-dimension-padding-md)' }}
+            >
+              {nextCursor && (
+                <Button
+                  variant="secondary"
+                  onClick={loadMore}
+                  isBusy={loadingMore}
+                  disabled={loadingMore}
+                  __next40pxDefaultSize
+                >
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </Button>
+              )}
+              {paginated && (
+                <Stack direction="row" gap="xs" align="center">
+                  <Text
+                    variant="body-sm"
+                    style={{
+                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      fontSize: 'var(--wpds-typography-font-size-xs)',
+                    }}
+                  >
+                    Auto-refresh paused while paginated.
+                  </Text>
+                  <Button
+                    variant="link"
+                    onClick={refreshFromTop}
+                    __next40pxDefaultSize
+                  >
+                    Refresh
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+          )}
         </Stack>
       )}
     </Page>
