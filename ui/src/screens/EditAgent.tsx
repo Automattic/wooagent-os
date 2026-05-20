@@ -84,8 +84,7 @@ const PERSONA_DESCRIPTION: Record<string, string> = {
   marketing: 'Grows organic traffic and on-site conversion.',
   pricing: 'Protects margin and monitors competitor pricing.',
   'sales-support': 'Drafts replies to pre-sale and order inquiries.',
-  reporting:
-    "Produces digests of catalog issues that need your attention — starting with products missing short or long descriptions. Read it on your own cadence; dismiss what's intentional.",
+  reporting: 'Summarize store performance in weekly or monthly digests.',
   inventory:
     'Watches stock levels, flags low-stock and overstock situations, and drafts reorder proposals against your supplier list.',
   accounting:

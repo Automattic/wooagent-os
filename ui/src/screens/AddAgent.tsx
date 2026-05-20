@@ -58,8 +58,7 @@ function displayName(slug: string, fallback: string): string {
 // Editorial copy for each persona, used as the read-only "What this agent
 // does" description on the form.
 const PERSONA_DESCRIPTION: Record<string, string> = {
-  reporting:
-    "Produces digests of catalog issues that need your attention — starting with products missing short or long descriptions. Read it on your own cadence; dismiss what's intentional.",
+  reporting: 'Summarize store performance in weekly or monthly digests.',
   inventory:
     'Watches stock levels, flags low-stock and overstock situations, and drafts reorder proposals against your supplier list.',
   accounting:
