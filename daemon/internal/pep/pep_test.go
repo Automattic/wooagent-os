@@ -54,6 +54,9 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if _, err := db.Exec(budgetUsageDDL); err != nil {
 		t.Fatalf("apply budget ddl: %v", err)
 	}
+	if _, err := db.Exec(agentsDDL); err != nil {
+		t.Fatalf("apply agents ddl: %v", err)
+	}
 
 	m := &manifest.Manifest{
 		Version: 1,
@@ -78,26 +81,27 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 }
 
 // auditDDL is the minimal DDL for the audit table — same shape as the
-// 003_audit_invocations.sql migration, inlined here so tests don't depend on
-// the store package's migration runner.
+// 003_audit_invocations.sql + 015_audit_policy_rule_name.sql migrations,
+// inlined here so tests don't depend on the store package's migration runner.
 const auditDDL = `
 CREATE TABLE audit_invocations (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    plan_id         TEXT,
-    task_id         TEXT,
-    step_id         TEXT,
-    issue_id        TEXT,
-    persona         TEXT NOT NULL,
-    model           TEXT,
-    prompt_hash     TEXT,
-    ability         TEXT NOT NULL,
-    args_hash       TEXT NOT NULL,
-    cap_token_id    TEXT,
-    intent          TEXT NOT NULL,
-    outcome         TEXT NOT NULL,
-    denial_reason   TEXT,
-    created_at      TEXT NOT NULL,
-    completed_at    TEXT
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id          TEXT,
+    task_id          TEXT,
+    step_id          TEXT,
+    issue_id         TEXT,
+    persona          TEXT NOT NULL,
+    model            TEXT,
+    prompt_hash      TEXT,
+    ability          TEXT NOT NULL,
+    args_hash        TEXT NOT NULL,
+    cap_token_id     TEXT,
+    intent           TEXT NOT NULL,
+    outcome          TEXT NOT NULL,
+    denial_reason    TEXT,
+    created_at       TEXT NOT NULL,
+    completed_at     TEXT,
+    policy_rule_name TEXT
 );`
 
 // abilitiesDDL is the minimal DDL for the abilities table — same shape as the
@@ -221,6 +225,7 @@ func TestInvoke_OperatorTrustedBypassesTrustCheck(t *testing.T) {
 	dec, _, err := p.Invoke(context.Background(), Request{
 		Persona: manifest.PersonaMarketing,
 		Ability: "custom-plugin/weird-ability",
+		Args:    map[string]any{"id": 1},
 		Intent:  IntentApply,
 		Source:  SourceOperator,
 	})
@@ -238,6 +243,7 @@ func TestInvoke_MCPCallError(t *testing.T) {
 	dec, _, err := p.Invoke(context.Background(), Request{
 		Persona: manifest.PersonaMarketing,
 		Ability: "wooagent-products/update",
+		Args:    map[string]any{"id": 1},
 		Intent:  IntentApply,
 		Source:  SourceOperator,
 	})
@@ -266,6 +272,7 @@ func TestInvoke_NoMCPClient(t *testing.T) {
 	_, _, err := p.Invoke(context.Background(), Request{
 		Persona: manifest.PersonaMarketing,
 		Ability: "wooagent-products/update",
+		Args:    map[string]any{"id": 1},
 		Intent:  IntentApply,
 		Source:  SourceOperator,
 	})
