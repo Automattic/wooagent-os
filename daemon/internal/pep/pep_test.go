@@ -70,7 +70,11 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	return New(lookup, mcpc, db, NewBudgetGate(db, DefaultThresholds())), db
+	p := New(lookup, mcpc, db, NewBudgetGate(db, DefaultThresholds()))
+	// Keep test stderr clean; specific tests overwrite p.logger to capture
+	// warn-log output for assertions.
+	p.logger = nullLogger
+	return p, db
 }
 
 // auditDDL is the minimal DDL for the audit table — same shape as the
