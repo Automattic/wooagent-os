@@ -53,6 +53,23 @@ UI work in `ui/` follows the WordPress Design System (WPDS) exclusively. See [`C
 - Prefer table-driven tests where the shape fits.
 - Package-internal helpers go in lower-case files; do not export from `internal/` packages.
 
+## Cutting a release
+
+Maintainers with push access cut releases by tagging a commit and pushing the tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` runs [GoReleaser](https://goreleaser.com/), which cross-compiles the `wooagent` binary for darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, and windows/amd64, packages the Companion Plugin zip, generates a `SHA256SUMS` file, and publishes everything as a GitHub Release. Tags like `v0.1.0-rc.1` or `v0.1.0-alpha.2` are auto-flagged as prereleases.
+
+Validate the build locally before tagging:
+
+```bash
+goreleaser release --snapshot --clean
+```
+
 ## Contributor License Agreement (CLA)
 
 The CLA / DCO process for external contributions is being finalized. Once it's in place, you'll be prompted to sign before your first PR is merged. We'll update this document with the specific process when it lands.
