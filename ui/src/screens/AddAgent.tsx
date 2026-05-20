@@ -122,13 +122,20 @@ export default function AddAgent({ connection, onChanged }: Props) {
   // 'available' candidates can actually be saved.
   const candidates = useMemo<Candidate[]>(() => {
     if (!agents) return [];
-    const enabledSlugs = new Set(
-      agents.filter((a) => a.enabled).map((a) => a.persona),
+    // Personas actually working on this fleet: registered AND (enabled OR
+    // not addable). A persona whose agents row says enabled=1 but whose
+    // Go type is no longer registered (e.g. Reporting today — historical
+    // row survives an un-Register) is *not* operable, so it should still
+    // surface in the picker so the operator can see it's coming back.
+    const operableSlugs = new Set(
+      agents
+        .filter((a) => a.implemented && (a.enabled || !a.addable))
+        .map((a) => a.persona),
     );
     const out: Candidate[] = [];
 
     for (const a of agents) {
-      if (a.enabled) continue;
+      if (operableSlugs.has(a.persona)) continue;
       if (!a.implemented || !a.addable) continue;
       out.push({
         slug: a.persona,
@@ -141,7 +148,7 @@ export default function AddAgent({ connection, onChanged }: Props) {
     }
 
     for (const slug of COMING_SOON_SLUGS) {
-      if (enabledSlugs.has(slug)) continue;
+      if (operableSlugs.has(slug)) continue;
       if (out.some((c) => c.slug === slug)) continue;
       out.push({
         slug,
