@@ -8,9 +8,15 @@ import (
 )
 
 // hhmmRe matches "HH:MM" in 24-hour format. Validation is also enforced
-// at write time by the agents PATCH handler; we re-check here so a
-// manual SQL edit that bypasses the handler can't silently fail open.
+// at write time by the agents PATCH handler (via the exported ValidHHMM
+// below); we re-check here so a manual SQL edit that bypasses the
+// handler can't silently fail open.
 var hhmmRe = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
+// ValidHHMM reports whether s is a well-formed "HH:MM" 24-hour time.
+// Exported so HTTP handlers (and any future config validators) share
+// the same canonical regex as the operator-hours policy.
+func ValidHHMM(s string) bool { return hhmmRe.MatchString(s) }
 
 // operatorHoursPolicy denies agent-sourced apply intents that fall
 // outside the configured per-persona window. Both AgentSettings.
