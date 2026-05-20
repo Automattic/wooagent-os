@@ -26,6 +26,16 @@ What each persona sends in a prompt:
 
 Reporting and Accounting ship in v0.2 and will get their own data-handling line when they land.
 
+**Your responsibilities.** Using WooAgent OS means you agree to comply with your LLM provider's terms of service and acceptable-use policies — the daemon doesn't intermediate that for you. You're responsible for your store's privacy and data-protection obligations (GDPR, CCPA, and any other laws that apply to your customers), including any disclosures you owe customers about automated processing of order data. If you handle data that can't leave your jurisdiction at all, the local-model path (Ollama / LM Studio / llama.cpp) keeps everything on-host.
+
+## What WooAgent OS can change on your store
+
+WooAgent OS can write to your live WooCommerce store. Today, that means: product descriptions and titles (Marketing), regular prices (Pricing), and customer-facing or internal order notes (Sales Support). Future personas extend this surface — Inventory adjusts stock levels and Accounting reconciles entries when they ship.
+
+Every write goes through a propose-approve loop. Agents never apply changes directly. You see a diff in the review queue, and the daemon only dispatches the call when you click **Approve**.
+
+**You are responsible** for reviewing each proposal before approving, for maintaining store backups, and for verifying writes against your store's data after they land. WooAgent OS is provided "AS IS" — see [`LICENSE`](./LICENSE) §7 (Disclaimer of Warranty) and §8 (Limitation of Liability) for the full text.
+
 ## Architecture
 
 - **Go daemon** (`daemon/`) — headless single binary. Owns the agent fleet, MCP client, issue queue, auth, local storage (SQLite), and the REST API the UI and CLI consume. Cross-platform, no external runtime dependencies.
@@ -37,7 +47,7 @@ Reporting and Accounting ship in v0.2 and will get their own data-handling line 
 - `daemon/` — Go daemon. Entry point `cmd/wooagent`; internals under `internal/`.
 - `ui/` — Standalone React UI (Vite + `@wordpress/components`).
 - `companion-plugin/` — WordPress plugin source.
-- `docs/` — engineering specs and shared design notes.
+- `scripts/` — Build, release, and maintenance scripts.
 - `dist/` — Build artifacts (plugin zips, UI bundles). Gitignored.
 
 ## Install
@@ -136,6 +146,16 @@ Up next:
 
 - **Phase 3 (May 5–12)** — design refinement on the rough build (Tue May 5), then full onboarding flow (welcome → store URL → auth picker → pairing code → model provider → fleet deploy → done) plus error states. TurnEvent recorder wiring so every model call + ability invocation + state transition writes a `turn_events` row, and the run-log panel that consumes it. Companion Plugin v0.2 with native device-pair (replaces the App Password path).
 
-## License
+## Reporting security issues
 
-Apache 2.0. See `LICENSE`.
+Please do **not** report security vulnerabilities through public GitHub issues. See [`SECURITY.md`](./SECURITY.md) for the private disclosure process.
+
+## License and trademarks
+
+Source code is licensed under the Apache License, Version 2.0. See [`LICENSE`](./LICENSE) for the full text and [`NOTICE`](./NOTICE) for third-party attribution required under §4(d).
+
+The Apache 2.0 license does not grant any rights to Automattic trademarks. See [`TRADEMARKS.md`](./TRADEMARKS.md) for permitted use of the WooAgent, WooCommerce, Woo, WordPress, and Jetpack names.
+
+## Export control
+
+This project may be subject to U.S. and other applicable export-control laws and regulations, including the U.S. Export Administration Regulations (EAR). By downloading, using, or distributing this software, you agree to comply with all such laws and regulations. You may not export, re-export, or transfer this software (directly or indirectly) to any country, person, or entity prohibited from receiving it under U.S. export-control rules — including, without limitation, parties listed on the U.S. Treasury Department's List of Specially Designated Nationals or the U.S. Commerce Department's Entity List.
