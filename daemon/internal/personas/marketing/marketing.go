@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
@@ -883,12 +884,15 @@ func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product,
 	}
 
 	if t := telemetry.TrackerFromContext(ctx); t != nil {
-		t.RecordModelCall(telemetry.ModelCall{
+		if err := t.RecordModelCall(telemetry.ModelCall{
 			Provider:     "anthropic",
 			Model:        model,
 			InputTokens:  parsed.Usage.InputTokens,
 			OutputTokens: parsed.Usage.OutputTokens,
-		})
+			CostUSD:      llm.CostUSD("anthropic", model, parsed.Usage.InputTokens, parsed.Usage.OutputTokens),
+		}); err != nil {
+			return "", err
+		}
 	}
 
 	var sb strings.Builder
@@ -967,12 +971,15 @@ func draftRewriteOpenAI(
 		return "", fmt.Errorf("llm returned no choices")
 	}
 	if t := telemetry.TrackerFromContext(ctx); t != nil {
-		t.RecordModelCall(telemetry.ModelCall{
+		if err := t.RecordModelCall(telemetry.ModelCall{
 			Provider:     "openai",
 			Model:        model,
 			InputTokens:  parsed.Usage.PromptTokens,
 			OutputTokens: parsed.Usage.CompletionTokens,
-		})
+			CostUSD:      llm.CostUSD("openai", model, parsed.Usage.PromptTokens, parsed.Usage.CompletionTokens),
+		}); err != nil {
+			return "", err
+		}
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 }
