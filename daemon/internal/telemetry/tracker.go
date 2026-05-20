@@ -2,11 +2,20 @@ package telemetry
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrRunBudgetExceeded is returned by Tracker.RecordModelCall when the
+// accumulated cost for the current run would exceed the configured
+// per-run cap. The scheduler classifies any wrapping of this sentinel as
+// a permanent failure (no retries) and surfaces the human-readable
+// reason via runs.failure_reason. Use errors.Is to identify it.
+var ErrRunBudgetExceeded = errors.New("run budget exceeded")
 
 // Tracker accumulates the model + skill calls a persona makes during one
 // agent turn, then materializes them into a single TurnEvent at the end of
@@ -29,6 +38,12 @@ type Tracker struct {
 	mu        sync.Mutex
 	model     []ModelCall
 	skill     []SkillCall
+	// budgetUSD is the per-run cost cap. Zero (the default) disables
+	// enforcement — tests and ad-hoc personas that don't care about budget
+	// keep working without setting it. Configured per persona via the
+	// agents.run_budget_cents column and propagated through Deps.
+	budgetUSD    float64
+	totalCostUSD float64
 }
 
 // NewTracker starts a fresh turn. turnID is the row's primary key; pass
@@ -50,15 +65,48 @@ func NewTracker(turnID, persona string) *Tracker {
 // to attach to.
 func (t *Tracker) TurnID() string { return t.turnID }
 
-// RecordModelCall appends one LLM API call's metadata to this turn. Safe
-// to call from any goroutine.
-func (t *Tracker) RecordModelCall(c ModelCall) {
+// SetBudgetUSD configures the per-run cost cap. Zero disables enforcement.
+// Call once before the persona's first model call; later changes apply
+// only to subsequent calls.
+func (t *Tracker) SetBudgetUSD(usd float64) {
 	if t == nil {
 		return
 	}
 	t.mu.Lock()
-	t.model = append(t.model, c)
+	t.budgetUSD = usd
 	t.mu.Unlock()
+}
+
+// TotalCostUSD returns the sum of CostUSD across all model calls
+// recorded so far. Mainly useful in tests and as a read-side hook for
+// observability — the budget check is performed inline in RecordModelCall.
+func (t *Tracker) TotalCostUSD() float64 {
+	if t == nil {
+		return 0
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.totalCostUSD
+}
+
+// RecordModelCall appends one LLM API call's metadata to this turn. Safe
+// to call from any goroutine. Returns ErrRunBudgetExceeded (wrapped with
+// the running total + configured cap) when the call pushes the run over
+// its per-run budget. Callers must propagate the error so the scheduler
+// can classify it as a permanent failure.
+func (t *Tracker) RecordModelCall(c ModelCall) error {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.model = append(t.model, c)
+	t.totalCostUSD += c.CostUSD
+	if t.budgetUSD > 0 && t.totalCostUSD > t.budgetUSD {
+		return fmt.Errorf("%w: total $%.4f exceeds cap $%.2f",
+			ErrRunBudgetExceeded, t.totalCostUSD, t.budgetUSD)
+	}
+	return nil
 }
 
 // RecordSkillCall appends one MCP ability invocation's metadata to this

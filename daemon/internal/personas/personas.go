@@ -125,6 +125,13 @@ type Deps struct {
 	// path (NilAbilities is the explicit zero value for tests and debug
 	// runs).
 	Abilities Abilities
+	// RunBudgetCents is the per-run model-cost cap in cents, read by the
+	// scheduler from agents.run_budget_cents. Zero (the default) disables
+	// enforcement — tests and debug runs that don't set it never trip the
+	// gate. When non-zero, RunAndPersist passes it to the per-turn
+	// telemetry.Tracker, which returns ErrRunBudgetExceeded on the model
+	// call that pushes total cost over the cap. DSGWOO-1296.
+	RunBudgetCents int64
 }
 
 // Abilities reports which ability names are presently invokable on the
@@ -448,6 +455,11 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		// One tracker per Draft call so each emitted issue gets its own
 		// turn_event row in the GEPA pipeline.
 		tracker := telemetry.NewTracker(uuid.NewString(), slug)
+		// Per-run model-cost cap. Zero disables enforcement so tests and
+		// debug runs that don't set RunBudgetCents keep working. DSGWOO-1296.
+		if deps.RunBudgetCents > 0 {
+			tracker.SetBudgetUSD(float64(deps.RunBudgetCents) / 100.0)
+		}
 		tctx := telemetry.WithTracker(ctx, tracker)
 
 		d, err := p.Draft(tctx, deps)

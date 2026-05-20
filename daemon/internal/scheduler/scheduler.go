@@ -78,7 +78,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	s.worker = &Worker{
 		Queue:       s.queue,
-		Runner:      personaRunnerAdapter{deps: s.Deps},
+		Runner:      personaRunnerAdapter{deps: s.Deps, db: s.Store.DB},
 		Personas:    pmap,
 		Now:         s.Now,
 		Backoff:     s.Backoff,
@@ -162,12 +162,28 @@ func (s *Scheduler) sweepOrphanedRunning(ctx context.Context) (int64, error) {
 }
 
 // personaRunnerAdapter wraps personas.RunAndPersist behind PersonaRunner.
+// Carries the daemon-wide Deps and overlays the per-run cost cap from the
+// agents row each time a run starts — operators can lower the cap in the
+// Agents UI and the next run picks it up without a daemon restart.
 type personaRunnerAdapter struct {
 	deps personas.Deps
+	db   *sql.DB
 }
 
 func (a personaRunnerAdapter) Run(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
 	deps := a.deps
 	deps.MaxEmits = opts.EmitCount
+	if a.db != nil {
+		var cents int64
+		err := a.db.QueryRowContext(ctx,
+			`SELECT run_budget_cents FROM agents WHERE persona = ?`,
+			p.Slug(),
+		).Scan(&cents)
+		if err == nil {
+			deps.RunBudgetCents = cents
+		}
+		// On lookup failure (row missing, schema drift), leave RunBudgetCents
+		// at zero — disabled gate beats refusing to run.
+	}
 	return personas.RunAndPersist(ctx, p, deps)
 }
