@@ -223,12 +223,11 @@ func draftForOrder(
 		ProposalType:    "customer_reply_draft",
 		ProposalContent: out.Message,
 		// Belt over the existing order_id Cooldown.
-		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
 		DedupKey: fmt.Sprintf("order:%d", o.ID),
 		// Target carries real PII intentionally. The operator preview and the
 		// wooagent-orders/add-note dispatch (approval flow) both read from here.
 		// The redaction in redactOrderForPrompt applies at the LLM-prompt
-		// boundary only — see docs/specs/2026-05-15-sales-support-pii-redaction-design.md.
+		// boundary only.
 		Target: map[string]any{
 			"order_id":       o.ID,
 			"order_number":   o.Number,

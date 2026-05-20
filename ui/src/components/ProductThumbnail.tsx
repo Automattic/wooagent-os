@@ -7,7 +7,7 @@ import { personaKeyFrom } from './PersonaAvatar';
 // tile binds the duotone fills to its own color tokens (fixed warm-gray
 // by default). Imported as raw strings + inlined via dangerouslySetInnerHTML
 // so the CSS variables actually cascade in (an <img src> sandbox wouldn't
-// inherit them). See docs/specs/2026-05-16-product-images-design.md.
+// inherit them).
 import customerSupportSvg from '../assets/illustrations/customer-support-3.svg?raw';
 import pencilSquareSvg from '../assets/illustrations/pencil-square.svg?raw';
 import tagAltSvg from '../assets/illustrations/tag-alt.svg?raw';
