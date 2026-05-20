@@ -335,16 +335,19 @@ func (p *PEP) checkPolicy(ctx context.Context, req Request) (ReasonCode, string)
 // logPolicyDenial emits a Warn line on every policy deny. Matches the
 // PII-redaction posture from checkSchema (DSGWOO-1307): the operator
 // gets ability + persona + rule + a short structured reason; rejected
-// argument *values* never reach the log.
-func (p *PEP) logPolicyDenial(req Request, ruleName, _ string) {
+// argument *values* never reach the log. The `detail` field carries the
+// per-policy descriptive string (e.g. "outside configured hours …") —
+// operator-facing static text composed in the policy file, never derived
+// from req.Args.
+func (p *PEP) logPolicyDenial(req Request, ruleName, reason string) {
 	if p.logger == nil {
 		return
 	}
 	p.logger.Warn("pep policy denied call",
 		"ability", req.Ability,
 		"persona", string(req.Persona),
-		"reason", string(ReasonPolicyViolation),
 		"rule_name", ruleName,
+		"detail", reason,
 	)
 }
 
