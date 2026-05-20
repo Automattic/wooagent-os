@@ -65,8 +65,7 @@ import (
 //      emit a second in_review issue with the same identity. Marketing /
 //      Pricing use "product:<id>"; Sales Support uses "order:<id>";
 //      digest personas use "digest:<kind>" (add an ISO-week suffix for
-//      time-bucketed digests). See
-//      docs/specs/2026-05-18-agent-proposal-dedup-design.md.
+//      time-bucketed digests).
 //
 // See marketing.go / pricing.go / sales-support.go for canonical examples.
 type Persona interface {
@@ -121,7 +120,6 @@ type Deps struct {
 	// baseline path (always-on Companion Plugin abilities) and an enhanced
 	// path that depends on an optional plugin (e.g. the WC AI plugin's
 	// woocommerce/find-products, woocommerce/plan-batch-operation, etc.).
-	// See docs/specs/2026-05-18-wc-ai-integration-strategy-design.md.
 	//
 	// Nil-safe: when unset, personas should fall through to the baseline
 	// path (NilAbilities is the explicit zero value for tests and debug
@@ -185,7 +183,6 @@ type Drafted struct {
 	//                      for time-bucketed digests)
 	// Cooldown still owns the approved/dismissed history windows; this
 	// field only blocks while a prior proposal is still open.
-	// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
 	DedupKey string
 
 	// BatchSiblings, when non-nil, turns this Drafted into the *first* child
@@ -378,8 +375,6 @@ func RecentlyTouchedTargets(
 // index excludes them anyway). Used by RunAndPersist's insert-time guard
 // to skip a Drafted whose logical identity is already represented by an
 // open proposal.
-//
-// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
 func findOpenIssueWithDedupKey(
 	ctx context.Context,
 	st *store.Store,
@@ -522,7 +517,6 @@ func RunAndPersist(ctx context.Context, p Persona, deps Deps) (Result, error) {
 		// approved/dismissed history; this only blocks while a prior
 		// proposal is still open. Fail-open on a transient query error
 		// (the guard is a safety net, not a correctness invariant).
-		// See docs/specs/2026-05-18-agent-proposal-dedup-design.md.
 		if d.DedupKey != "" {
 			if existingID, qerr := findOpenIssueWithDedupKey(ctx, deps.Store, slug, d.DedupKey); qerr == nil && existingID != "" {
 				recordTurn(ctx, deps.Recorder, tracker, "", d)
