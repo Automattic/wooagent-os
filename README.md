@@ -26,6 +26,16 @@ What each persona sends in a prompt:
 
 Reporting and Accounting ship in v0.2 and will get their own data-handling line when they land.
 
+**Your responsibilities.** Using WooAgent OS means you agree to comply with your LLM provider's terms of service and acceptable-use policies — the daemon doesn't intermediate that for you. You're responsible for your store's privacy and data-protection obligations (GDPR, CCPA, and any other laws that apply to your customers), including any disclosures you owe customers about automated processing of order data. If you handle data that can't leave your jurisdiction at all, the local-model path (Ollama / LM Studio / llama.cpp) keeps everything on-host.
+
+## What WooAgent OS can change on your store
+
+WooAgent OS can write to your live WooCommerce store. Today, that means: product descriptions and titles (Marketing), regular prices (Pricing), and customer-facing or internal order notes (Sales Support). Future personas extend this surface — Inventory adjusts stock levels and Accounting reconciles entries when they ship.
+
+Every write goes through a propose-approve loop. Agents never apply changes directly. You see a diff in the review queue, and the daemon only dispatches the call when you click **Approve**.
+
+**You are responsible** for reviewing each proposal before approving, for maintaining store backups, and for verifying writes against your store's data after they land. WooAgent OS is provided "AS IS" — see [`LICENSE`](./LICENSE) §7 (Disclaimer of Warranty) and §8 (Limitation of Liability) for the full text.
+
 ## Architecture
 
 - **Go daemon** (`daemon/`) — headless single binary. Owns the agent fleet, MCP client, issue queue, auth, local storage (SQLite), and the REST API the UI and CLI consume. Cross-platform, no external runtime dependencies.
@@ -37,12 +47,10 @@ Reporting and Accounting ship in v0.2 and will get their own data-handling line 
 - `daemon/` — Go daemon. Entry point `cmd/wooagent`; internals under `internal/`.
 - `ui/` — Standalone React UI (Vite + `@wordpress/components`).
 - `companion-plugin/` — WordPress plugin source.
-- `docs/` — engineering specs and shared design notes.
+- `scripts/` — Build, release, and maintenance scripts.
 - `dist/` — Build artifacts (plugin zips, UI bundles). Gitignored.
 
 ## Install
-
-> **Internal testers (pre-public):** grab the binary directly from the [a8c Releases page](https://***REMOVED***/Automattic/wooagent-os/releases) — download the archive for your platform, verify against `SHA256SUMS`, extract to `~/.wooagent/bin/`, and run `wooagent init && wooagent run`. The one-line installer below assumes a public mirror with a tagged release; until that's in place, the curl URL will 404.
 
 If you just want to run WooAgent OS — not develop on it — grab the latest release with one line:
 
@@ -120,24 +128,20 @@ goreleaser release --snapshot --clean
 
 ## Status
 
-Phase 2 complete (Mon May 4). All three Phase-1 personas — **Marketing, Pricing, Sales Support** — now propose changes that land as `in_review` issues, render in their respective diff layouts, and write through to the connected WooCommerce store on operator approval.
+WooAgent OS is in active pre-1.0 development. Today, three personas — **Marketing**, **Pricing**, and **Sales Support** — propose changes against a live WooCommerce store and write through on operator approval. Inventory, Reporting, Accounting, and Chief of Staff are in progress and will ship as they're ready.
 
-- **Go daemon** — CLI surface, SQLite store + migrations, REST API with bearer auth, agents/issues/runs schemas, embedded prompt + skill registry, telemetry scaffolding.
-- **MCP client** — Streamable HTTP + JSON-RPC 2.0 client with session-id tracking, Basic Auth, and pass-through to the WP MCP Adapter's three-meta-tool pattern (`discover-abilities`, `get-ability-info`, `execute-ability`).
-- **Companion plugin v0.1** — `wooagent-products/*`, `wooagent-orders/*`, `wooagent-customers/*` CRUD abilities, verified end-to-end against a real WooCommerce store over MCP.
-- **Pre-signed ability manifest** — shipped default with 25 real entries covering the Companion Plugin baseline, the WooCommerce AI plugin's local abilities, Jetpack Forms, and WP core — every entry with a SHA-256 schema hash computed from live schemas, so drift detection is live from day one. Operator overlay support at `~/.wooagent/manifest.json`. A `manifest-compute` dev tool refreshes the seed as plugin schemas change.
-- **Policy Enforcement Point — V1** (`daemon/internal/pep/`) — the deterministic non-LLM gate from PRD §8.4.2. Every store-mutating MCP call now routes through `pep.Invoke`; the rule "no orchestrator → MCP shortcut" is enforced by removing the direct MCP handle from the HTTP server entirely. V1 enforces two of the six §8.4.2 checks (trust state, persona scope) and writes a chain-of-identity audit row per invocation (`audit_invocations` table, append-only) regardless of outcome. Denials return typed reason codes (`ability_unapproved`, `persona_forbidden`) mapped to HTTP 403/422/429 by the approve handler. Schema validation, policy predicates, budgets, and capability tokens are stubbed pass-through behind the same `Decision`/`Request`/`Intent` surface so post-V1 phases are additive.
-- **Persona registry** (`daemon/internal/personas/`) — shared `Persona` interface with side-effect registration on import. The daemon spawns enabled personas sequentially on boot via `RunAndPersist`, which checks `agents.enabled`, guards against duplicate seeding, and writes the issue. No more per-persona CLI; the existing `cmd/persona-{slug}/` binaries became thin debug wrappers around the same code path.
-- **Marketing persona, propose → review → approve → write** — reads products via `wooagent-products/{list,get}`, generates a rewrite proposal via local LM Studio (`gemma-4-e4b`), surfaces it as an `in_review` issue, and on operator approval writes the new copy back via `wooagent-products/update`. The previous copy is snapshotted before write so the change is reversible from the Done column.
-- **Pricing persona, propose → review → approve → write** — Claude Haiku 4.5 with the Anthropic native `web_search` tool. The `pricing-benchmark` skill (`daemon/internal/registry/skills/pricing-benchmark/v1.yaml`, embedded into the binary at build time via `//go:embed`) names the preferred mid-tier retailers (J.Crew, Madewell, Aritzia, Everlane, Quince, COS for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods) plus the search method (`site:` queries first, cap at 6). Emits `product_price_change` proposals with structured numeric output (current → proposed, observed low/median/high, percent change, sources with retailer attribution) and a `no_proposal` contract that refuses to invent comparables when grounding is thin. Approve dispatches `wooagent-products/update` with a 2dp-canonical `regular_price` string.
-- **Sales Support persona, propose → review → approve → write** — Claude Haiku 4.5, brand-voice system prompt for warm small-batch home-goods customer support. Picks the most recent order in `processing` or `completed` status, drafts a customer-facing note (or returns `no_proposal` for shapes without comparable retail comps). Approve dispatches `wooagent-orders/add-note` with the `is_customer_note` flag — operator chooses customer-facing email vs internal wp-admin note via `target.note_type`.
-- **Daemon UI** (`/ui/`) — sidebar layout (App / Agents / Connected store), review queue backed by live `/v1/issues`. **`IssueDetail` branches by `proposal.type`:** prose (Marketing) keeps the variant-card layout; **numeric** (Pricing) renders current → proposed price block, observed-range bar with low/median/high markers, rationale paragraph, and a sources list with persona-blue retailer pills (J.Crew / Madewell / etc.); **message** (Sales Support) renders order-context card (customer + line items) + email-shaped preview with a `To: <customer>` chrome line for customer-facing notes. Sticky `ActionBar` adapts: "Approve & apply price" / "Approve & send" / "Approve & save note" depending on type. **The queue dedupes batch children** — fetches `/v1/batches` alongside issues and renders one synthetic row per batch with a state-aware meta line (`5 of 7 rewrites pending`). Built on the WordPress Design System (`@wordpress/ui` + `@wordpress/components`, see `CLAUDE.md`). Mobile-responsive: sidebar collapses to an off-canvas drawer at <768px, the queue scrolls horizontally with snap, IssueDetail stacks at <1024px.
-- **Agent runtime, end-to-end** — verified against a live WooCommerce store across all three personas. Pricing persona produced an Indigo-Dyed Throw Pillow proposal grounded at Crate & Barrel ($59.95), Anthropologie ($68), Parachute ($72), proposing $48 → $56 (+16.67%) with cited URLs; approved through the UI, `regular_price` updated on the staging store.
+Expect breaking changes between v0.x releases.
 
-Up next:
+## Reporting security issues
 
-- **Phase 3 (May 5–12)** — design refinement on the rough build (Tue May 5), then full onboarding flow (welcome → store URL → auth picker → pairing code → model provider → fleet deploy → done) plus error states. TurnEvent recorder wiring so every model call + ability invocation + state transition writes a `turn_events` row, and the run-log panel that consumes it. Companion Plugin v0.2 with native device-pair (replaces the App Password path).
+Please do **not** report security vulnerabilities through public GitHub issues. See [`SECURITY.md`](./SECURITY.md) for the private disclosure process.
 
-## License
+## License and trademarks
 
-Apache 2.0. See `LICENSE`.
+Source code is licensed under the Apache License, Version 2.0. See [`LICENSE`](./LICENSE) for the full text and [`NOTICE`](./NOTICE) for third-party attribution required under §4(d).
+
+The Apache 2.0 license does not grant any rights to Automattic trademarks. See [`TRADEMARKS.md`](./TRADEMARKS.md) for permitted use of the WooAgent, WooCommerce, Woo, WordPress, and Jetpack names.
+
+## Export control
+
+This project may be subject to U.S. and other applicable export-control laws and regulations, including the U.S. Export Administration Regulations (EAR). By downloading, using, or distributing this software, you agree to comply with all such laws and regulations. You may not export, re-export, or transfer this software (directly or indirectly) to any country, person, or entity prohibited from receiving it under U.S. export-control rules — including, without limitation, parties listed on the U.S. Treasury Department's List of Specially Designated Nationals or the U.S. Commerce Department's Entity List.

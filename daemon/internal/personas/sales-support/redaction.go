@@ -11,8 +11,6 @@
 // Maria,…" naturally because it's been handed a first name; nothing
 // downstream needs to re-hydrate anything because nothing downstream
 // ever saw a placeholder.
-//
-// See docs/specs/2026-05-15-sales-support-pii-redaction-design.md.
 package salessupport
 
 import "strings"

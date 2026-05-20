@@ -7,11 +7,11 @@
 # core would hit PEP denials on first invocation.
 #
 # Required env:
+#   WOOAGENT_STORE             Store URL (e.g. https://shop.example.com)
 #   WOOAGENT_MCP_USER          WordPress username or email
 #   WOOAGENT_MCP_APP_PASSWORD  WordPress Application Password (spaces ok)
 #
 # Optional env:
-#   WOOAGENT_STORE             Store URL (defaults to the demo staging store)
 #   WOOAGENT_FILTER            Comma-separated namespace prefixes
 #
 # Cadence: monthly, or whenever a plugin update on the connected store
@@ -21,12 +21,13 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST="$REPO_ROOT/daemon/internal/manifest/default.json"
-STORE="${WOOAGENT_STORE:-https://store.example.com}"
-FILTER="${WOOAGENT_FILTER:-woocommerce/*,wooagent-*,core/*,jetpack-forms/*}"
-PLACEHOLDER='sha256:0000000000000000000000000000000000000000000000000000000000000000'
-
+: "${WOOAGENT_STORE:?WOOAGENT_STORE is required (e.g. https://shop.example.com)}"
 : "${WOOAGENT_MCP_USER:?WOOAGENT_MCP_USER is required}"
 : "${WOOAGENT_MCP_APP_PASSWORD:?WOOAGENT_MCP_APP_PASSWORD is required}"
+
+STORE="$WOOAGENT_STORE"
+FILTER="${WOOAGENT_FILTER:-woocommerce/*,wooagent-*,core/*,jetpack-forms/*}"
+PLACEHOLDER='sha256:0000000000000000000000000000000000000000000000000000000000000000'
 
 command -v jq  >/dev/null || { echo "jq not found"  >&2; exit 1; }
 command -v go  >/dev/null || { echo "go not found"  >&2; exit 1; }
