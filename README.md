@@ -80,7 +80,7 @@ cd daemon && go run ./cmd/wooagent run
 
 ## Releases
 
-Tag a commit and push the tag; `.github/workflows/release.yml` cross-compiles binaries, packages the Companion Plugin zip, generates `SHA256SUMS`, and publishes to GitHub Releases. Validate locally with `goreleaser release --snapshot --clean`.
+Binaries are built by [GoReleaser](https://goreleaser.com/) via `.github/workflows/release.yml` from tagged commits. Every GitHub Release publishes a `SHA256SUMS` file alongside the platform archives. See [`CONTRIBUTING.md`](./CONTRIBUTING.md#cutting-a-release) for the maintainer procedure.
 
 ## Status
 
