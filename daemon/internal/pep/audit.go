@@ -89,7 +89,7 @@ func (w *auditWriter) finalizeWithRule(ctx context.Context, id int64, persona ma
 		`UPDATE audit_invocations
 		   SET outcome = ?, denial_reason = ?, completed_at = ?, policy_rule_name = ?
 		 WHERE id = ?`,
-		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), ruleName, id,
+		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), nullIfEmpty(ruleName), id,
 	)
 	if err != nil {
 		return fmt.Errorf("finalize-with-rule audit row %d: %w", id, err)
