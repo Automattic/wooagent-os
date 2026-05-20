@@ -186,7 +186,7 @@ Square swatch with the persona's `bg` and `ink` colors and the persona's initial
 
 ### `ProductThumbnail` (`ui/src/components/ProductThumbnail.tsx`)
 
-Image-or-placeholder primitive used wherever a proposal references a product. Renders an `<img>` (lazy-loaded, `object-fit: cover`) when `src` is set and loads successfully; falls back to a neutral gray placeholder with a persona-derived icon (`marketing` → `pencil`, `pricing` → `currencyDollar`, `sales-support` → `comment`, etc.) when there's no image or `<img>` errors. Sizes: `sm` (40px), `md` (72px), `lg` (86px). Used on Needs review + Done grid cards (DataViews `mediaField`), Marketing + Pricing detail page title rows, and per-row inside `BatchReview`'s pricing-batch product cards. The placeholder is deliberately neutral — identity stays on `PersonaAvatar`; the thumbnail is content. See `docs/specs/2026-05-16-product-images-design.md`.
+Image-or-placeholder primitive used wherever a proposal references a product. Renders an `<img>` (lazy-loaded, `object-fit: cover`) when `src` is set and loads successfully; falls back to a neutral gray placeholder with a persona-derived icon (`marketing` → `pencil`, `pricing` → `currencyDollar`, `sales-support` → `comment`, etc.) when there's no image or `<img>` errors. Sizes: `sm` (40px), `md` (72px), `lg` (86px). Used on Needs review + Done grid cards (DataViews `mediaField`), Marketing + Pricing detail page title rows, and per-row inside `BatchReview`'s pricing-batch product cards. The placeholder is deliberately neutral — identity stays on `PersonaAvatar`; the thumbnail is content.
 
 ### `LeftNav` (`ui/src/components/LeftNav.tsx`)
 

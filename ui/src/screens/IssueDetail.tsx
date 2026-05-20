@@ -36,8 +36,7 @@ interface Props {
 
 // Choose the score-value color class based on the score band. SEO and Voice
 // use slightly different bands (SEO 80+, Voice 80+ for "good") to match the
-// Yoast/voice-model conventions and the corpus-based voice scoring design
-// (docs/specs/2026-05-18-marketing-kpi-scoring-design.md).
+// Yoast/voice-model conventions and the corpus-based voice scoring design.
 function seoColorClass(score: number): string {
   if (score >= 80) return 'wa-score-label__value--good';
   if (score >= 70) return 'wa-score-label__value--caution';
@@ -57,10 +56,8 @@ function seoToneBand(score: number): KpiTone {
 }
 
 // Voice tone band — brand (matches the Figma frame's blue for high-match
-// voice) / caution / warning. Thresholds relaxed from 90/75 → 80/65 per the
-// corpus-based scoring design in
-// docs/specs/2026-05-18-marketing-kpi-scoring-design.md — 90% against a
-// small sample is unrealistic.
+// voice) / caution / warning. Thresholds relaxed from 90/75 → 80/65 — 90%
+// against a small sample is unrealistic.
 function voiceToneBand(score: number): KpiTone {
   if (score >= 80) return 'brand';
   if (score >= 65) return 'caution';

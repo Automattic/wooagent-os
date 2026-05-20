@@ -44,12 +44,11 @@ func (Reporting) Cooldown() personas.CooldownPolicy {
 	return personas.CooldownPolicy{}
 }
 
-// Draft is a dormant stub. product_health_digest was retired 2026-05-18;
-// see docs/specs/2026-05-18-marketing-cold-draft-batch-design.md.
+// Draft is a dormant stub. product_health_digest was retired 2026-05-18.
 // Returns Skipped:true until a real reporting skill is registered.
 func (Reporting) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted, error) {
 	return personas.Drafted{
 		Skipped:    true,
-		SkipReason: "no skills registered yet — product_health_digest retired 2026-05-18 (see docs/specs/2026-05-18-marketing-cold-draft-batch-design.md)",
+		SkipReason: "no skills registered yet — product_health_digest retired 2026-05-18",
 	}, nil
 }
