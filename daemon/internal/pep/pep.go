@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
@@ -33,7 +34,8 @@ type PEP struct {
 	// logger captures schema-validation diagnostics that we deliberately
 	// do not propagate to audit rows or HTTP responses (the rejected values
 	// may contain PII). Defaults to slog.Default(); tests overwrite directly.
-	logger *slog.Logger
+	logger   *slog.Logger
+	policies []Policy
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
@@ -49,6 +51,11 @@ func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB, budget *BudgetGate
 		schemas:  &schemaCache{},
 		budget:   budget,
 		logger:   slog.Default(),
+		policies: []Policy{
+			&defensiveArgsPolicy{},
+			&reversibilityBeltPolicy{},
+			&operatorHoursPolicy{},
+		},
 	}
 }
 
@@ -98,8 +105,11 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	if reason := p.checkSchema(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, req.Persona, reason)
 	}
-	if reason := p.checkPolicy(req); reason != "" {
-		return p.deny(ctx, auditID, req.Persona, reason)
+	if reason, ruleName := p.checkPolicy(ctx, req); reason != "" {
+		if err := p.audit.finalizeWithRule(ctx, auditID, req.Persona, OutcomeDenied, reason, ruleName); err != nil {
+			return Decision{}, mcp.ToolCallResult{}, err
+		}
+		return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
 	}
 	if reason := p.checkBudget(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, req.Persona, reason)
@@ -287,12 +297,55 @@ func schemaErrorPaths(err error) []string {
 	return paths
 }
 
-// checkPolicy — Check 4. Phase 2 will evaluate operator-configured
-// predicates over req.Args (e.g. "never products-update with price < cost").
-// V1 has no policies to evaluate.
-func (p *PEP) checkPolicy(_ Request) ReasonCode {
-	// TODO(phase-2): evaluate operator policies.
-	return ""
+// checkPolicy — Check 4. Iterates the registered policies in order;
+// first deny wins. On deny, returns (ReasonPolicyViolation, ruleName).
+// The caller (Invoke) plumbs ruleName into the audit row via
+// audit.finalizeWithRule.
+//
+// Fail-closed: a load failure on agent settings or a panic in a policy
+// implementation both deny. Tests cover both.
+func (p *PEP) checkPolicy(ctx context.Context, req Request) (ReasonCode, string) {
+	settings, err := loadAgentSettings(ctx, p.db, req.Persona)
+	if err != nil {
+		return ReasonPolicyViolation, "agent_settings_unavailable"
+	}
+	evalCtx := EvalContext{
+		Now:      time.Now(),
+		Manifest: p.manifest,
+		Agent:    settings,
+	}
+	for _, pol := range p.policies {
+		deny, reason, panicked := evalWithRecover(pol, req, evalCtx)
+		if panicked {
+			p.logger.Error("pep policy evaluator panicked",
+				"ability", req.Ability,
+				"persona", string(req.Persona),
+				"rule_name", pol.Name(),
+			)
+			return ReasonPolicyViolation, pol.Name()
+		}
+		if deny {
+			p.logPolicyDenial(req, pol.Name(), reason)
+			return ReasonPolicyViolation, pol.Name()
+		}
+	}
+	return "", ""
+}
+
+// logPolicyDenial emits a Warn line on every policy deny. Matches the
+// PII-redaction posture from checkSchema (DSGWOO-1307): the operator
+// gets ability + persona + rule + a short structured reason; rejected
+// argument *values* never reach the log.
+func (p *PEP) logPolicyDenial(req Request, ruleName, _ string) {
+	if p.logger == nil {
+		return
+	}
+	p.logger.Warn("pep policy denied call",
+		"ability", req.Ability,
+		"persona", string(req.Persona),
+		"reason", string(ReasonPolicyViolation),
+		"rule_name", ruleName,
+	)
 }
 
 // checkBudget — Check 5. Refuses MCP dispatch when the persona is at or
