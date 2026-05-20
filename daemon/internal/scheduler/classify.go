@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 // classify maps an error from personas.RunAndPersist to a failure class
@@ -30,6 +31,13 @@ func classify(err error) (FailureClass, string) {
 	}
 	if errors.Is(err, mcp.ErrTransport) {
 		return FailureTransient, "MCP transport error; transient network issue"
+	}
+	// Per-run cost cap. Permanent: a looping persona would re-trip the gate
+	// on every retry. The wrapped error message carries the actual dollar
+	// amount the run consumed, which is exactly what an operator triaging
+	// the failure_reason cell wants to see. DSGWOO-1296.
+	if errors.Is(err, telemetry.ErrRunBudgetExceeded) {
+		return FailurePermanent, err.Error()
 	}
 	msg := strings.ToLower(err.Error())
 	// LLM rate limits — until a centralized LLM package exists with typed

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
 func TestClassify(t *testing.T) {
@@ -26,6 +27,12 @@ func TestClassify(t *testing.T) {
 		{"http 401 is permanent", errors.New("anthropic http 401: bad key"), FailurePermanent, "auth"},
 		{"http 403 is permanent", errors.New("openai http 403: forbidden"), FailurePermanent, "auth"},
 		{"unknown error defaults to transient", errors.New("some weird thing"), FailureTransient, "unknown error"},
+		{
+			"per-run budget exceeded is permanent",
+			fmt.Errorf("draft: %w", fmt.Errorf("%w: total $0.1234 exceeds cap $0.10", telemetry.ErrRunBudgetExceeded)),
+			FailurePermanent,
+			"exceeds cap",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
