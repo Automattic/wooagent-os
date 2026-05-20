@@ -10,6 +10,8 @@ import Done from './screens/Done';
 import IssueDetail from './screens/IssueDetail';
 import BatchReview from './screens/BatchReview';
 import Agents from './screens/Agents';
+import AddAgent from './screens/AddAgent';
+import EditAgent from './screens/EditAgent';
 import Abilities from './screens/Abilities';
 import Archived from './screens/Archived';
 import Stores from './screens/Stores';
@@ -390,6 +392,24 @@ export default function App() {
               <Agents
                 connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
+                onChanged={() => refreshIssues(connection)}
+              />
+            }
+          />
+          <Route
+            path="/agents/add"
+            element={
+              <AddAgent
+                connection={connection}
+                onChanged={() => refreshIssues(connection)}
+              />
+            }
+          />
+          <Route
+            path="/agents/:slug/edit"
+            element={
+              <EditAgent
+                connection={connection}
                 onChanged={() => refreshIssues(connection)}
               />
             }

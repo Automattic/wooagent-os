@@ -9,7 +9,6 @@ import { Badge, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
   FormToggle,
-  SelectControl,
   Snackbar,
   Spinner,
 } from '@wordpress/components';
@@ -20,8 +19,6 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
-import EditAgentModal from '../components/EditAgentModal';
-import AddAgentModal from '../components/AddAgentModal';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -132,23 +129,6 @@ function buildFullRoster(daemonPersonas: Persona[]): Persona[] {
   );
 }
 
-// V1 model options. Hardcoded until the daemon exposes the available-models
-// endpoint.
-const MODEL_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: 'Claude Sonnet 4.6', value: 'anthropic/claude-sonnet-4-6' },
-  { label: 'Claude Opus 4.7', value: 'anthropic/claude-opus-4-7' },
-  { label: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4-5' },
-  { label: 'Gemini 2.5 Pro', value: 'google/gemini-2.5-pro' },
-  { label: 'GPT-5', value: 'openai/gpt-5' },
-];
-
-function modelOptionsFor(current: string | undefined) {
-  if (current && !MODEL_OPTIONS.some((o) => o.value === current)) {
-    return [{ label: current, value: current }, ...MODEL_OPTIONS];
-  }
-  return MODEL_OPTIONS;
-}
-
 // Sentence case for all display names. Acronyms (SEO) stay uppercased.
 // The 'reporting' override exists alongside the Go-side rename in
 // Reporting.DisplayName() because operators who added Reporting before
@@ -196,33 +176,6 @@ function MandateCell({ persona }: { persona: Persona }) {
   );
 }
 
-interface ModelCellProps {
-  persona: Persona;
-  busy: boolean;
-  onChange: (value: string) => void;
-}
-
-function ModelCell({ persona, busy, onChange }: ModelCellProps) {
-  const current = persona.model_preference ?? 'anthropic/claude-sonnet-4-6';
-  // Wrapper width keeps the column at ~180px regardless of `table-layout`
-  // hints. DataViews's per-column `view.layout.styles.model.width` is set too,
-  // but auto-layout treats it as a preference; sizing the content itself is
-  // the only reliable lever.
-  return (
-    <div style={{ minWidth: 180 }}>
-      <SelectControl
-        __nextHasNoMarginBottom
-        label="Model"
-        hideLabelFromVision
-        value={current}
-        options={modelOptionsFor(current)}
-        disabled={busy}
-        onChange={onChange}
-      />
-    </div>
-  );
-}
-
 interface StatusCellProps {
   persona: Persona;
   busy: boolean;
@@ -246,8 +199,8 @@ function StatusCell({ persona, busy, onToggle }: StatusCellProps) {
 }
 
 // Click-stopper for cells that own their own click semantics. DataViews makes
-// the row clickable via `onClickItem`; without this wrapper, clicking the model
-// SelectControl or the FormToggle would also fire the row's edit action.
+// the row clickable via `onClickItem`; without this wrapper, clicking the
+// FormToggle would also fire the row's edit action.
 function NoRowClick({ children }: { children: ReactNode }) {
   return (
     <div
@@ -286,7 +239,7 @@ const DEFAULT_VIEW: View = {
   page: 1,
   perPage: 25,
   titleField: 'persona',
-  fields: ['mandate', 'model', 'enabled', 'run_now'],
+  fields: ['mandate', 'enabled', 'run_now'],
   // No default sort — `ALL_PERSONA_KEYS` orders implemented personas first
   // and the "Coming soon" group last; an asc sort by displayName would
   // interleave them ("Accounting" lands above "Marketing & SEO").
@@ -296,12 +249,6 @@ const DEFAULT_VIEW: View = {
   // crammed the rows; 'compact' is tighter still.
   layout: {
     density: 'comfortable',
-    styles: {
-      // Paired with the same minWidth on the ModelCell content wrapper —
-      // see ModelCell. 180px fits short labels like "GPT-5" and the
-      // recommended Claude variants without dominating the row.
-      model: { width: '180px' },
-    },
   },
 };
 
@@ -309,8 +256,6 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   const navigate = useNavigate();
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Persona | null>(null);
-  const [showAddAgent, setShowAddAgent] = useState(false);
   const [view, setView] = useState<View>(DEFAULT_VIEW);
   // Surfaced after a manual-trigger run lands a succeeded status. The
   // "View board" action navigates to /. Auto-dismisses via the WPDS
@@ -356,31 +301,25 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     Record<string, { message: string; isSkip: boolean }>
   >({});
 
-  // Patch state: one persona+field can be busy at a time per slug, and
-  // per-slug error strings surface inline on the row that produced them.
-  // Keyed by persona slug; an entry { kind } records which field is in
-  // flight so we can disable just that control without freezing the row.
-  const [patchBusy, setPatchBusy] = useState<
-    Record<string, 'enabled' | 'model'>
-  >({});
+  // Patch state: tracks which row's enabled toggle is currently flipping,
+  // plus a per-slug error string surfaced as a Notice above the table.
+  // Model edits no longer happen inline (Edit Agent owns that now), so the
+  // only patch this screen issues is the enabled flip from StatusCell.
+  const [patchBusy, setPatchBusy] = useState<Record<string, true>>({});
   const [patchErrors, setPatchErrors] = useState<Record<string, string>>({});
 
-  const handlePatch = useCallback(
-    async (
-      persona: Persona,
-      patch: { enabled?: boolean; model_preference?: string },
-      kind: 'enabled' | 'model',
-    ) => {
-      setPatchBusy((prev) => ({ ...prev, [persona.persona]: kind }));
+  const handleToggleEnabled = useCallback(
+    async (persona: Persona) => {
+      setPatchBusy((prev) => ({ ...prev, [persona.persona]: true }));
       setPatchErrors((prev) => {
         const next = { ...prev };
         delete next[persona.persona];
         return next;
       });
       try {
-        const updated = await api.patchAgent(connection, persona.persona, patch);
-        // Replace the row in place so the next render reflects the new
-        // canonical state without a refetch round-trip.
+        const updated = await api.patchAgent(connection, persona.persona, {
+          enabled: !persona.enabled,
+        });
         setPersonas((prev) =>
           prev
             ? prev.map((p) => (p.persona === updated.persona ? updated : p))
@@ -389,7 +328,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         // Toggling enabled (especially for an addable persona) can shift
         // the row between operable and "Coming soon"; ask App to refresh
         // downstream surfaces (sidebar counts, board) too.
-        if (kind === 'enabled') onChanged?.();
+        onChanged?.();
       } catch (e) {
         const msg =
           e instanceof ApiError
@@ -521,23 +460,6 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         render: ({ item }) => <MandateCell persona={item} />,
       },
       {
-        id: 'model',
-        label: 'Model',
-        enableSorting: false,
-        getValue: ({ item }) => item.model_preference ?? '',
-        render: ({ item }) => (
-          <NoRowClick>
-            <ModelCell
-              persona={item}
-              busy={patchBusy[item.persona] === 'model'}
-              onChange={(value) =>
-                void handlePatch(item, { model_preference: value }, 'model')
-              }
-            />
-          </NoRowClick>
-        ),
-      },
-      {
         id: 'enabled',
         label: 'Status',
         enableSorting: false,
@@ -547,10 +469,8 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
           <NoRowClick>
             <StatusCell
               persona={item}
-              busy={patchBusy[item.persona] === 'enabled'}
-              onToggle={() =>
-                void handlePatch(item, { enabled: !item.enabled }, 'enabled')
-              }
+              busy={!!patchBusy[item.persona]}
+              onToggle={() => void handleToggleEnabled(item)}
             />
           </NoRowClick>
         ),
@@ -579,7 +499,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         },
       },
     ],
-    [runBusy, handleRunNow, patchBusy, handlePatch],
+    [runBusy, handleRunNow, patchBusy, handleToggleEnabled],
   );
 
   // Row click drives the edit flow via `onClickItem`. The actions are also
@@ -597,7 +517,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         isEligible: (item) => isOperable(item),
         callback: (items) => {
           const p = items[0];
-          if (p) setEditing(p);
+          if (p) navigate(`/agents/${encodeURIComponent(p.persona)}/edit`);
         },
       },
       {
@@ -703,7 +623,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
             variant="primary"
             icon={plus}
             __next40pxDefaultSize
-            onClick={() => setShowAddAgent(true)}
+            onClick={() => navigate('/agents/add')}
           >
             Add agent
           </Button>
@@ -764,35 +684,12 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
             paginationInfo={paginationInfo}
             defaultLayouts={{ table: {} }}
             onClickItem={(p) => {
-              if (isOperable(p)) setEditing(p);
+              if (isOperable(p)) {
+                navigate(`/agents/${encodeURIComponent(p.persona)}/edit`);
+              }
             }}
             empty={<EmptyState />}
           />
-
-          {editing && (
-            <EditAgentModal
-              persona={editing}
-              mandate={metaFor(editing.persona).mandate}
-              systemPrompt={metaFor(editing.persona).systemPrompt}
-              onClose={() => setEditing(null)}
-            />
-          )}
-          {showAddAgent && (
-            <AddAgentModal
-              connection={connection}
-              agents={personas ?? []}
-              onAgentAdded={() => {
-                // Refetch the agents list so the new persona appears in
-                // the roster + drops out of the modal's addable set.
-                const signal = { cancelled: false };
-                void fetchAgents(signal);
-                // Surface the enable to App's downstream state too
-                // (board, sidebar counts).
-                onChanged?.();
-              }}
-              onClose={() => setShowAddAgent(false)}
-            />
-          )}
         </>
       )}
       {toast && (
