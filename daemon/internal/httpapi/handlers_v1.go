@@ -176,6 +176,7 @@ func annotateRegistryFlags(p *Persona) {
 // without round-tripping the whole Persona shape.
 type patchAgentRequest struct {
 	Enabled         *bool   `json:"enabled,omitempty"`
+	Name            *string `json:"name,omitempty"`
 	ModelPreference *string `json:"model_preference,omitempty"`
 	CadenceSeconds  *int    `json:"cadence_seconds,omitempty"`
 }
@@ -249,6 +250,10 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 			enabledInt = 1
 		}
 		args = append(args, enabledInt)
+	}
+	if req.Name != nil {
+		setParts = append(setParts, "name = ?")
+		args = append(args, *req.Name)
 	}
 	if req.ModelPreference != nil {
 		setParts = append(setParts, "model_preference = ?")

@@ -304,6 +304,23 @@ func TestPatchAgent_CadenceOnly(t *testing.T) {
 	}
 }
 
+func TestPatchAgent_NameOnly(t *testing.T) {
+	personas.RegisterForTest(t, &fakeRegistryPersona{slug: "marketing"})
+	url, st := newAgentsTestRig(t)
+	seedAgent(t, st, "marketing", "Marketing", "anthropic/claude-sonnet-4-6", 21600, true)
+
+	resp, p := patchAgent(t, url, "marketing", map[string]any{"name": "Brand voice"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	if p.Name != "Brand voice" {
+		t.Errorf("name=%q want Brand voice", p.Name)
+	}
+	if !p.Enabled || p.ModelPreference != "anthropic/claude-sonnet-4-6" || p.CadenceSeconds != 21600 {
+		t.Errorf("other fields disturbed by name patch: %+v", p)
+	}
+}
+
 func TestPatchAgent_EmptyBodyTouchesUpdatedAt(t *testing.T) {
 	// Empty body is treated as "touch this row." Not strictly used by the
 	// UI today, but keeps the contract simple: the caller doesn't have to

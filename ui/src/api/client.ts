@@ -163,6 +163,7 @@ export interface Persona {
  *  are written on the daemon side. */
 export interface PatchAgentRequest {
   enabled?: boolean;
+  name?: string;
   model_preference?: string;
   cadence_seconds?: number;
 }
