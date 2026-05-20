@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
@@ -33,7 +34,8 @@ type PEP struct {
 	// logger captures schema-validation diagnostics that we deliberately
 	// do not propagate to audit rows or HTTP responses (the rejected values
 	// may contain PII). Defaults to slog.Default(); tests overwrite directly.
-	logger *slog.Logger
+	logger   *slog.Logger
+	policies []Policy
 }
 
 // New wires the PEP to its dependencies. The manifest Lookup is required;
@@ -49,6 +51,11 @@ func New(m *manifest.Lookup, mcpClient MCPClient, db *sql.DB, budget *BudgetGate
 		schemas:  &schemaCache{},
 		budget:   budget,
 		logger:   slog.Default(),
+		policies: []Policy{
+			&defensiveArgsPolicy{},
+			&reversibilityBeltPolicy{},
+			&operatorHoursPolicy{},
+		},
 	}
 }
 
@@ -98,8 +105,11 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	if reason := p.checkSchema(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, req.Persona, reason)
 	}
-	if reason := p.checkPolicy(req); reason != "" {
-		return p.deny(ctx, auditID, req.Persona, reason)
+	if reason, ruleName := p.checkPolicy(ctx, req); reason != "" {
+		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeDenied, reason, ruleName); err != nil {
+			return Decision{}, mcp.ToolCallResult{}, err
+		}
+		return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
 	}
 	if reason := p.checkBudget(ctx, req); reason != "" {
 		return p.deny(ctx, auditID, req.Persona, reason)
@@ -112,7 +122,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	if p.mcp == nil {
 		// Audit row stays pending — finalize it as mcp_error so the operator
 		// can tell allowed-but-undispatched from genuine MCP failures.
-		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, ""); err != nil {
+		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", ""); err != nil {
 			return Decision{}, mcp.ToolCallResult{}, err
 		}
 		return Decision{}, mcp.ToolCallResult{}, ErrMCPNotConfigured
@@ -120,7 +130,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 
 	// Initialize is idempotent; persona-marketing and approve both call it.
 	if _, err := p.mcp.Initialize(ctx); err != nil {
-		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp init: %w", err)
 	}
 
@@ -129,11 +139,11 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 		"parameters":   req.Args,
 	})
 	if err != nil {
-		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp call %s: %w", req.Ability, err)
 	}
 
-	if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeSuccess, ""); err != nil {
+	if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeSuccess, "", ""); err != nil {
 		return Decision{}, res, err
 	}
 	return Decision{Allowed: true, AuditID: auditID}, res, nil
@@ -143,7 +153,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 // Errors from finalize are surfaced — losing the audit row would compromise
 // the chain-of-identity story even on a denial.
 func (p *PEP) deny(ctx context.Context, auditID int64, persona manifest.Persona, reason ReasonCode) (Decision, mcp.ToolCallResult, error) {
-	if err := p.audit.finalize(ctx, auditID, persona, OutcomeDenied, reason); err != nil {
+	if err := p.audit.finalize(ctx, auditID, persona, OutcomeDenied, reason, ""); err != nil {
 		return Decision{}, mcp.ToolCallResult{}, err
 	}
 	return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
@@ -287,12 +297,58 @@ func schemaErrorPaths(err error) []string {
 	return paths
 }
 
-// checkPolicy — Check 4. Phase 2 will evaluate operator-configured
-// predicates over req.Args (e.g. "never products-update with price < cost").
-// V1 has no policies to evaluate.
-func (p *PEP) checkPolicy(_ Request) ReasonCode {
-	// TODO(phase-2): evaluate operator policies.
-	return ""
+// checkPolicy — Check 4. Iterates the registered policies in order;
+// first deny wins. On deny, returns (ReasonPolicyViolation, ruleName).
+// The caller (Invoke) plumbs ruleName into the audit row via
+// audit.finalize (which writes the rule name into the audit row).
+//
+// Fail-closed: a load failure on agent settings or a panic in a policy
+// implementation both deny. Tests cover both.
+func (p *PEP) checkPolicy(ctx context.Context, req Request) (ReasonCode, string) {
+	settings, err := loadAgentSettings(ctx, p.db, req.Persona)
+	if err != nil {
+		return ReasonPolicyViolation, "agent_settings_unavailable"
+	}
+	evalCtx := EvalContext{
+		Now:      time.Now(),
+		Manifest: p.manifest,
+		Agent:    settings,
+	}
+	for _, pol := range p.policies {
+		deny, reason, panicked := evalWithRecover(pol, req, evalCtx)
+		if panicked {
+			p.logger.Error("pep policy evaluator panicked",
+				"ability", req.Ability,
+				"persona", string(req.Persona),
+				"rule_name", pol.Name(),
+			)
+			return ReasonPolicyViolation, pol.Name()
+		}
+		if deny {
+			p.logPolicyDenial(req, pol.Name(), reason)
+			return ReasonPolicyViolation, pol.Name()
+		}
+	}
+	return "", ""
+}
+
+// logPolicyDenial emits a Warn line on every policy deny. Matches the
+// PII-redaction posture from checkSchema (DSGWOO-1307): the operator
+// gets ability + persona + rule + a short structured reason; rejected
+// argument *values* never reach the log. The `detail` field carries the
+// per-policy descriptive string (e.g. "outside configured hours …") —
+// operator-facing static text composed in the policy file, never derived
+// from req.Args.
+func (p *PEP) logPolicyDenial(req Request, ruleName, reason string) {
+	if p.logger == nil {
+		return
+	}
+	p.logger.Warn("pep policy denied call",
+		"ability", req.Ability,
+		"persona", string(req.Persona),
+		"rule_name", ruleName,
+		"detail", reason,
+	)
 }
 
 // checkBudget — Check 5. Refuses MCP dispatch when the persona is at or

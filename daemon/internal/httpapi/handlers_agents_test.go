@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -335,5 +336,89 @@ func TestPatchAgent_EmptyBodyTouchesUpdatedAt(t *testing.T) {
 	}
 	if !p.Enabled || p.ModelPreference != "anthropic/claude-sonnet-4-6" || p.CadenceSeconds != 21600 {
 		t.Errorf("fields disturbed by empty patch: %+v", p)
+	}
+}
+
+// ---------- PATCH /v1/agents/{slug} — apply_hours validation ----------
+
+// patchAgentRaw issues a PATCH and returns the raw *http.Response without
+// decoding, so callers can inspect non-200 error bodies.
+func patchAgentRaw(t *testing.T, baseURL, slug string, body any) *http.Response {
+	t.Helper()
+	var buf bytes.Buffer
+	if body != nil {
+		if err := json.NewEncoder(&buf).Encode(body); err != nil {
+			t.Fatalf("encode patch: %v", err)
+		}
+	}
+	req, err := http.NewRequest(http.MethodPatch, baseURL+"/v1/agents/"+slug, &buf)
+	if err != nil {
+		t.Fatalf("build req: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	return resp
+}
+
+func TestPatchAgent_HoursFormatValidation(t *testing.T) {
+	personas.RegisterForTest(t, &fakeRegistryPersona{slug: "marketing", addable: false})
+	url, st := newAgentsTestRig(t)
+	seedAgent(t, st, "marketing", "Marketing", "anthropic/claude-sonnet-4-6", 21600, true)
+
+	cases := []struct {
+		name           string
+		body           map[string]any
+		wantStatus     int
+		wantBodySubstr string
+	}{
+		{
+			name:       "valid HH:MM both set",
+			body:       map[string]any{"apply_hours_start": "09:00", "apply_hours_end": "17:00"},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:           "malformed start rejected",
+			body:           map[string]any{"apply_hours_start": "9am", "apply_hours_end": "17:00"},
+			wantStatus:     http.StatusBadRequest,
+			wantBodySubstr: "apply_hours_start",
+		},
+		{
+			name:           "out-of-range hour rejected",
+			body:           map[string]any{"apply_hours_start": "25:00", "apply_hours_end": "17:00"},
+			wantStatus:     http.StatusBadRequest,
+			wantBodySubstr: "apply_hours_start",
+		},
+		{
+			name:           "XOR rejected (only start set)",
+			body:           map[string]any{"apply_hours_start": "09:00"},
+			wantStatus:     http.StatusBadRequest,
+			wantBodySubstr: "both",
+		},
+		{
+			name:           "XOR rejected (only end set)",
+			body:           map[string]any{"apply_hours_end": "17:00"},
+			wantStatus:     http.StatusBadRequest,
+			wantBodySubstr: "both",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := patchAgentRaw(t, url, "marketing", tc.body)
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.wantStatus {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status=%d want %d body=%s", resp.StatusCode, tc.wantStatus, body)
+			}
+			if tc.wantBodySubstr != "" {
+				body, _ := io.ReadAll(resp.Body)
+				if !strings.Contains(string(body), tc.wantBodySubstr) {
+					t.Errorf("response body %q does not contain %q", body, tc.wantBodySubstr)
+				}
+			}
+		})
 	}
 }

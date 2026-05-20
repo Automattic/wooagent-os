@@ -53,6 +53,15 @@ const (
 	PersonaChiefOfStaff  Persona = "chief-of-staff"
 )
 
+// LowReversibilityThreshold is the boundary between "easy to undo" and
+// "hard to undo" abilities. Anything below this value is treated as
+// high-stakes by gates that require operator mediation for apply-intent
+// calls (see daemon/internal/pep/policy_reversibility.go).
+//
+// 0.3 is conservative — abilities below this have less than a 30% chance
+// of being safely reverted in operator-visible time.
+const LowReversibilityThreshold = 0.3
+
 // Entry is one pre-signed ability record. Every field is part of the trust
 // decision except Description, which is informational only.
 type Entry struct {
