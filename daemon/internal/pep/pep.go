@@ -106,7 +106,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 		return p.deny(ctx, auditID, req.Persona, reason)
 	}
 	if reason, ruleName := p.checkPolicy(ctx, req); reason != "" {
-		if err := p.audit.finalizeWithRule(ctx, auditID, req.Persona, OutcomeDenied, reason, ruleName); err != nil {
+		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeDenied, reason, ruleName); err != nil {
 			return Decision{}, mcp.ToolCallResult{}, err
 		}
 		return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
@@ -122,7 +122,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 	if p.mcp == nil {
 		// Audit row stays pending — finalize it as mcp_error so the operator
 		// can tell allowed-but-undispatched from genuine MCP failures.
-		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, ""); err != nil {
+		if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", ""); err != nil {
 			return Decision{}, mcp.ToolCallResult{}, err
 		}
 		return Decision{}, mcp.ToolCallResult{}, ErrMCPNotConfigured
@@ -130,7 +130,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 
 	// Initialize is idempotent; persona-marketing and approve both call it.
 	if _, err := p.mcp.Initialize(ctx); err != nil {
-		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp init: %w", err)
 	}
 
@@ -139,11 +139,11 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 		"parameters":   req.Args,
 	})
 	if err != nil {
-		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "")
+		_ = p.audit.finalize(ctx, auditID, req.Persona, OutcomeMCPError, "", "")
 		return Decision{}, mcp.ToolCallResult{}, fmt.Errorf("mcp call %s: %w", req.Ability, err)
 	}
 
-	if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeSuccess, ""); err != nil {
+	if err := p.audit.finalize(ctx, auditID, req.Persona, OutcomeSuccess, "", ""); err != nil {
 		return Decision{}, res, err
 	}
 	return Decision{Allowed: true, AuditID: auditID}, res, nil
@@ -153,7 +153,7 @@ func (p *PEP) Invoke(ctx context.Context, req Request) (Decision, mcp.ToolCallRe
 // Errors from finalize are surfaced — losing the audit row would compromise
 // the chain-of-identity story even on a denial.
 func (p *PEP) deny(ctx context.Context, auditID int64, persona manifest.Persona, reason ReasonCode) (Decision, mcp.ToolCallResult, error) {
-	if err := p.audit.finalize(ctx, auditID, persona, OutcomeDenied, reason); err != nil {
+	if err := p.audit.finalize(ctx, auditID, persona, OutcomeDenied, reason, ""); err != nil {
 		return Decision{}, mcp.ToolCallResult{}, err
 	}
 	return Decision{Allowed: false, Reason: reason, AuditID: auditID}, mcp.ToolCallResult{}, nil
@@ -300,7 +300,7 @@ func schemaErrorPaths(err error) []string {
 // checkPolicy — Check 4. Iterates the registered policies in order;
 // first deny wins. On deny, returns (ReasonPolicyViolation, ruleName).
 // The caller (Invoke) plumbs ruleName into the audit row via
-// audit.finalizeWithRule.
+// audit.finalize (which writes the rule name into the audit row).
 //
 // Fail-closed: a load failure on agent settings or a panic in a policy
 // implementation both deny. Tests cover both.

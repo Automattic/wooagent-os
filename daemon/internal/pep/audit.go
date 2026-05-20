@@ -54,16 +54,19 @@ func (w *auditWriter) insert(ctx context.Context, req Request, argsHash string) 
 // completed_at — V1 doesn't enforce one-shot finalization since concurrent
 // finalizers don't happen on the approve path.
 //
+// ruleName is the policy rule that fired (only meaningful for policy denials —
+// empty string everywhere else, which writes NULL to the audit row).
+//
 // On Allowed outcomes (success, mcp_error), finalize also bumps the persona's
 // call_count in persona_budget_usage. Increment errors are logged and swallowed
 // — a missed increment is a slight under-count favouring the operator, which is
 // acceptable. Don't fail the call over accounting noise.
-func (w *auditWriter) finalize(ctx context.Context, id int64, persona manifest.Persona, outcome Outcome, reason ReasonCode) error {
+func (w *auditWriter) finalize(ctx context.Context, id int64, persona manifest.Persona, outcome Outcome, reason ReasonCode, ruleName string) error {
 	_, err := w.db.ExecContext(ctx,
 		`UPDATE audit_invocations
-		   SET outcome = ?, denial_reason = ?, completed_at = ?
+		   SET outcome = ?, denial_reason = ?, completed_at = ?, policy_rule_name = ?
 		 WHERE id = ?`,
-		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), id,
+		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), nullIfEmpty(ruleName), id,
 	)
 	if err != nil {
 		return fmt.Errorf("finalize audit row %d: %w", id, err)
@@ -73,29 +76,6 @@ func (w *auditWriter) finalize(ctx context.Context, id int64, persona manifest.P
 			// Log + swallow. The check is authoritative for "over budget";
 			// a missed increment is a slight under-count favoring the
 			// operator, which is acceptable. Don't fail the call.
-			_ = incErr
-		}
-	}
-	return nil
-}
-
-// finalizeWithRule is finalize plus a non-empty policy_rule_name. Only
-// callers that have a policy rule name to record use this; everyone else
-// stays on finalize() (which passes NULL for the column). Keeping them
-// as two methods avoids polluting every other deny site with an empty
-// ruleName argument.
-func (w *auditWriter) finalizeWithRule(ctx context.Context, id int64, persona manifest.Persona, outcome Outcome, reason ReasonCode, ruleName string) error {
-	_, err := w.db.ExecContext(ctx,
-		`UPDATE audit_invocations
-		   SET outcome = ?, denial_reason = ?, completed_at = ?, policy_rule_name = ?
-		 WHERE id = ?`,
-		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), nullIfEmpty(ruleName), id,
-	)
-	if err != nil {
-		return fmt.Errorf("finalize-with-rule audit row %d: %w", id, err)
-	}
-	if w.budget != nil && (outcome == OutcomeSuccess || outcome == OutcomeMCPError) {
-		if incErr := w.budget.IncrementCalls(ctx, persona); incErr != nil {
 			_ = incErr
 		}
 	}
