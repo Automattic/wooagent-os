@@ -7,7 +7,6 @@ This file is loaded into every Claude Code session in this repo. It captures con
 - `daemon/`, `cmd/`, `internal/` — Go (ADK Go runtime). Pure-Go, no Python.
 - `ui/` — daemon-served React UI. Connects to the local daemon over `/v1/*`. Real auth, real fetches. **The active UI surface — all new UI work happens here.**
 - `prompts/`, `skills/` — agent prompts and ability templates.
-- `spike-adk/` — exploratory Python (kept for now; new work goes in Go).
 
 ## UI stack — WordPress Design System (WPDS)
 
@@ -39,7 +38,7 @@ When building or reviewing UI in this repo, invoke these skills:
 - `frontend-design` — distinctive, polished frontend principles (apply within WPDS, not against it).
 - `wordpress-mockups` — when prototyping WordPress admin / Site Editor concepts.
 
-### Packages (per [the WPDS resources P2 post](https://***REMOVED***/2026/04/20/resources-for-the-wordpress-design-system/) — private, read via the `context-a8c` `wpcom` MCP)
+### Packages
 
 - `@wordpress/ui` — primary. `Card`, `CollapsibleCard`, `Stack`, `Text`, `Badge`, etc.
 - `@wordpress/components` — fill the gaps (`Button`, `Notice`, `Spinner`, `Modal`, `Snackbar`, form controls). Always check the component's "Status" in Storybook — only adopt `stable`.
@@ -99,16 +98,13 @@ After the refresh, review the diff and commit if it looks right.
 ## Git
 
 - Default branch is `trunk`.
-- Push freely on feature branches; confirm before pushing to `main`/`trunk`.
+- Push freely on feature branches; confirm before pushing to `trunk`.
 - Never `--force-push`, never `--no-verify`.
-- Committer must use the `@a8c.com` email when pushing to `***REMOVED***` (set in repo-local `.git/config`).
 
 ## External resources
 
 - WPDS reference site: https://system.automattic.design/
 - WPDS MCP package: `@wordpress/design-system-mcp` (npm)
-- Design Systems P2 post (private): https://***REMOVED***/2026/04/20/resources-for-the-wordpress-design-system/
 - `@wordpress/components` Storybook: https://wordpress.github.io/gutenberg/?path=/docs/components-introduction--docs
 - `@wordpress/ui` Storybook: https://wordpress.github.io/gutenberg/?path=/docs/design-system-components-introduction--docs
 - DataViews docs: https://wordpress.github.io/gutenberg/?path=/docs/dataviews-dataviews--best-practices
-- #design-systems on ***REMOVED***

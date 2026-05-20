@@ -42,8 +42,6 @@ Reporting and Accounting ship in v0.2 and will get their own data-handling line 
 
 ## Install
 
-> **Internal testers (pre-public):** grab the binary directly from the [a8c Releases page](https://***REMOVED***/Automattic/wooagent-os/releases) — download the archive for your platform, verify against `SHA256SUMS`, extract to `~/.wooagent/bin/`, and run `wooagent init && wooagent run`. The one-line installer below assumes a public mirror with a tagged release; until that's in place, the curl URL will 404.
-
 If you just want to run WooAgent OS — not develop on it — grab the latest release with one line:
 
 ```bash
