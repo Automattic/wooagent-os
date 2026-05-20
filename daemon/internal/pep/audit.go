@@ -79,6 +79,29 @@ func (w *auditWriter) finalize(ctx context.Context, id int64, persona manifest.P
 	return nil
 }
 
+// finalizeWithRule is finalize plus a non-empty policy_rule_name. Only
+// callers that have a policy rule name to record use this; everyone else
+// stays on finalize() (which passes NULL for the column). Keeping them
+// as two methods avoids polluting every other deny site with an empty
+// ruleName argument.
+func (w *auditWriter) finalizeWithRule(ctx context.Context, id int64, persona manifest.Persona, outcome Outcome, reason ReasonCode, ruleName string) error {
+	_, err := w.db.ExecContext(ctx,
+		`UPDATE audit_invocations
+		   SET outcome = ?, denial_reason = ?, completed_at = ?, policy_rule_name = ?
+		 WHERE id = ?`,
+		string(outcome), nullIfEmpty(string(reason)), nowRFC3339(), ruleName, id,
+	)
+	if err != nil {
+		return fmt.Errorf("finalize-with-rule audit row %d: %w", id, err)
+	}
+	if w.budget != nil && (outcome == OutcomeSuccess || outcome == OutcomeMCPError) {
+		if incErr := w.budget.IncrementCalls(ctx, persona); incErr != nil {
+			_ = incErr
+		}
+	}
+	return nil
+}
+
 // hashArgs canonicalizes args (sorted keys, no whitespace) and returns its
 // sha256 hex. Canonical form means "{a:1,b:2}" and "{b:2,a:1}" produce the
 // same hash — useful for correlating identical-payload retries.
