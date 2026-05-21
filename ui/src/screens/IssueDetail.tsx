@@ -197,9 +197,25 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       onChanged?.();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'undo_stale') {
-        const current =
+        const rawCurrent =
           typeof err.payload?.current === 'string' ? err.payload.current : '';
-        setUndoStale({ current });
+        // Format prices with currency; truncate long description strings so
+        // the Notice doesn't render raw HTML walls of text.
+        let displayCurrent = rawCurrent;
+        if (rawCurrent) {
+          const proposalType = data?.proposal?.type;
+          if (proposalType === 'product_price_change') {
+            const parsed = parseFloat(rawCurrent);
+            if (Number.isFinite(parsed)) {
+              const priceProposal = priceProposalFromProposal(data?.proposal);
+              const currency = priceProposal?.currency ?? 'USD';
+              displayCurrent = formatPrice(parsed, currency);
+            }
+          } else if (proposalType === 'product_description_rewrite') {
+            displayCurrent = rawCurrent.length > 80 ? rawCurrent.slice(0, 80) + '…' : rawCurrent;
+          }
+        }
+        setUndoStale({ current: displayCurrent });
       } else {
         setActionMsg({
           kind: 'error',
