@@ -18,6 +18,7 @@ import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
+import SourceRow from '../components/SourceRow';
 import { useAskAgentContext } from '../lib/askAgent';
 import { issueToVisible } from '../lib/visibleItems';
 import DismissDialog from '../components/DismissDialog';
@@ -1024,6 +1025,26 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
     products.flatMap((p) => p.sources.map((s) => s.url)),
   );
   const currency = products[0]?.currency ?? 'USD';
+
+  // Variable-product batches: all children share the same rationale and the
+  // same source list. Lift them out of each row and render once below the
+  // list — matches the single-product PriceIssueView pattern.
+  const isVariableBatch = data.batch.intent === 'pricing_variable';
+  const sharedRationale = isVariableBatch ? (products[0]?.rationale ?? '') : '';
+  const dedupedSources: PriceSource[] = isVariableBatch
+    ? (() => {
+        const seen = new Set<string>();
+        const out: PriceSource[] = [];
+        for (const p of products) {
+          for (const s of p.sources) {
+            if (seen.has(s.url)) continue;
+            seen.add(s.url);
+            out.push(s);
+          }
+        }
+        return out;
+      })()
+    : [];
   const sym = currencySymbol(currency);
   const totalToneCalc: 'success' | 'warning' = totalDelta >= 0 ? 'success' : 'warning';
   const medianToneCalc: 'neutral' | 'warning' | 'success' =
@@ -1065,9 +1086,72 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
             key={p.productId || idx}
             product={p}
             defaultExpanded={idx === 0}
+            hideRationaleAndSources={isVariableBatch}
           />
         ))}
       </Stack>
+
+      {isVariableBatch && sharedRationale && (
+        <Card.Root>
+          <Card.Header>
+            <Stack direction="row" gap="md" align="center" style={{ width: '100%' }}>
+              <Text
+                variant="body-md"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                Rationale
+              </Text>
+              <Text
+                variant="body-sm"
+                style={{
+                  marginLeft: 'auto',
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                }}
+              >
+                shared across all variations
+              </Text>
+            </Stack>
+          </Card.Header>
+          <Card.Content>
+            <Text
+              variant="body-md"
+              style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}
+            >
+              {sharedRationale}
+            </Text>
+          </Card.Content>
+        </Card.Root>
+      )}
+
+      {isVariableBatch && dedupedSources.length > 0 && (
+        <Card.Root>
+          <Card.Header>
+            <Stack direction="row" gap="md" align="center">
+              <Text
+                variant="body-md"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                Sources
+              </Text>
+              <Badge intent="none">
+                {`${dedupedSources.length} comparable${dedupedSources.length === 1 ? '' : 's'}`}
+              </Badge>
+            </Stack>
+          </Card.Header>
+          <Card.Content>
+            <Stack direction="column" gap="sm">
+              {dedupedSources.map((s, idx) => (
+                <SourceRow
+                  key={idx}
+                  source={s}
+                  currency={currency}
+                  proposed={products[0]?.proposedPrice ?? 0}
+                />
+              ))}
+            </Stack>
+          </Card.Content>
+        </Card.Root>
+      )}
     </Stack>
   );
 }
