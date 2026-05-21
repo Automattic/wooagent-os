@@ -204,3 +204,158 @@ func TestUndoIssue_PriceChange_HappyPath(t *testing.T) {
 		t.Errorf("undone_at should be populated")
 	}
 }
+
+func TestUndoIssue_NotUndoableProposalType(t *testing.T) {
+	ts, st, _ := newUndoRig(t)
+	// customer_reply_draft isn't in undoableProposalTypes.
+	// Seed an issue directly in 'done' state to skip the customer-note
+	// approve path (which would require wooagent-orders/add-note in the
+	// manifest, not relevant to this test).
+	now := time.Now().UTC().Format(time.RFC3339)
+	// Seed sales_support agent for this test.
+	if _, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO agents(persona, name, enabled, created_at, updated_at) VALUES('sales_support','Sales Support',1,?,?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed sales_support agent: %v", err)
+	}
+	body := map[string]any{
+		"title":   "msg",
+		"persona": "sales_support",
+		"status":  "in_review",
+		"proposal": map[string]any{
+			"type":    "customer_reply_draft",
+			"content": "hello",
+			"target":  map[string]any{"order_id": 99, "note_type": "internal"},
+		},
+	}
+	res := httpPostJSON(t, ts.URL+"/v1/issues", body)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create: status=%d", res.StatusCode)
+	}
+	var created struct {
+		Issue struct {
+			ID string `json:"id"`
+		} `json:"issue"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	res.Body.Close()
+
+	// Force the row to done without going through approve.
+	if _, err := st.DB.ExecContext(context.Background(),
+		`UPDATE issues SET status = 'done', updated_at = ? WHERE id = ?`,
+		now, created.Issue.ID,
+	); err != nil {
+		t.Fatalf("force done: %v", err)
+	}
+
+	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+created.Issue.ID+"/undo", map[string]any{})
+	if undoRes.StatusCode != http.StatusUnprocessableEntity {
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(undoRes.Body)
+		undoRes.Body.Close()
+		t.Fatalf("status = %d, want 422; body=%s", undoRes.StatusCode, buf.String())
+	}
+	var body2 map[string]any
+	if err := json.NewDecoder(undoRes.Body).Decode(&body2); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	undoRes.Body.Close()
+	errObj, _ := body2["error"].(map[string]any)
+	if errObj["code"] != "not_undoable" {
+		t.Errorf("code = %v, want not_undoable", errObj["code"])
+	}
+}
+
+func TestUndoIssue_StaleProductReturns409(t *testing.T) {
+	ts, _, mock := newUndoRig(t)
+
+	id := approveAndGetID(t, ts, map[string]any{
+		"title":   "p",
+		"persona": "pricing",
+		"status":  "in_review",
+		"proposal": map[string]any{
+			"type":    "product_price_change",
+			"content": "rationale",
+			"target": map[string]any{
+				"product_id":     821,
+				"currency":       "USD",
+				"previous_price": 39.00,
+				"proposed_price": 44.99,
+				"regular_price":  "44.99",
+				"target_field":   "regular_price",
+				"percent_change": 15.4,
+				"direction":      "increase",
+				"sources":        []map[string]any{{"url": "u", "comparable_product": "c", "observed_price": 45.0}},
+			},
+		},
+	})
+
+	// Live product price is $52 — someone changed it after we approved.
+	mock.getResponse = `{"success":true,"data":{"id":821,"regular_price":"52.00"}}`
+
+	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
+	if undoRes.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", undoRes.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(undoRes.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	undoRes.Body.Close()
+	if body["code"] != "undo_stale" {
+		t.Errorf("code = %v, want undo_stale", body["code"])
+	}
+	if body["current"] != "52.00" {
+		t.Errorf("current = %v, want \"52.00\"", body["current"])
+	}
+}
+
+func TestUndoIssue_AlreadyUndone(t *testing.T) {
+	ts, _, mock := newUndoRig(t)
+
+	id := approveAndGetID(t, ts, map[string]any{
+		"title":   "p",
+		"persona": "pricing",
+		"status":  "in_review",
+		"proposal": map[string]any{
+			"type":    "product_price_change",
+			"content": "rationale",
+			"target": map[string]any{
+				"product_id":     821,
+				"currency":       "USD",
+				"previous_price": 39.00,
+				"proposed_price": 44.99,
+				"regular_price":  "44.99",
+				"target_field":   "regular_price",
+				"percent_change": 15.4,
+				"direction":      "increase",
+				"sources":        []map[string]any{{"url": "u", "comparable_product": "c", "observed_price": 45.0}},
+			},
+		},
+	})
+	mock.getResponse = `{"success":true,"data":{"id":821,"regular_price":"44.99"}}`
+
+	first := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first undo: status=%d", first.StatusCode)
+	}
+	first.Body.Close()
+
+	// Second undo must fail with already_undone, not attempt another write.
+	second := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
+	if second.StatusCode != http.StatusConflict {
+		t.Fatalf("second undo: status=%d, want 409", second.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(second.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	second.Body.Close()
+	errObj, _ := body["error"].(map[string]any)
+	if errObj["code"] != "already_undone" {
+		t.Errorf("code = %v, want already_undone", errObj["code"])
+	}
+}
