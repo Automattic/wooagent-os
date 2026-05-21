@@ -30,6 +30,12 @@ import (
 // error.
 var PluginNotInstalled = errors.New("pairing: Companion Plugin endpoints not registered")
 
+// ErrTokenRevoked is returned by VerifyDevice when the plugin responds
+// 401 to /wp-json/wooagent/v1/devices/me — the daemon's stored bearer is
+// no longer in wooagent_devices (operator clicked Remove, option reset,
+// etc.). The /v1/stores handler maps this to status='unpaired'.
+var ErrTokenRevoked = errors.New("pairing: device token no longer recognized by the Companion Plugin")
+
 // Status is the high-level state returned by Poll. The plugin itself uses
 // strings; we surface them as a typed enum so callers don't typo.
 type Status string
@@ -146,6 +152,50 @@ func (c *Client) Poll(ctx context.Context, storeURL, code string) (PollResult, e
 		DeviceName:  parsed.DeviceName,
 		DeviceToken: parsed.DeviceToken,
 	}, nil
+}
+
+// VerifyDevice asks the plugin whether the bearer it presents is still a
+// registered device. 200 → still paired (the daemon refreshes
+// last_verified_at and is done). 401 → ErrTokenRevoked, the daemon flips
+// its local row to 'unpaired' and drops the keychain entry. 404 →
+// PluginNotInstalled (the plugin was uninstalled or downgraded after
+// pairing — treat as transient: don't mutate the row, the next probe
+// will retry).
+//
+// Cache-Control no-cache for the same Batcache reason as Poll: the
+// "device removed" transition has to surface within seconds, not after
+// the upstream cache TTL expires.
+func (c *Client) VerifyDevice(ctx context.Context, storeURL, deviceToken string) error {
+	base := strings.TrimRight(storeURL, "/")
+	u, err := url.Parse(base + "/wp-json/wooagent/v1/devices/me")
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+deviceToken)
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("devices/me: %w", err)
+	}
+	defer res.Body.Close()
+	switch {
+	case res.StatusCode == http.StatusUnauthorized, res.StatusCode == http.StatusForbidden:
+		// WordPress returns 403 when an alternate auth source (cookies)
+		// resolves a user without admin caps — extremely unlikely for the
+		// daemon, but coalescing the two means a misconfigured plugin
+		// can't strand a paired row in a "neither 200 nor 401" limbo.
+		return ErrTokenRevoked
+	case res.StatusCode == http.StatusNotFound:
+		return PluginNotInstalled
+	case res.StatusCode/100 != 2:
+		return statusError("devices/me", res)
+	}
+	return nil
 }
 
 // Revoke tells the plugin to drop the device whose token we present.

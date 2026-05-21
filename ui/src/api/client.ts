@@ -579,7 +579,10 @@ export interface Store {
   url: string;
   mcp_endpoint?: string;
   device_name?: string;
-  status: 'pairing' | 'paired' | 'expired' | 'failed';
+  // 'unpaired' is set by the daemon's staleness probe (DSGWOO-1275) when
+  // the operator removes this device in wp-admin; the App.tsx gate keys
+  // off === 'paired' so unpaired naturally routes back to onboarding.
+  status: 'pairing' | 'paired' | 'expired' | 'failed' | 'unpaired';
   pairing_code?: string;
   pair_url?: string;
   expires_at?: string;
