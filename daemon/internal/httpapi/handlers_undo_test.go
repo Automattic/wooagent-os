@@ -305,11 +305,15 @@ func TestUndoIssue_StaleProductReturns409(t *testing.T) {
 		t.Fatalf("decode body: %v", err)
 	}
 	undoRes.Body.Close()
-	if body["code"] != "undo_stale" {
-		t.Errorf("code = %v, want undo_stale", body["code"])
+	errObj, _ := body["error"].(map[string]any)
+	if errObj == nil {
+		t.Fatalf("body has no error envelope: %v", body)
 	}
-	if body["current"] != "52.00" {
-		t.Errorf("current = %v, want \"52.00\"", body["current"])
+	if errObj["code"] != "undo_stale" {
+		t.Errorf("error.code = %v, want undo_stale", errObj["code"])
+	}
+	if errObj["current"] != "52.00" {
+		t.Errorf("error.current = %v, want \"52.00\"", errObj["current"])
 	}
 }
 

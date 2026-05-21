@@ -119,10 +119,15 @@ func (s *Server) handleUndoIssue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !equalsCanonical(current, appliedValue.String, undoField) {
+			// Canonical {"error": {...}} envelope plus a `current` field
+			// inside it so the UI's ApiError parser picks up the live
+			// value without needing a special-case shape.
 			writeJSON(w, http.StatusConflict, map[string]any{
-				"code":    "undo_stale",
-				"message": "product was changed after this approval — inspect it in WooCommerce",
-				"current": current,
+				"error": map[string]any{
+					"code":    "undo_stale",
+					"message": "product was changed after this approval — inspect it in WooCommerce",
+					"current": current,
+				},
 			})
 			return
 		}
