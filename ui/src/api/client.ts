@@ -353,9 +353,7 @@ export function isReversibleProposalType(
   type: string | undefined | null,
 ): boolean {
   return (
-    type === 'product_description_rewrite' ||
-    type === 'product_price_change' ||
-    type === 'product_price_change_variable'
+    type === 'product_description_rewrite' || type === 'product_price_change'
   );
 }
 
@@ -500,126 +498,6 @@ export function priceProposalFromProposal(
       typeof t.regular_price_observed === 'string' ? t.regular_price_observed : undefined,
     salePriceObserved:
       typeof t.sale_price_observed === 'string' ? t.sale_price_observed : undefined,
-  };
-}
-
-export interface VariationPriceRow {
-  variationId: number;
-  attributesLabel: string;
-  targetField: 'regular_price' | 'sale_price';
-  previousPrice: number;
-  proposedPrice: number;
-  /** Decimal string that the dispatcher writes. Keyed `regular_price` in
-   *  the proposal target for parity with the simple shape. */
-  regularPrice: string;
-  /** WooCommerce stock_status: "instock" | "outofstock" | "onbackorder".
-   *  The UI surfaces "outofstock" with a small badge but still shows the
-   *  proposed price — operators may restock later. */
-  stockStatus: 'instock' | 'outofstock' | 'onbackorder' | string;
-}
-
-export interface VariablePriceProposal {
-  productId?: number;
-  productName?: string;
-  productSku?: string;
-  currency: string;
-  /** Signed. Negative = price cut. Daemon caps at ±25% per step. */
-  percentChange: number;
-  direction: 'increase' | 'decrease' | 'hold';
-  observedLow?: number;
-  observedMedian?: number;
-  observedHigh?: number;
-  sources: PriceSource[];
-  variations: VariationPriceRow[];
-  variationCount: number;
-  /** Range of pre-approval prices across variations. */
-  previousPriceMin: number;
-  previousPriceMax: number;
-  /** Range of post-approval prices. */
-  proposedPriceMin: number;
-  proposedPriceMax: number;
-}
-
-export function variablePriceProposalFromProposal(
-  p: Proposal | null | undefined,
-): VariablePriceProposal | null {
-  if (!p || p.type !== 'product_price_change_variable' || !p.target) return null;
-  const t = p.target as Record<string, unknown>;
-  const rawVariations = Array.isArray(t.variations) ? t.variations : [];
-  if (rawVariations.length === 0) return null;
-
-  const variations: VariationPriceRow[] = [];
-  for (const v of rawVariations) {
-    if (!v || typeof v !== 'object') continue;
-    const r = v as Record<string, unknown>;
-    const variationId = typeof r.variation_id === 'number' ? r.variation_id : NaN;
-    const previousPrice = typeof r.previous_price === 'number' ? r.previous_price : NaN;
-    const proposedPrice = typeof r.proposed_price === 'number' ? r.proposed_price : NaN;
-    const regularPrice = typeof r.regular_price === 'string' ? r.regular_price : '';
-    if (!Number.isFinite(variationId) || !Number.isFinite(previousPrice) || !Number.isFinite(proposedPrice) || regularPrice === '') {
-      continue;
-    }
-    const targetFieldRaw = typeof r.target_field === 'string' ? r.target_field : '';
-    const targetField: VariationPriceRow['targetField'] =
-      targetFieldRaw === 'sale_price' ? 'sale_price' : 'regular_price';
-    variations.push({
-      variationId,
-      attributesLabel: typeof r.attributes_label === 'string' ? r.attributes_label : `#${variationId}`,
-      targetField,
-      previousPrice,
-      proposedPrice,
-      regularPrice,
-      stockStatus: typeof r.stock_status === 'string' ? r.stock_status : 'instock',
-    });
-  }
-  if (variations.length === 0) return null;
-
-  const sourcesRaw = Array.isArray(t.sources) ? t.sources : [];
-  const sources: PriceSource[] = [];
-  for (const s of sourcesRaw) {
-    if (!s || typeof s !== 'object') continue;
-    const r = s as Record<string, unknown>;
-    if (typeof r.url !== 'string' || typeof r.observed_price !== 'number') continue;
-    sources.push({
-      url: r.url,
-      retailer: typeof r.retailer === 'string' ? r.retailer : undefined,
-      comparable_product:
-        typeof r.comparable_product === 'string' ? r.comparable_product : r.url,
-      observed_price: r.observed_price,
-      currency: typeof r.currency === 'string' ? r.currency : undefined,
-      note: typeof r.note === 'string' ? r.note : undefined,
-    });
-  }
-
-  const direction: VariablePriceProposal['direction'] =
-    t.direction === 'increase' || t.direction === 'decrease' || t.direction === 'hold'
-      ? (t.direction as VariablePriceProposal['direction'])
-      : 'hold';
-
-  return {
-    productId: typeof t.product_id === 'number' ? t.product_id : undefined,
-    productName: typeof t.product_name === 'string' ? t.product_name : undefined,
-    productSku: typeof t.product_sku === 'string' ? t.product_sku : undefined,
-    currency: typeof t.currency === 'string' ? t.currency : 'USD',
-    percentChange: typeof t.percent_change === 'number' ? t.percent_change : 0,
-    direction,
-    observedLow: typeof t.observed_low === 'number' ? t.observed_low : undefined,
-    observedMedian:
-      typeof t.observed_median === 'number' ? t.observed_median : undefined,
-    observedHigh:
-      typeof t.observed_high === 'number' ? t.observed_high : undefined,
-    sources,
-    variations,
-    variationCount:
-      typeof t.variation_count === 'number' ? t.variation_count : variations.length,
-    previousPriceMin:
-      typeof t.previous_price_min === 'number' ? t.previous_price_min : Math.min(...variations.map(v => v.previousPrice)),
-    previousPriceMax:
-      typeof t.previous_price_max === 'number' ? t.previous_price_max : Math.max(...variations.map(v => v.previousPrice)),
-    proposedPriceMin:
-      typeof t.proposed_price_min === 'number' ? t.proposed_price_min : Math.min(...variations.map(v => v.proposedPrice)),
-    proposedPriceMax:
-      typeof t.proposed_price_max === 'number' ? t.proposed_price_max : Math.max(...variations.map(v => v.proposedPrice)),
   };
 }
 
