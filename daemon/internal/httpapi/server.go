@@ -29,6 +29,7 @@ type PairingClient interface {
 	Request(ctx context.Context, storeURL, code, deviceName string) error
 	Poll(ctx context.Context, storeURL, code string) (pairing.PollResult, error)
 	Revoke(ctx context.Context, storeURL, deviceToken string) error
+	VerifyDevice(ctx context.Context, storeURL, deviceToken string) error
 }
 
 // Server wraps a chi router configured with the v1 API, CORS, and bearer-token

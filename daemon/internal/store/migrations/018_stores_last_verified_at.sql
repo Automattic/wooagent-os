@@ -1,0 +1,21 @@
+-- DSGWOO-1275 pairing staleness probe.
+--
+-- The daemon now verifies its stored device_token against the Companion
+-- Plugin's /devices/me endpoint on reads of a `paired` row. To avoid
+-- hammering the store on chatty UI polling, each row carries the
+-- timestamp of its last successful probe; reads inside a short window
+-- (handlers_stores.go: verifyThrottle) reuse the cached `paired` status
+-- and skip the HTTP call.
+--
+-- A NULL value means "never verified since this row landed" — the next
+-- read will probe immediately. No backfill needed: existing paired rows
+-- get re-verified on first read after upgrade, which is the desired
+-- behavior.
+--
+-- This migration also widens the inline status enum semantics: a new
+-- `unpaired` state is introduced for rows that probed 401, distinct from
+-- `expired` (which still means "pairing handshake window closed before
+-- the operator acted"). No schema-level CHECK constraint — the status
+-- column has never had one and the daemon owns the transitions.
+
+ALTER TABLE stores ADD COLUMN last_verified_at TEXT;
