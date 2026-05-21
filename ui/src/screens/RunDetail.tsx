@@ -13,6 +13,8 @@ import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
+import { useAskAgentContext } from '../lib/askAgent';
+import { runToVisible } from '../lib/visibleItems';
 
 interface Props {
   connection: Connection;
@@ -169,6 +171,14 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<RunDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'run-detail',
+      visible_items: data?.run ? [runToVisible(data.run)] : [],
+    }),
+    [data],
+  );
 
   useEffect(() => {
     if (!id) return;

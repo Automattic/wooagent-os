@@ -13,6 +13,8 @@ import {
   personaElementsFrom,
   relativeTime,
 } from '../lib/boardItems';
+import { useAskAgentContext } from '../lib/askAgent';
+import { issueToVisible } from '../lib/visibleItems';
 
 interface Props {
   connection: Connection;
@@ -81,6 +83,16 @@ export default function Archived({ connection, onAskAgent }: Props) {
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>(DEFAULT_VIEW);
+
+  useAskAgentContext(
+    () => ({
+      page: 'archived',
+      visible_items: (issues ?? [])
+        .filter((i) => i.status === 'dismissed' || i.status === 'rejected')
+        .map(issueToVisible),
+    }),
+    [issues],
+  );
 
   useEffect(() => {
     let cancelled = false;
