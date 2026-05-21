@@ -350,6 +350,7 @@ func buildAskConfig(env personas.Env, st *store.Store, sch *scheduler.Scheduler,
 	return httpapi.AskConfig{
 		Client:  client,
 		Threads: ask.NewThreadStore(0), // default cap (50)
+		Events:  ask.NewBroker(),
 		Agents: map[ask.AgentSlug]httpapi.AskAgent{
 			ask.AgentChiefOfStaff: {
 				Prompt: agents.CoSPrompt,
