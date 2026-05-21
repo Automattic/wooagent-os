@@ -335,7 +335,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           title={issue.title}
           description={
             issue.description ??
-            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce. The previous copy is snapshotted — reversible from the Done column.'
+            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce.'
           }
           imageUrl={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
           imageAlt={typeof data.proposal?.target?.image_alt === 'string' ? data.proposal.target.image_alt : undefined}
@@ -798,7 +798,7 @@ function PriceIssueView(props: PriceViewProps) {
           title={issue.title}
           description={
             issue.description ??
-            `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce; the previous price is snapshotted and reversible from the Done column.`
+            `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce.`
           }
           imageUrl={typeof rawProposal?.target?.image_url === 'string' ? rawProposal.target.image_url : undefined}
           imageAlt={typeof rawProposal?.target?.image_alt === 'string' ? rawProposal.target.image_alt : undefined}
@@ -1241,7 +1241,7 @@ function MessageIssueView(props: MessageViewProps) {
             issue.description ??
             (isInternal
               ? `Internal note for order ${orderLabel}. Saves to wp-admin only — not visible to the customer.`
-              : `Customer-facing note for ${customerName}. Approval emails this directly to ${proposal.customerEmail ?? 'the customer'}; reversible from the Done column.`)
+              : `Customer-facing note for ${customerName}. Approval emails this directly to ${proposal.customerEmail ?? 'the customer'}.`)
           }
         />
 
