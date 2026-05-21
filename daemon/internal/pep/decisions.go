@@ -19,6 +19,14 @@ import (
 // proposal for review, or applying a change immediately. The PEP uses Intent
 // in the scope-sufficiency check (Phase 2): an apply against a propose-scoped
 // ability is denied unless the call is staging a proposal, not applying it.
+//
+// Intent is per-call, not a lasting grant. IntentApply on a Request authorizes
+// exactly that one Invoke — never a future call with different args. The
+// operator-approve path (handlers_v1.approveOne, handlers_undo) mints one
+// IntentApply per click; replay is prevented by the issue's status (approve
+// requires in_review → done; undo requires undone_at IS NULL). Per-ability
+// admissibility is a separate layer (abilities.trust_state, mutated by
+// Trust/Revoke/Restore) and never widens what IntentApply can do.
 type Intent string
 
 const (

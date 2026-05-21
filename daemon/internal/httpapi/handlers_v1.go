@@ -820,6 +820,12 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 	// state + persona scope checks (V1), writes a chain-of-identity audit
 	// row, and dispatches to MCP. There is no direct s.mcp call site here
 	// or anywhere else in the daemon — that's the §8.4.2 invariant.
+	//
+	// This Invoke mints a one-shot apply permission scoped to (IssueID,
+	// Ability, Args). It does not persist beyond this call: a second
+	// /approve POST returns 409 wrong_status because the in_review → done
+	// status flip below blocks replay. Per-ability trust (abilities table)
+	// is the separate, lasting layer; see §8.4.2 for the two-layer model.
 	decision, mcpRes, invokeErr := s.pep.Invoke(ctx, pep.Request{
 		Persona: persona,
 		Ability: dispatch.ability,
