@@ -78,6 +78,10 @@ type Issue struct {
 	DismissReason  string     `json:"dismiss_reason,omitempty"`
 	DismissComment string     `json:"dismiss_comment,omitempty"`
 	DismissedAt    *time.Time `json:"dismissed_at,omitempty"`
+	// UndoneAt is set by POST /v1/issues/:id/undo. When non-nil the
+	// issue's approve has been reversed; status remains 'done'. The UI's
+	// DoneBar uses this to render the "undone" affordance instead of Undo.
+	UndoneAt *time.Time `json:"undone_at,omitempty"`
 	// Target is the proposal's per-target payload (product_id, image_url,
 	// etc.). Surfaced on list responses so queue card UIs can read fields
 	// without fetching the full IssueDetail. Omitted when not set.
@@ -333,7 +337,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	persona := r.URL.Query().Get("persona")
 	batchID := r.URL.Query().Get("batch_id")
 
-	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, COALESCE(proposal_target, 'null') FROM issues`
+	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, undone_at, COALESCE(proposal_target, 'null') FROM issues`
 	args := []any{}
 	where := []string{}
 	if status != "" {
@@ -364,9 +368,9 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var i Issue
 		var createdAt, updatedAt string
-		var dismissedAt sql.NullString
+		var dismissedAt, undoneAt sql.NullString
 		var targetRaw string
-		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &i.DismissReason, &i.DismissComment, &dismissedAt, &targetRaw); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &i.DismissReason, &i.DismissComment, &dismissedAt, &undoneAt, &targetRaw); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
@@ -375,6 +379,11 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		if dismissedAt.Valid && dismissedAt.String != "" {
 			if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
 				i.DismissedAt = &t
+			}
+		}
+		if undoneAt.Valid && undoneAt.String != "" {
+			if t, err := time.Parse(time.RFC3339, undoneAt.String); err == nil {
+				i.UndoneAt = &t
 			}
 		}
 		if targetRaw != "" && targetRaw != "null" {
@@ -477,10 +486,10 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var i Issue
 	var createdAt, updatedAt string
-	var proposalType, proposalContent, proposalTarget, dismissedAt sql.NullString
+	var proposalType, proposalContent, proposalTarget, dismissedAt, undoneAt sql.NullString
 	err := s.store.DB.QueryRowContext(r.Context(),
-		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at FROM issues WHERE id = ?`, id,
-	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget, &i.DismissReason, &i.DismissComment, &dismissedAt)
+		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, undone_at FROM issues WHERE id = ?`, id,
+	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget, &i.DismissReason, &i.DismissComment, &dismissedAt, &undoneAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
 		return
@@ -490,6 +499,11 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	if dismissedAt.Valid && dismissedAt.String != "" {
 		if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
 			i.DismissedAt = &t
+		}
+	}
+	if undoneAt.Valid && undoneAt.String != "" {
+		if t, err := time.Parse(time.RFC3339, undoneAt.String); err == nil {
+			i.UndoneAt = &t
 		}
 	}
 
@@ -513,30 +527,33 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 
 // approveDispatch maps a proposal_type to (a) the MCP ability that applies it
 // and (b) a function that builds the ability's parameters from the proposal
-// content + target. Adding new proposal types is purely additive — register a
-// new dispatcher here, and the approve handler picks it up.
+// content + target. buildParams returns the params payload AND the string
+// snapshot of the value we wrote (decimal string for prices, full body for
+// rewrites). approveOne persists the snapshot into issues.applied_value so
+// the undo handler's staleness check has a comparable. Dispatchers that
+// can't be undone (cold-draft, customer-reply) return "" as appliedValue.
 //
 // selectedVariant is the full variant map chosen by the operator (nil when
 // no variant_id was supplied). Dispatchers that only need the content string
 // (rewrite, price-change, customer-reply) ignore it; cold-draft reads
 // body_short/body_long from it.
 type approveDispatch struct {
-	ability    string
-	buildParams func(content string, selectedVariant map[string]any, target map[string]any) (map[string]any, error)
+	ability     string
+	buildParams func(content string, selectedVariant map[string]any, target map[string]any) (params map[string]any, appliedValue string, err error)
 }
 
 var approveDispatchByType = map[string]approveDispatch{
 	"product_description_rewrite": {
 		ability: "wooagent-products/update",
-		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			return map[string]any{
 				"id":          pid,
 				"description": content,
-			}, nil
+			}, content, nil
 		},
 	},
 	// Pricing persona. proposal.content is the operator-facing rationale
@@ -550,16 +567,16 @@ var approveDispatchByType = map[string]approveDispatch{
 	// rewrite; the fields-shipped subset is the only difference.
 	"product_price_change": {
 		ability: "wooagent-products/update",
-		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			field := "regular_price"
 			if v, present := target["target_field"]; present {
 				s, ok := v.(string)
 				if !ok {
-					return nil, fmt.Errorf("target_field must be a string, got %T", v)
+					return nil, "", fmt.Errorf("target_field must be a string, got %T", v)
 				}
 				s = strings.TrimSpace(s)
 				switch s {
@@ -568,31 +585,33 @@ var approveDispatchByType = map[string]approveDispatch{
 				case "":
 					// back-compat: empty falls back to regular_price
 				default:
-					return nil, fmt.Errorf("invalid target_field %q (expected regular_price|sale_price)", s)
+					return nil, "", fmt.Errorf("invalid target_field %q (expected regular_price|sale_price)", s)
 				}
 			}
 			price, err := requireDecimalStringFromTarget(target, "regular_price")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
-			return map[string]any{"id": pid, field: price}, nil
+			return map[string]any{"id": pid, field: price}, price, nil
 		},
 	},
 	// Sales Support persona. proposal.content is the message body (plain
 	// text, ready for WP to email to the customer). target carries the
 	// order id and a note_type discriminator — "customer" sets
 	// is_customer_note=true so WP emails the note; "internal" leaves it
-	// off so it shows only in wp-admin.
+	// off so it shows only in wp-admin. Not undoable in v1 — the
+	// dispatcher returns "" as appliedValue so the undo handler will
+	// reject any attempt with code=not_undoable.
 	"customer_reply_draft": {
 		ability: "wooagent-orders/add-note",
-		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			oid, err := requireIntFromTarget(target, "order_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			note := strings.TrimSpace(content)
 			if note == "" {
-				return nil, fmt.Errorf("proposal content (note body) is empty")
+				return nil, "", fmt.Errorf("proposal content (note body) is empty")
 			}
 			isCustomer := true // default: customer-facing
 			if v, ok := target["note_type"]; ok {
@@ -604,56 +623,58 @@ var approveDispatchByType = map[string]approveDispatch{
 				"id":               oid,
 				"note":             note,
 				"is_customer_note": isCustomer,
-			}, nil
+			}, "", nil
 		},
 	},
 	// Marketing persona — cold-draft path. proposal.target.drafting lists
 	// which description fields to fill ("short" and/or "long"); the selected
 	// variant carries body_short and/or body_long. The payload writes only
 	// the previously-empty fields; existing copy in non-drafted fields is
-	// preserved because we only include keys named in drafting.
+	// preserved because we only include keys named in drafting. Not undoable
+	// in v1 (the natural reverse — writing an empty string back — is
+	// rarely what an operator wants); dispatcher returns "" as appliedValue.
 	"product_cold_draft": {
 		ability: "wooagent-products/update",
-		buildParams: func(_ string, selectedVariant map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(_ string, selectedVariant map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if selectedVariant == nil {
-				return nil, fmt.Errorf("cold-draft approval requires a variant_id")
+				return nil, "", fmt.Errorf("cold-draft approval requires a variant_id")
 			}
 			rawDrafting, ok := target["drafting"]
 			if !ok {
-				return nil, fmt.Errorf("missing drafting in proposal target")
+				return nil, "", fmt.Errorf("missing drafting in proposal target")
 			}
 			drafting, ok := rawDrafting.([]any)
 			if !ok {
-				return nil, fmt.Errorf("drafting is not an array")
+				return nil, "", fmt.Errorf("drafting is not an array")
 			}
 			params := map[string]any{"id": pid}
 			for _, f := range drafting {
 				field, ok := f.(string)
 				if !ok {
-					return nil, fmt.Errorf("drafting entry %v is not a string", f)
+					return nil, "", fmt.Errorf("drafting entry %v is not a string", f)
 				}
 				switch field {
 				case "short":
 					short, ok := selectedVariant["body_short"].(string)
 					if !ok || short == "" {
-						return nil, fmt.Errorf("variant missing body_short (drafting requires it)")
+						return nil, "", fmt.Errorf("variant missing body_short (drafting requires it)")
 					}
 					params["short_description"] = short
 				case "long":
 					long, ok := selectedVariant["body_long"].(string)
 					if !ok || long == "" {
-						return nil, fmt.Errorf("variant missing body_long (drafting requires it)")
+						return nil, "", fmt.Errorf("variant missing body_long (drafting requires it)")
 					}
 					params["description"] = long
 				default:
-					return nil, fmt.Errorf("unknown drafting field %q (expected short|long)", field)
+					return nil, "", fmt.Errorf("unknown drafting field %q (expected short|long)", field)
 				}
 			}
-			return params, nil
+			return params, "", nil
 		},
 	},
 }
@@ -758,7 +779,7 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		}
 	}
 
-	params, err := dispatch.buildParams(contentToShip, selectedVariant, target)
+	params, applied, err := dispatch.buildParams(contentToShip, selectedVariant, target)
 	if err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_proposal_target", Message: err.Error()}
 	}
@@ -836,8 +857,13 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "ability_failed", Message: envelope.Error}
 	}
 
+	var appliedArg any = nil
+	if applied != "" {
+		appliedArg = applied
+	}
 	if _, err := s.store.DB.ExecContext(ctx,
-		`UPDATE issues SET status = 'done', updated_at = ? WHERE id = ?`, now, issueID,
+		`UPDATE issues SET status = 'done', applied_value = ?, updated_at = ? WHERE id = ?`,
+		appliedArg, now, issueID,
 	); err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
 	}

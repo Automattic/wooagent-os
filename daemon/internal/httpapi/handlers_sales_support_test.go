@@ -78,7 +78,7 @@ func TestApproveDispatch_CustomerReplyDraft_BuildParamsShape(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			params, err := d.buildParams(tc.content, nil, tc.target)
+			params, _, err := d.buildParams(tc.content, nil, tc.target)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got params=%v", params)

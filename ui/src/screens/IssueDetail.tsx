@@ -88,7 +88,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   const nav = useNavigate();
   const [data, setData] = useState<IssueDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+  const [busy, setBusy] = useState<'approve' | 'reject' | 'undo' | null>(null);
+  const [undoStale, setUndoStale] = useState<{ current: string } | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<{
     kind: 'success' | 'error';
@@ -184,6 +185,48 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     }
   };
 
+  const handleUndo = async () => {
+    if (!id) return;
+    setBusy('undo');
+    setUndoStale(null);
+    try {
+      await api.undo(connection, id);
+      // Re-fetch the issue so undone_at is reflected in the DoneBar.
+      const updated = await api.issue(connection, id);
+      setData(updated);
+      onChanged?.();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'undo_stale') {
+        const rawCurrent =
+          typeof err.payload?.current === 'string' ? err.payload.current : '';
+        // Format prices with currency; truncate long description strings so
+        // the Notice doesn't render raw HTML walls of text.
+        let displayCurrent = rawCurrent;
+        if (rawCurrent) {
+          const proposalType = data?.proposal?.type;
+          if (proposalType === 'product_price_change') {
+            const parsed = parseFloat(rawCurrent);
+            if (Number.isFinite(parsed)) {
+              const priceProposal = priceProposalFromProposal(data?.proposal);
+              const currency = priceProposal?.currency ?? 'USD';
+              displayCurrent = formatPrice(parsed, currency);
+            }
+          } else if (proposalType === 'product_description_rewrite') {
+            displayCurrent = rawCurrent.length > 80 ? rawCurrent.slice(0, 80) + '…' : rawCurrent;
+          }
+        }
+        setUndoStale({ current: displayCurrent });
+      } else {
+        setActionMsg({
+          kind: 'error',
+          text: err instanceof Error ? err.message : 'Undo failed',
+        });
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const idLabel = id ? id.slice(0, 8).toUpperCase() : 'Issue';
 
   if (error) {
@@ -255,6 +298,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           rationale={proposal?.content ?? ''}
           personaLabel={personaLabel}
           actionMsg={actionMsg}
+          undoStale={undoStale}
           busy={busy}
           reviewable={reviewable}
           isDone={isDone}
@@ -263,7 +307,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           onApprove={onApprove}
           onReject={onReject}
           onCancel={() => nav('/')}
-          onUndo={() => nav('/')}
+          onUndo={handleUndo}
           onView={() => nav('/')}
           onAskAgent={onAskAgent}
         />
@@ -289,7 +333,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           onApprove={onApprove}
           onReject={onReject}
           onCancel={() => nav('/')}
-          onUndo={() => nav('/')}
+          onUndo={handleUndo}
           onView={() => nav('/')}
           onAskAgent={onAskAgent}
         />
@@ -683,6 +727,16 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
               </Notice.Root>
             )}
 
+            {undoStale && (
+              <Notice.Root intent="warning">
+                <Notice.Description>
+                  The product was changed after this approval.{' '}
+                  {undoStale.current ? `Current value is ${undoStale.current}. ` : ''}
+                  Inspect it in WooCommerce.
+                </Notice.Description>
+              </Notice.Root>
+            )}
+
           </div>
         </div>
         </div>
@@ -695,14 +749,16 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           state="done"
           variantId={approvedVariant ?? activeVariant?.id ?? 'A'}
           scope={scope}
-          onUndo={() => nav('/')}
+          undoneAt={issue.undone_at ?? undefined}
+          busy={busy === 'undo' ? 'undo' : null}
+          onUndo={handleUndo}
           onView={() => nav('/')}
         />
       ) : (
         <ActionBar
           state="review"
           productBound={productBound}
-          busy={busy}
+          busy={busy as 'approve' | 'reject' | null}
           disabled={!reviewable || !proposal}
           selectedVariantId={activeVariant?.id ?? null}
           onApprove={onApprove}
@@ -731,7 +787,8 @@ interface PriceViewProps {
   rationale: string;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
-  busy: 'approve' | 'reject' | null;
+  undoStale?: { current: string } | null;
+  busy: 'approve' | 'reject' | 'undo' | null;
   reviewable: boolean;
   isDone: boolean;
   isArchived: boolean;
@@ -1025,6 +1082,18 @@ function PriceIssueView(props: PriceViewProps) {
               </Notice.Root>
             )}
 
+            {props.undoStale && (
+              <Notice.Root intent="warning">
+                <Notice.Description>
+                  The product was changed after this approval.{' '}
+                  {props.undoStale.current
+                    ? `Current price is ${props.undoStale.current}. `
+                    : ''}
+                  Inspect it in WooCommerce.
+                </Notice.Description>
+              </Notice.Root>
+            )}
+
           </div>
         </div>
         </div>
@@ -1036,8 +1105,14 @@ function PriceIssueView(props: PriceViewProps) {
         <ActionBar
           state="done"
           entity="price"
-          priceSummary={doneSummary}
+          priceSummary={
+            props.issue.undone_at
+              ? formatPrice(proposal.previousPrice, currency)
+              : doneSummary
+          }
           scope={scope}
+          undoneAt={props.issue.undone_at ?? undefined}
+          busy={props.busy === 'undo' ? 'undo' : null}
           onUndo={props.onUndo}
           onView={props.onView}
         />
@@ -1046,7 +1121,7 @@ function PriceIssueView(props: PriceViewProps) {
           state="review"
           entity="price"
           productBound={productBound}
-          busy={props.busy}
+          busy={props.busy as 'approve' | 'reject' | null}
           disabled={!props.reviewable}
           priceSummary={summary}
           onApprove={props.onApprove}
@@ -1182,7 +1257,7 @@ interface MessageViewProps {
   proposal: MessageProposal;
   personaLabel: string;
   actionMsg: { kind: 'success' | 'error'; text: string } | null;
-  busy: 'approve' | 'reject' | null;
+  busy: 'approve' | 'reject' | 'undo' | null;
   reviewable: boolean;
   isDone: boolean;
   isArchived: boolean;
@@ -1446,7 +1521,7 @@ function MessageIssueView(props: MessageViewProps) {
           state="review"
           entity="message"
           productBound={productBound}
-          busy={props.busy}
+          busy={props.busy as 'approve' | 'reject' | null}
           disabled={!props.reviewable}
           messageRecipient={recipientLabel}
           messageNoteType={proposal.noteType}
