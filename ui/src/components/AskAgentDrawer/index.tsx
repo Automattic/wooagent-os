@@ -5,7 +5,7 @@ import { Text } from '@wordpress/ui';
 import ChatThread from './ChatThread';
 import MessageInput from './MessageInput';
 import Picker from './Picker';
-import { suggestionsForPage } from './suggestions';
+import { suggestionsForAgentAndPage } from './suggestions';
 import {
   api,
   type AskAgent,
@@ -20,26 +20,52 @@ interface Props {
   connection: Connection;
 }
 
-// AskAgentDrawer is the multi-turn chat surface (DSGWOO-1348 B1). The
-// operator opens it with ⌘K, types a question or work request, and
-// the daemon's CoS agent answers — read questions inline, dispatch
-// requests as receipts with a "Working" chip that links to the run.
+// AskAgentDrawer is the multi-turn chat surface (DSGWOO-1347). The
+// operator opens it with ⌘K, types a question or work request, and the
+// picked agent answers — read questions inline, dispatch requests as
+// receipts with a "Working" chip that links to the run.
 //
-// State here is in-memory per session: the messages array, the active
-// agent (CoS-only in B1; B2 unlocks the picker), and a stable
-// thread_id minted on mount. The bearer connection is threaded
-// through props because the drawer needs it for the api.ask call —
-// the App owns the durable Connection.
+// State here is in-memory per session: messages keyed per agent so each
+// thread persists when the picker switches, a stable thread_id minted
+// on mount, and an `unread` flag set when a non-active agent's thread
+// gets a new message. Threads clear on reload — persistence is a
+// follow-up.
+//
+// Live agents: Chief of Staff (default), Marketing, Pricing,
+// Sales Support. Inventory / Accounting / Reporting appear disabled in
+// the picker — their runtimes aren't registered (1355).
+
+/** Empty per-agent thread map. One key per live agent; new agents added
+ *  here must also be exported from the daemon's AgentSlug enum so the
+ *  POST /v1/ask handler routes them. */
+const EMPTY_THREADS: Record<AskAgent, AskMessage[]> = {
+  chief_of_staff: [],
+  marketing: [],
+  pricing: [],
+  'sales-support': [],
+};
+
 export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
-  const [activeAgent /* setActiveAgent — B2 */] = useState<AskAgent>('chief_of_staff');
-  const [messages, setMessages] = useState<AskMessage[]>([]);
+  const [activeAgent, setActiveAgent] = useState<AskAgent>('chief_of_staff');
+  // Per-agent message threads. Switching the picker swaps which thread
+  // ChatThread renders without losing the others — within one session,
+  // a half-finished Pricing chat survives a quick detour to CoS.
+  const [threads, setThreads] = useState<Record<AskAgent, AskMessage[]>>(EMPTY_THREADS);
+  const [unread, setUnread] = useState<Partial<Record<AskAgent, boolean>>>({});
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // Per-agent loading flag so two threads aren't gated by each other —
+  // currently the drawer only allows one in-flight request at a time
+  // since the input belongs to the active thread, but tracking
+  // per-agent keeps the surface honest if we ever lift that constraint.
+  const [loadingAgent, setLoadingAgent] = useState<AskAgent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const threadId = useMemo(() => crypto.randomUUID(), []);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const getPageContext = useAskAgentContextGetter();
+
+  const messages = threads[activeAgent];
+  const isLoading = loadingAgent === activeAgent;
 
   // Focus the input when the drawer opens.
   useEffect(() => {
@@ -58,44 +84,68 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
 
+  // Clear the unread dot for the agent the operator just switched to.
+  useEffect(() => {
+    setUnread((prev) => {
+      if (!prev[activeAgent]) return prev;
+      const next = { ...prev };
+      delete next[activeAgent];
+      return next;
+    });
+  }, [activeAgent]);
+
   const submit = async (textOverride?: string) => {
     const text = (textOverride ?? input).trim();
     if (!text || isLoading) return;
 
+    const agent = activeAgent;
     const ctx = getPageContext();
     const userMsg: AskMessage = {
       role: 'user',
       content: text,
       page_context: ctx,
     };
-    const next = [...messages, userMsg];
-    setMessages(next);
+    const nextThread = [...threads[agent], userMsg];
+    setThreads((prev) => ({ ...prev, [agent]: nextThread }));
     setInput('');
-    setIsLoading(true);
+    setLoadingAgent(agent);
     setError(null);
 
     try {
       const resp = await api.ask(connection, {
-        agent: activeAgent,
+        agent,
         thread_id: threadId,
-        messages: next,
+        messages: nextThread,
       });
-      setMessages([...next, resp.message]);
+      setThreads((prev) => ({
+        ...prev,
+        [agent]: [...prev[agent], resp.message],
+      }));
+      // If the operator switched away before the reply came back, flag
+      // the originating agent's thread as unread so the picker dot
+      // surfaces the new message.
+      if (agent !== activeAgent) {
+        setUnread((prev) => ({ ...prev, [agent]: true }));
+      }
     } catch (err) {
+      // Roll back the user message — keeping it without a reply leaves
+      // the thread confusingly mid-air, and the operator can re-submit
+      // from the input box (the input itself is empty by now).
+      setThreads((prev) => ({ ...prev, [agent]: prev[agent].slice(0, -1) }));
+      setInput(text);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsLoading(false);
-      // Refocus the input so the next turn is one keystroke away.
+      setLoadingAgent((prev) => (prev === agent ? null : prev));
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
-  // Page label drives which suggestion set we surface on an empty
-  // thread. Reads the getter so the suggestions reflect the page
-  // the operator is currently looking at (not whatever page was
-  // active when the drawer last rendered).
+  // Page label + active agent drive which suggestion set we surface on
+  // an empty thread. Reads the getter so suggestions reflect the page
+  // the operator is currently looking at (not whatever page was active
+  // when the drawer last rendered).
   const pageLabel = isOpen ? getPageContext().page : '';
-  const suggestions = suggestionsForPage(pageLabel);
+  const suggestions = suggestionsForAgentAndPage(activeAgent, pageLabel);
 
   return (
     <>
@@ -123,7 +173,7 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
           </button>
         </div>
 
-        <Picker active={activeAgent} />
+        <Picker active={activeAgent} onSelect={setActiveAgent} unread={unread} />
 
         <ChatThread
           messages={messages}
