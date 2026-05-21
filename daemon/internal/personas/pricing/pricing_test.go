@@ -415,3 +415,39 @@ func TestDraftForProduct_TargetShape_RegularPriceBackcompat(t *testing.T) {
 		t.Errorf("sale_price_observed should be absent when no sale price is set; target=%v", target)
 	}
 }
+
+func TestPickFirstProduct_AllowsVariable(t *testing.T) {
+	// After variable-product support lands, pickFirstProduct should no
+	// longer skip type=variable. The function still skips no-price and
+	// cooldown'd entries — those gates stay.
+	summaries := []productSummary{
+		{ID: 100, Status: "publish", Type: "simple", RegularPrice: ""},        // skipped: no price
+		{ID: 101, Status: "publish", Type: "variable", RegularPrice: ""},      // accepted: variable parents have empty regular_price by design
+		{ID: 102, Status: "publish", Type: "simple", RegularPrice: "19.99"},   // accepted
+	}
+	id, err := firstEligible(summaries, map[int]struct{}{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != 101 {
+		t.Fatalf("expected id 101 (first variable, no price-string requirement on variables); got %d", id)
+	}
+}
+
+func TestListEligibleProducts_IncludesVariable(t *testing.T) {
+	products := []product{
+		{ID: 200, Status: "publish", Type: "simple", RegularPrice: "29.99"},
+		{ID: 201, Status: "publish", Type: "variable", RegularPrice: ""},
+		{ID: 202, Status: "publish", Type: "simple", RegularPrice: ""},
+	}
+	got := filterEligible(products, map[int]struct{}{})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 eligible (variable + simple-with-price); got %d (%v)", len(got), got)
+	}
+	wantIDs := map[int]bool{200: true, 201: true}
+	for _, p := range got {
+		if !wantIDs[p.ID] {
+			t.Fatalf("unexpected id %d in eligible set", p.ID)
+		}
+	}
+}
