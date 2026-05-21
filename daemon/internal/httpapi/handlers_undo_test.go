@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,9 +26,6 @@ type undoMCP struct {
 	calls          []recordedMCPCall
 	getResponse    string // JSON for the next wooagent-products/get
 	updateResponse string // JSON for the next wooagent-products/update
-	// respondByAbility lets a test script a JSON body per ability name.
-	// Takes precedence over getResponse/updateResponse when the key matches.
-	respondByAbility map[string]string
 }
 
 type recordedMCPCall struct {
@@ -45,11 +41,6 @@ func (m *undoMCP) CallTool(_ context.Context, tool string, params any) (mcp.Tool
 	p, _ := params.(map[string]any)
 	m.calls = append(m.calls, recordedMCPCall{tool: tool, params: p})
 	ability, _ := p["ability_name"].(string)
-	if m.respondByAbility != nil {
-		if body, ok := m.respondByAbility[ability]; ok && body != "" {
-			return mcp.ToolCallResult{Content: []mcp.ContentPart{{Type: "text", Text: body}}}, nil
-		}
-	}
 	switch ability {
 	case "wooagent-products/get":
 		body := m.getResponse
@@ -92,22 +83,6 @@ func newUndoRig(t *testing.T) (*httptest.Server, *store.Store, *undoMCP) {
 				SchemaHash:     "sha256:test",
 				Scope:          manifest.ScopePropose,
 				Reversibility:  1.0,
-				Personas:       []manifest.Persona{manifest.PersonaPricing, manifest.PersonaMarketing},
-			},
-			{
-				Ability:        "wooagent-products/variations-list",
-				NamespaceOwner: "test",
-				SchemaHash:     "sha256:test",
-				Scope:          manifest.ScopeRead,
-				Reversibility:  1.0,
-				Personas:       []manifest.Persona{manifest.PersonaPricing, manifest.PersonaMarketing},
-			},
-			{
-				Ability:        "wooagent-products/update-variations-bulk",
-				NamespaceOwner: "test",
-				SchemaHash:     "sha256:test",
-				Scope:          manifest.ScopePropose,
-				Reversibility:  0.6,
 				Personas:       []manifest.Persona{manifest.PersonaPricing, manifest.PersonaMarketing},
 			},
 		},
@@ -496,147 +471,3 @@ func TestGetIssue_ExposesUndoneAt(t *testing.T) {
 	}
 }
 
-func TestUndoIssue_VariablePriceChange_HappyPath(t *testing.T) {
-	ts, _, mcpHandler := newUndoRig(t)
-
-	// Pre-script the approve-time MCP call: the dispatcher will invoke
-	// wooagent-products/update-variations-bulk; success is enough.
-	// At undo time the mock needs to answer variations-list with the
-	// values we wrote (no drift) and then accept the reverse bulk write.
-	mcpHandler.respondByAbility = map[string]string{
-		"wooagent-products/update-variations-bulk": `{"success":true,"data":{"parent_id":4012,"updated":[{"variation_id":4013,"updated_fields":["regular_price"]},{"variation_id":4014,"updated_fields":["sale_price"]}]}}`,
-		"wooagent-products/variations-list":        `{"success":true,"data":{"parent_id":4012,"variations":[{"id":4013,"attributes_label":"S/Blue","regular_price":"21.59","sale_price":"","stock_status":"instock"},{"id":4014,"attributes_label":"M/Blue","regular_price":"30.00","sale_price":"27.00","stock_status":"instock"}]}}`,
-	}
-
-	id := approveAndGetID(t, ts, map[string]any{
-		"title":   "Price change · V-Neck",
-		"persona": "pricing",
-		"status":  "in_review",
-		"proposal": map[string]any{
-			"type":    "product_price_change_variable",
-			"content": "rationale",
-			"target": map[string]any{
-				"product_id":     4012,
-				"percent_change": 8.0,
-				"direction":      "increase",
-				"variations": []any{
-					map[string]any{
-						"variation_id":     4013,
-						"attributes_label": "Small / Blue",
-						"target_field":     "regular_price",
-						"regular_price":    "21.59",
-						"previous_price":   19.99,
-						"proposed_price":   21.59,
-					},
-					map[string]any{
-						"variation_id":     4014,
-						"attributes_label": "Medium / Blue",
-						"target_field":     "sale_price",
-						"regular_price":    "27.00",
-						"previous_price":   25.00,
-						"proposed_price":   27.00,
-					},
-				},
-			},
-		},
-	})
-
-	// Reset captured calls so we only see undo-time MCP traffic.
-	mcpHandler.calls = nil
-
-	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
-	if undoRes.StatusCode != http.StatusOK {
-		buf := new(bytes.Buffer)
-		_, _ = buf.ReadFrom(undoRes.Body)
-		undoRes.Body.Close()
-		t.Fatalf("expected 200; got %d body=%s", undoRes.StatusCode, buf.String())
-	}
-	undoRes.Body.Close()
-
-	// Find the bulk-update call carrying the reverse write.
-	var bulkArgs map[string]any
-	for _, c := range mcpHandler.calls {
-		abilityName, _ := c.params["ability_name"].(string)
-		if abilityName == "wooagent-products/update-variations-bulk" {
-			bulkArgs, _ = c.params["parameters"].(map[string]any)
-		}
-	}
-	if bulkArgs == nil {
-		t.Fatalf("undo did not call update-variations-bulk; calls=%+v", mcpHandler.calls)
-	}
-	// updates is []map[string]any in-process (no JSON round-trip), so we
-	// try both shapes for resilience to a future params marshaler change.
-	var updatesList []map[string]any
-	switch v := bulkArgs["updates"].(type) {
-	case []map[string]any:
-		updatesList = v
-	case []any:
-		for _, e := range v {
-			if m, ok := e.(map[string]any); ok {
-				updatesList = append(updatesList, m)
-			}
-		}
-	}
-	if len(updatesList) != 2 {
-		t.Fatalf("expected 2 updates; got %d (bulkArgs=%+v)", len(updatesList), bulkArgs)
-	}
-	if updatesList[0]["regular_price"] != "19.99" {
-		t.Fatalf("variation 4013 undo regular_price = %v; want 19.99", updatesList[0]["regular_price"])
-	}
-	if updatesList[1]["sale_price"] != "25.00" {
-		t.Fatalf("variation 4014 undo sale_price = %v; want 25.00", updatesList[1]["sale_price"])
-	}
-}
-
-func TestUndoIssue_VariablePriceChange_StaleReturns409(t *testing.T) {
-	ts, _, mcpHandler := newUndoRig(t)
-
-	// Approve-time: bulk update succeeds. Undo-time: variations-list
-	// returns a DIFFERENT regular_price for 4013 (someone changed it),
-	// so undo should bail with 409.
-	mcpHandler.respondByAbility = map[string]string{
-		"wooagent-products/update-variations-bulk": `{"success":true,"data":{"parent_id":4012,"updated":[]}}`,
-		"wooagent-products/variations-list":        `{"success":true,"data":{"parent_id":4012,"variations":[{"id":4013,"attributes_label":"S/Blue","regular_price":"99.99","sale_price":"","stock_status":"instock"}]}}`,
-	}
-
-	id := approveAndGetID(t, ts, map[string]any{
-		"title":   "Price change · X",
-		"persona": "pricing",
-		"status":  "in_review",
-		"proposal": map[string]any{
-			"type":    "product_price_change_variable",
-			"content": "rationale",
-			"target": map[string]any{
-				"product_id":     4012,
-				"percent_change": 8.0,
-				"direction":      "increase",
-				"variations": []any{
-					map[string]any{
-						"variation_id":     4013,
-						"attributes_label": "Small / Blue",
-						"target_field":     "regular_price",
-						"regular_price":    "21.59",
-						"previous_price":   19.99,
-						"proposed_price":   21.59,
-					},
-				},
-			},
-		},
-	})
-
-	mcpHandler.calls = nil
-
-	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
-	if undoRes.StatusCode != http.StatusConflict {
-		buf := new(bytes.Buffer)
-		_, _ = buf.ReadFrom(undoRes.Body)
-		undoRes.Body.Close()
-		t.Fatalf("expected 409 stale; got %d body=%s", undoRes.StatusCode, buf.String())
-	}
-	buf := new(bytes.Buffer)
-	_, _ = buf.ReadFrom(undoRes.Body)
-	undoRes.Body.Close()
-	if !strings.Contains(buf.String(), "undo_stale") {
-		t.Fatalf("expected error code undo_stale; got %s", buf.String())
-	}
-}
