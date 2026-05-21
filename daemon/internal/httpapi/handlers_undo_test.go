@@ -470,3 +470,4 @@ func TestGetIssue_ExposesUndoneAt(t *testing.T) {
 		t.Errorf("issue payload missing undone_at: %v", issue)
 	}
 }
+

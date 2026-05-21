@@ -18,6 +18,7 @@ import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
+import SourceRow from '../components/SourceRow';
 import { useAskAgentContext } from '../lib/askAgent';
 import { issueToVisible } from '../lib/visibleItems';
 import DismissDialog from '../components/DismissDialog';
@@ -824,7 +825,13 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         {/* Branch body on first child's proposal type. Marketing keeps the
             existing variant-accordion + Marketing KPI strip; pricing renders
             BatchProductCard rows with a pricing KPI strip. */}
-        {isPricingBatch ? renderPricingBody(data, counterStrip) : renderMarketingBody()}
+        {isPricingBatch
+          ? renderPricingBody(data, counterStrip, {
+              busy,
+              onApprove: approveRow,
+              onReject: rejectRow,
+            })
+          : renderMarketingBody()}
 
         {actionMsg && (
           <div style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
@@ -982,11 +989,22 @@ function Counter({ label, value, tone }: CounterProps) {
 }
 
 // Pricing-shape body: KPI strip aggregated across the batch + counter
-// strip + a vertical list of BatchProductCards. Pure: no closure over
-// component state — the Approve / Reject wiring still flows through the
-// sticky action bar in the parent. The counter strip is passed in by
+// strip + a vertical list of BatchProductCards. Per-row Approve / Dismiss
+// callbacks come from the parent's batch-level state machine — the cards
+// render the buttons themselves but the network calls live in
+// approveRow / rejectRow in the parent. The counter strip is passed in by
 // the caller so the same JSX serves marketing and pricing bodies.
-function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
+interface PricingBodyHandlers {
+  busy: string | null;
+  onApprove: (issueId: string) => void;
+  onReject: (issueId: string) => void;
+}
+
+function renderPricingBody(
+  data: BatchDetail,
+  counterStrip: ReactNode,
+  handlers: PricingBodyHandlers,
+) {
   const products: BatchProduct[] = data.issues.map((iwp) => {
     const t = (iwp.proposal?.target ?? {}) as Record<string, unknown>;
     const direction: BatchProduct['direction'] =
@@ -994,6 +1012,8 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
         ? t.direction
         : 'flat';
     return {
+      issueId: iwp.issue.id,
+      status: iwp.issue.status,
       productId: typeof t.product_id === 'number' ? t.product_id : 0,
       sku: typeof t.product_sku === 'string' ? t.product_sku : '',
       name: typeof t.product_name === 'string' ? t.product_name : iwp.issue.title,
@@ -1008,6 +1028,11 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
       currency: typeof t.currency === 'string' ? t.currency : 'USD',
       rationale: iwp.proposal?.content ?? '',
       sources: Array.isArray(t.sources) ? (t.sources as PriceSource[]) : [],
+      observedLow: typeof t.observed_low === 'number' ? t.observed_low : undefined,
+      observedMedian:
+        typeof t.observed_median === 'number' ? t.observed_median : undefined,
+      observedHigh:
+        typeof t.observed_high === 'number' ? t.observed_high : undefined,
     };
   });
 
@@ -1024,6 +1049,26 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
     products.flatMap((p) => p.sources.map((s) => s.url)),
   );
   const currency = products[0]?.currency ?? 'USD';
+
+  // Variable-product batches: all children share the same rationale and the
+  // same source list. Lift them out of each row and render once below the
+  // list — matches the single-product PriceIssueView pattern.
+  const isVariableBatch = data.batch.intent === 'pricing_variable';
+  const sharedRationale = isVariableBatch ? (products[0]?.rationale ?? '') : '';
+  const dedupedSources: PriceSource[] = isVariableBatch
+    ? (() => {
+        const seen = new Set<string>();
+        const out: PriceSource[] = [];
+        for (const p of products) {
+          for (const s of p.sources) {
+            if (seen.has(s.url)) continue;
+            seen.add(s.url);
+            out.push(s);
+          }
+        }
+        return out;
+      })()
+    : [];
   const sym = currencySymbol(currency);
   const totalToneCalc: 'success' | 'warning' = totalDelta >= 0 ? 'success' : 'warning';
   const medianToneCalc: 'neutral' | 'warning' | 'success' =
@@ -1062,12 +1107,79 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
       <Stack direction="column" gap="sm">
         {products.map((p, idx) => (
           <BatchProductCard
-            key={p.productId || idx}
+            key={p.issueId || idx}
             product={p}
             defaultExpanded={idx === 0}
+            hideRationaleAndSources={isVariableBatch}
+            busy={handlers.busy}
+            reviewable={p.status === 'in_review'}
+            onApprove={handlers.onApprove}
+            onReject={handlers.onReject}
           />
         ))}
       </Stack>
+
+      {isVariableBatch && sharedRationale && (
+        <Card.Root>
+          <Card.Header>
+            <Stack direction="row" gap="md" align="center" style={{ width: '100%' }}>
+              <Text
+                variant="body-md"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                Rationale
+              </Text>
+              <Text
+                variant="body-sm"
+                style={{
+                  marginLeft: 'auto',
+                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                }}
+              >
+                shared across all variations
+              </Text>
+            </Stack>
+          </Card.Header>
+          <Card.Content>
+            <Text
+              variant="body-md"
+              style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}
+            >
+              {sharedRationale}
+            </Text>
+          </Card.Content>
+        </Card.Root>
+      )}
+
+      {isVariableBatch && dedupedSources.length > 0 && (
+        <Card.Root>
+          <Card.Header>
+            <Stack direction="row" gap="md" align="center">
+              <Text
+                variant="body-md"
+                style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+              >
+                Sources
+              </Text>
+              <Badge intent="none">
+                {`${dedupedSources.length} comparable${dedupedSources.length === 1 ? '' : 's'}`}
+              </Badge>
+            </Stack>
+          </Card.Header>
+          <Card.Content>
+            <Stack direction="column" gap="sm">
+              {dedupedSources.map((s, idx) => (
+                <SourceRow
+                  key={idx}
+                  source={s}
+                  currency={currency}
+                  proposed={products[0]?.proposedPrice ?? 0}
+                />
+              ))}
+            </Stack>
+          </Card.Content>
+        </Card.Root>
+      )}
     </Stack>
   );
 }

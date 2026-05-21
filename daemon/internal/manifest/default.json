@@ -99,6 +99,21 @@
       "description": "Update any subset of editable product fields. Only the fields provided are modified."
     },
     {
+      "ability": "wooagent-products/variations-list",
+      "namespace_owner": "wooagent-os/companion-plugin",
+      "source_url": "",
+      "schema_hash": "pending",
+      "scope": "read",
+      "reversibility": 1,
+      "personas": [
+        "marketing",
+        "pricing",
+        "inventory",
+        "sales-support"
+      ],
+      "description": "List all enabled, priced variations of a variable product."
+    },
+    {
       "ability": "wooagent-orders/list",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",

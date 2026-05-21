@@ -1,11 +1,15 @@
 // Command mcp-probe is a throwaway verification tool that exercises the
 // mcp.Client against a live store without involving the ADK agent loop.
 // Used to isolate MCP-transport bugs from model-behavior bugs.
+//
+// Default: calls wooagent-products/list with per_page=3.
+// Flags: -ability <name> -args '<json>' to call any ability with custom args.
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +19,15 @@ import (
 )
 
 func main() {
+	abilityFlag := flag.String("ability", "wooagent-products/list", "ability name to invoke")
+	argsFlag := flag.String("args", `{"per_page":3}`, "ability arguments as a JSON object")
+	flag.Parse()
+
+	var params map[string]any
+	if err := json.Unmarshal([]byte(*argsFlag), &params); err != nil {
+		log.Fatalf("decode -args: %v", err)
+	}
+
 	ctx := context.Background()
 
 	endpoint := mustEnv("WOOAGENT_MCP_URL")
@@ -31,8 +44,8 @@ func main() {
 		info.ServerInfo.Name, info.ServerInfo.Version, info.ProtocolVersion, c.SessionID())
 
 	result, err := c.CallTool(ctx, "mcp-adapter-execute-ability", map[string]any{
-		"ability_name": "wooagent-products/list",
-		"parameters":   map[string]any{"per_page": 3},
+		"ability_name": *abilityFlag,
+		"parameters":   params,
 	})
 	if err != nil {
 		log.Fatalf("call tool: %v", err)
@@ -54,7 +67,7 @@ func main() {
 	}
 
 	pretty, _ := json.MarshalIndent(json.RawMessage(envelope.Data), "", "  ")
-	fmt.Println("ok tools/call   wooagent-products/list  ↓")
+	fmt.Printf("ok tools/call   %s  ↓\n", *abilityFlag)
 	fmt.Println(string(pretty))
 	os.Exit(0)
 }
