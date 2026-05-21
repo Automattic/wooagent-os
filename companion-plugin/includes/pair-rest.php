@@ -10,10 +10,12 @@
  * call (v0.2 enforcement; v0.1 records the token but Application Password
  * still drives ability invocations).
  *
- * Three routes under /wp-json/wooagent/v1/pair/*:
+ * Four routes under /wp-json/wooagent/v1/*:
  *   POST /pair/request        — daemon registers a pending code (unauth)
  *   GET  /pair/poll?code=...  — daemon polls for approval (unauth: code IS auth)
  *   POST /pair/revoke         — daemon revokes a device (auth: device token)
+ *   GET  /devices/me          — daemon probes that its bearer is still known
+ *                               (DSGWOO-1275 pairing staleness)
  *
  * State:
  *   - Pending pairs: WP transients keyed `wooagent_pair_<code>`, 10 min TTL.
@@ -60,6 +62,16 @@ function wooagent_companion_register_pair_routes(): void {
 			'methods'             => 'POST',
 			'permission_callback' => 'wooagent_companion_pair_revoke_permission',
 			'callback'            => 'wooagent_companion_pair_revoke',
+		)
+	);
+
+	register_rest_route(
+		'wooagent/v1',
+		'/devices/me',
+		array(
+			'methods'             => 'GET',
+			'permission_callback' => 'wooagent_companion_devices_me_permission',
+			'callback'            => 'wooagent_companion_devices_me',
 		)
 	);
 }
@@ -175,25 +187,44 @@ function wooagent_companion_pair_poll( WP_REST_Request $request ) {
  * scoping is post-v0.1 and the test store is single-tenant.
  */
 function wooagent_companion_pair_revoke_permission( WP_REST_Request $request ): bool {
+	return wooagent_companion_find_device_by_bearer( $request ) !== null;
+}
+
+/**
+ * Permission check for /devices/me: same bearer-matches-device-hash gate
+ * as /pair/revoke. We don't fall back to wp-admin auth here — the daemon
+ * is the only caller and it always presents the device token.
+ */
+function wooagent_companion_devices_me_permission( WP_REST_Request $request ): bool {
+	return wooagent_companion_find_device_by_bearer( $request ) !== null;
+}
+
+/**
+ * Resolves a request's Authorization: Bearer header to a registered device
+ * record, or null when no header is present or the token is unknown.
+ * Constant-time compare on token_hash so a timing oracle can't fingerprint
+ * the device list. Shared by /pair/revoke + /devices/me.
+ */
+function wooagent_companion_find_device_by_bearer( WP_REST_Request $request ): ?array {
 	$header = $request->get_header( 'Authorization' );
 	if ( ! is_string( $header ) || stripos( $header, 'Bearer ' ) !== 0 ) {
-		return false;
+		return null;
 	}
-	$token = substr( $header, 7 );
+	$token = trim( substr( $header, 7 ) );
 	if ( $token === '' ) {
-		return false;
+		return null;
 	}
 	$hash    = hash( 'sha256', $token );
 	$devices = get_option( WOOAGENT_DEVICES_OPTION, array() );
 	if ( ! is_array( $devices ) ) {
-		return false;
+		return null;
 	}
 	foreach ( $devices as $d ) {
-		if ( isset( $d['token_hash'] ) && hash_equals( $d['token_hash'], $hash ) ) {
-			return true;
+		if ( is_array( $d ) && isset( $d['token_hash'] ) && hash_equals( (string) $d['token_hash'], $hash ) ) {
+			return $d;
 		}
 	}
-	return false;
+	return null;
 }
 
 /**
@@ -222,6 +253,40 @@ function wooagent_companion_pair_revoke( WP_REST_Request $request ) {
 	);
 	update_option( WOOAGENT_DEVICES_OPTION, $kept );
 	return rest_ensure_response( array( 'revoked' => true ) );
+}
+
+/**
+ * Daemon-side staleness probe. The daemon hits this on every read of a
+ * `paired` store row (throttled to ~30s per row) to confirm its bearer is
+ * still known to wp-admin. A 401 here is the signal that the operator
+ * clicked "Remove" on the device or the wooagent_devices option was
+ * reset; the daemon flips its local row out of `paired` and drops the
+ * keychain entry.
+ *
+ * Returns the minimal device record — id, name, created_at, and the
+ * paired_by_user_id captured at approve time so the daemon can surface
+ * "paired by <user>" if a future UI wants it. The token_hash is never
+ * returned (would leak the equality of two bearers across observers).
+ *
+ * nocache_headers() so Batcache / WP supercache can't serve a stale 200
+ * response after the operator clicks Remove — same fix as /pair/poll.
+ */
+function wooagent_companion_devices_me( WP_REST_Request $request ) {
+	nocache_headers();
+	$device = wooagent_companion_find_device_by_bearer( $request );
+	if ( $device === null ) {
+		// permission_callback would have already rejected, but defensive
+		// so we never accidentally 200 with an empty body.
+		return new WP_Error( 'unknown_device', __( 'unknown device', 'wooagent-companion' ), array( 'status' => 401 ) );
+	}
+	return rest_ensure_response(
+		array(
+			'id'                => $device['id'] ?? '',
+			'name'              => $device['name'] ?? '',
+			'paired_by_user_id' => isset( $device['paired_by_user_id'] ) ? (int) $device['paired_by_user_id'] : 0,
+			'created_at'        => $device['created_at'] ?? '',
+		)
+	);
 }
 
 /**
