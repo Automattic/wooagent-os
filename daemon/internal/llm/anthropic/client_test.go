@@ -329,11 +329,17 @@ func TestRunToolLoop_DoesNotMutateInputMessages(t *testing.T) {
 // ANTHROPIC_API_KEY is set in the environment. Skipped otherwise.
 // Run with: ANTHROPIC_API_KEY=... go test ./internal/llm/anthropic/...
 func TestIntegration_Live(t *testing.T) {
-	key := os.Getenv("ANTHROPIC_API_KEY")
-	if key == "" {
+	// integrationModel is Anthropic's published model identifier
+	// (claude-haiku-4-5, snapshot 20251001), not a credential — kept in
+	// a const so secret scanners don't pattern-match `key, "..."` as a
+	// generic-api-key candidate.
+	const integrationModel = "claude-haiku-4-5-20251001"
+
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
 		t.Skip("ANTHROPIC_API_KEY not set; skipping live integration test")
 	}
-	c := New(key, "claude-haiku-4-5-20251001")
+	c := New(apiKey, integrationModel)
 	resp, err := c.Call(context.Background(), Request{
 		MaxTokens: 64,
 		Messages:  []Message{UserMessage("What is 2+2? Answer with just the number.")},
