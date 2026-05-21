@@ -474,6 +474,10 @@ function wooagent_products_variations_list_execute( array $args ) {
 		}
 		$attributes_label = implode( ' / ', $attribute_values );
 
+		if ( '' === $attributes_label ) {
+			$attributes_label = __( 'Default', 'wooagent-companion' );
+		}
+
 		$variations[] = array(
 			'id'               => (int) $variation->get_id(),
 			'attributes_label' => $attributes_label,
