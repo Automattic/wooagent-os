@@ -1,7 +1,32 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Badge, Stack, Text } from '@wordpress/ui';
 import { Button } from '@wordpress/components';
-import { Icon, check } from '@wordpress/icons';
+
+// CUSTOM: outlined check-circle icon for the DoneBar success affordance.
+// (a) @wordpress/icons exposes a bare `check` glyph but no
+// check-in-circle variant, and the Figma (5TXGXZEejxJ4sRejFyjLCC, node
+// 2-9274 "Icon/ActionBar/Sucess") specifies an outlined circle with the
+// check inside. (b) Inline SVG with `currentColor` so it picks up the
+// success foreground token via .wa-done-check. (c) Documented in the
+// IssueDetail Done-state spec in the Figma file above.
+function CheckCircleIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="m8 12 3 3 5-6" />
+    </svg>
+  );
+}
 
 // Entity discriminator. 'variant' is the prose-rewrite default (Marketing).
 // 'price' is the pricing-persona path. 'message' is the sales-support path
@@ -36,6 +61,14 @@ interface ReviewProps {
   onCancel: () => void;
 }
 
+interface ArchivedProps {
+  state: 'archived';
+  /** RFC3339 timestamp when the proposal was dismissed. Drives the
+   *  "will be deleted on [date]" line — 30 days after dismissedAt. When
+   *  absent, the line falls back to "soon." */
+  dismissedAt?: string;
+}
+
 interface DoneProps {
   state: 'done';
   /** Defaults to 'variant'. */
@@ -54,7 +87,7 @@ interface DoneProps {
   onView: () => void;
 }
 
-type Props = ReviewProps | DoneProps;
+type Props = ReviewProps | DoneProps | ArchivedProps;
 
 // Used only for the non-variant badges (price `$`, message `✉` / `#`). The
 // variant badge below uses the shared `.wa-variant-letter` class so the
@@ -82,101 +115,79 @@ export default function ActionBar(props: Props) {
   if (props.state === 'done') {
     return <DoneBar {...props} />;
   }
+  if (props.state === 'archived') {
+    return <ArchivedBar {...props} />;
+  }
   return <ReviewBar {...props} />;
+}
+
+// Footer for dismissed/rejected proposals. No actions yet — the operator
+// returns to the board via the breadcrumb. The deletion date is calculated
+// client-side from dismissed_at + 30 days; the actual sweep job that
+// honors the promise is DSGWOO-1350.
+function ArchivedBar(props: ArchivedProps) {
+  const deletionDate = (() => {
+    const anchor = props.dismissedAt ? new Date(props.dismissedAt) : null;
+    if (!anchor || Number.isNaN(anchor.getTime())) return null;
+    anchor.setDate(anchor.getDate() + 30);
+    return anchor.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  })();
+  return (
+    <div className="wa-action-bar">
+      <div className="wa-action-bar-row">
+        <div className="wa-action-bar__left">
+          <Stack direction="column" gap="xs">
+            <Text
+              variant="body-sm"
+              style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+            >
+              Dismissed and archived
+            </Text>
+            <Text
+              variant="body-sm"
+              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            >
+              {deletionDate
+                ? `This proposal will be deleted on ${deletionDate} unless restored.`
+                : 'This proposal will be deleted soon unless restored.'}
+            </Text>
+          </Stack>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DoneBar(props: DoneProps) {
   const entity = props.entity ?? 'variant';
-  let headline: ReactNode;
+  let headlineText: string;
   if (entity === 'price') {
-    headline = (
-      <Stack direction="row" gap="sm" align="center" wrap="wrap">
-        <Text
-          variant="body-sm"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          Price change written to WooCommerce
-        </Text>
-        {props.priceSummary && (
-          <Text
-            variant="body-sm"
-            className="wa-mono"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-          >
-            {props.priceSummary}
-          </Text>
-        )}
-        <Text
-          variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-        >
-          {props.scope}
-        </Text>
-      </Stack>
-    );
+    headlineText = 'Price change written to WooCommerce';
   } else if (entity === 'message') {
-    const sent =
+    headlineText =
       props.messageNoteType === 'internal'
         ? 'Internal note added'
         : 'Customer note sent';
-    headline = (
-      <Stack direction="row" gap="sm" align="center" wrap="wrap">
-        <Text
-          variant="body-sm"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          {sent}
-        </Text>
-        {props.messageRecipient && (
-          <Text
-            variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-          >
-            {props.messageRecipient}
-          </Text>
-        )}
-        <Text
-          variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-        >
-          {props.scope}
-        </Text>
-      </Stack>
-    );
   } else {
-    headline = (
-      <Stack direction="row" gap="sm" align="center" wrap="wrap">
-        <Text
-          variant="body-sm"
-          style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
-        >
-          Variant {variantLetterFromId(props.variantId)} written to WooCommerce
-        </Text>
-        <Text
-          variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-        >
-          {props.scope}
-        </Text>
-      </Stack>
-    );
+    headlineText = `Variant ${variantLetterFromId(props.variantId)} written to WooCommerce`;
   }
   return (
     <div className="wa-action-bar">
       <div className="wa-action-bar-row">
         <div className="wa-action-bar__left">
           <span className="wa-done-check" aria-hidden="true">
-            <Icon icon={check} size={20} />
+            <CheckCircleIcon />
           </span>
-          <Stack direction="column" gap="xs">
-            {headline}
-            <Text
-              variant="body-sm"
-              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-            >
-              Just now · snapshot saved · reversible from the Done column
-            </Text>
-          </Stack>
+          <Text
+            variant="body-sm"
+            style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+          >
+            {headlineText}
+          </Text>
         </div>
         <div className="wa-action-bar-actions">
           <Button variant="tertiary" __next40pxDefaultSize onClick={props.onUndo}>

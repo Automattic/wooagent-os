@@ -298,15 +298,20 @@ func IsEnabled(ctx context.Context, st *store.Store, slug string) (bool, error) 
 // fresh draft; the skip only fires when the count reaches this many.
 const OpenProposalSkipThreshold = 2
 
-// CountOpenWork returns how many issues for slug are currently in
-// todo / in_progress / in_review. Done and rejected don't count — those
-// are resolved. Callers compare against OpenProposalSkipThreshold to
-// decide whether to skip seeding (RunAndPersist) or skip a scheduler
-// tick (the Loop's HasOpenWorkFn wiring).
+// CountOpenWork returns how many open units of work for slug are currently
+// in todo / in_progress / in_review. A "unit" is one stand-alone issue OR
+// one batch — a 9-child marketing batch counts as 1, so the operator can
+// still kick off a fresh marketing run while the batch is pending review.
+// Done and rejected don't count — those are resolved. Callers compare
+// against OpenProposalSkipThreshold to decide whether to skip seeding
+// (RunAndPersist) or skip a scheduler tick (the Loop's HasOpenWorkFn
+// wiring). COALESCE(batch_id, id) folds each batch's children to a single
+// bucket while leaving stand-alone issues distinct.
 func CountOpenWork(ctx context.Context, st *store.Store, slug string) (int, error) {
 	var n int
 	err := st.DB.QueryRowContext(ctx,
-		`SELECT count(*) FROM issues WHERE persona = ? AND status IN ('todo','in_progress','in_review')`,
+		`SELECT count(DISTINCT COALESCE(batch_id, id)) FROM issues
+		 WHERE persona = ? AND status IN ('todo','in_progress','in_review')`,
 		slug,
 	).Scan(&n)
 	if err != nil {

@@ -11,12 +11,14 @@ import {
   type BatchApproveChild,
   type BatchDetail,
   type Connection,
+  type DismissReason,
   type PriceSource,
 } from '../api/client';
 import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
+import DismissDialog from '../components/DismissDialog';
 import ProductThumbnail from '../components/ProductThumbnail';
 import ProposalHeader from '../components/ProposalHeader';
 
@@ -52,6 +54,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     kind: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [dismissOpen, setDismissOpen] = useState(false);
 
   const refresh = async () => {
     if (!id) return;
@@ -179,13 +182,28 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     }
   };
 
-  const rejectAll = async () => {
+  // Dismiss-all is gated behind the same DismissDialog single proposals use,
+  // so the operator captures a reason + optional comment. The daemon's
+  // reject-all endpoint forwards the pair into dismiss_reason/dismiss_comment
+  // for every in_review child — see handleRejectBatch.
+  const openDismissAll = () => {
+    setActionMsg(null);
+    setDismissOpen(true);
+  };
+
+  const handleDismissAllConfirm = async ({
+    reason,
+    comment,
+  }: {
+    reason: DismissReason;
+    comment?: string;
+  }) => {
     if (!id) return;
     setBusy('reject-all');
-    setActionMsg(null);
     try {
-      const res = await api.batches.rejectAll(connection, id);
+      const res = await api.batches.rejectAll(connection, id, { reason, comment });
       const okCount = res.results.filter((r) => r.ok).length;
+      setDismissOpen(false);
       setActionMsg({
         kind: 'success',
         text: `Dismissed ${okCount} ${okCount === 1 ? 'child' : 'children'}.`,
@@ -317,7 +335,26 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   // accordion. Captures component state (selectedVariants, expanded, busy,
   // approveRow, rejectRow). Behavior is unchanged from before the pricing
   // dispatch landed.
-  const renderMarketingBody = () => (
+  const renderMarketingBody = () => {
+    // Best-of across all variants of all proposals in the batch — the
+    // header reports the top-scoring candidate, not an average, so an
+    // operator can see the ceiling of what's available to approve.
+    let bestVoice: number | null = null;
+    let bestSeo: number | null = null;
+    for (const { proposal } of issues) {
+      const vs = variantsFromProposal(proposal);
+      if (!vs) continue;
+      for (const v of vs) {
+        if (typeof v.voice === 'number' && (bestVoice === null || v.voice > bestVoice)) {
+          bestVoice = v.voice;
+        }
+        if (typeof v.seo === 'number' && (bestSeo === null || v.seo > bestSeo)) {
+          bestSeo = v.seo;
+        }
+      }
+    }
+
+    return (
     <>
       {/* KPI row */}
       <div className="wa-kpi-row" style={{ marginBottom: 'var(--wpds-dimension-gap-lg)' }}>
@@ -327,15 +364,15 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           hint="3 variants each"
         />
         <Kpi
-          label="Brand voice match"
-          value="96%"
-          score={96}
+          label="Best brand voice match"
+          value={bestVoice !== null ? `${bestVoice}%` : '—'}
+          score={bestVoice ?? undefined}
           hint={isColdDraftBatch ? 'vs. your voice model' : 'vs. your existing copy'}
         />
         <Kpi
-          label="SEO score"
-          value="91"
-          score={91}
+          label="Best SEO score"
+          value={bestSeo !== null ? `${bestSeo}` : '—'}
+          score={bestSeo ?? undefined}
           hint="Product-copy rubric · out of 100"
         />
         <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
@@ -418,7 +455,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                 </Stack>
                 {selectedVariant && typeof selectedVariant.seo === 'number' && (
                   <span className="wa-score-label">
-                    Best SEO{' '}
+                    SEO{' '}
                     <span className={`wa-score-label__value ${seoColorClass(selectedVariant.seo)}`}>
                       {selectedVariant.seo}
                     </span>
@@ -732,7 +769,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         })}
       </Stack>
     </>
-  );
+    );
+  };
 
   return (
     <div className="wa-detail-shell">
@@ -747,7 +785,9 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         }
         badges={
           pendingCount > 0 ? (
-            <Badge intent="none">Needs review</Badge>
+            <Badge intent="medium">Needs review</Badge>
+          ) : batch.approved === 0 && batch.rejected > 0 ? (
+            <Badge intent="none">Archived</Badge>
           ) : (
             <Badge intent="stable">Done</Badge>
           )
@@ -813,7 +853,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               __next40pxDefaultSize
               variant="tertiary"
               isDestructive
-              onClick={rejectAll}
+              onClick={openDismissAll}
               disabled={pendingCount === 0 || busy !== null}
             >
               {busy === 'reject-all' ? 'Dismissing…' : 'Dismiss all'}
@@ -832,6 +872,26 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           </div>
         </div>
       </div>
+
+      <DismissDialog
+        open={dismissOpen}
+        onOpenChange={setDismissOpen}
+        persona={batch.persona ?? undefined}
+        variantCount={pendingCount}
+        titleOverride={
+          pendingCount > 1
+            ? `Dismiss all ${pendingCount} products?`
+            : 'Dismiss this product?'
+        }
+        bodyOverride={
+          pendingCount > 1
+            ? `The ${personaLabel.toLowerCase()} won't re-propose copy for these products unless you ask. They move to your archive — not deleted yet.`
+            : `The ${personaLabel.toLowerCase()} won't re-propose copy for this product unless you ask. It moves to your archive — not deleted yet.`
+        }
+        confirmLabelOverride={pendingCount > 1 ? 'Dismiss all' : 'Dismiss'}
+        onConfirm={handleDismissAllConfirm}
+        busy={busy === 'reject-all'}
+      />
     </div>
   );
 }
