@@ -359,10 +359,10 @@ func listProductSummaries(ctx context.Context, c *mcp.Client, orderby, order str
 	return listOut.Products, nil
 }
 
-// pickFirstProduct returns the first simple, priced, published product
-// whose ID is not in skip. Surfaces slow movers first (orderby=total_sales
-// asc) so Pricing benchmarks the catalog's revenue-soft tail before its
-// best sellers — that's where a re-priced run typically moves the needle.
+// pickFirstProduct returns the first published product whose ID is not in
+// skip. Surfaces slow movers first (orderby=total_sales asc) so Pricing
+// benchmarks the catalog's revenue-soft tail before its best sellers —
+// that's where a re-priced run typically moves the needle.
 func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{}) (int, error) {
 	summaries, err := listProductSummaries(ctx, c, "total_sales", "asc")
 	if err != nil {
@@ -371,16 +371,27 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{})
 	if len(summaries) == 0 {
 		return 0, fmt.Errorf("no products in store")
 	}
-	skippedVariable, skippedNoPrice, skippedCooldown := 0, 0, 0
+	id, ferr := firstEligible(summaries, skip)
+	if ferr == nil {
+		return id, nil
+	}
+	return 0, fmt.Errorf("no priceable products in first %d (%s); "+
+		"approved proposals cool down for 7d, dismissed for 30d; "+
+		"set a regular_price on a simple product in wp-admin or pass PERSONA_PRODUCT_ID=<id>",
+		len(summaries), ferr.Error())
+}
+
+// firstEligible scans summaries for the first published product whose ID
+// is not in skip. Variable parents pass even though their RegularPrice is
+// empty — variations carry the prices. Simple/other types must have a
+// non-empty RegularPrice to be considered priced.
+func firstEligible(summaries []productSummary, skip map[int]struct{}) (int, error) {
+	skippedNoPrice, skippedCooldown := 0, 0
 	for _, p := range summaries {
 		if p.Status != "publish" && p.Status != "" {
 			continue
 		}
-		if p.Type == "variable" {
-			skippedVariable++
-			continue
-		}
-		if strings.TrimSpace(p.RegularPrice) == "" {
+		if p.Type != "variable" && strings.TrimSpace(p.RegularPrice) == "" {
 			skippedNoPrice++
 			continue
 		}
@@ -390,21 +401,15 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{})
 		}
 		return p.ID, nil
 	}
-	return 0, fmt.Errorf(
-		"no priceable simple products in first %d (skipped %d variable, %d without regular_price, %d in cooldown); "+
-			"approved proposals cool down for 7d, dismissed for 30d; "+
-			"set a regular_price on a simple product in wp-admin or pass PERSONA_PRODUCT_ID=<id>",
-		len(summaries), skippedVariable, skippedNoPrice, skippedCooldown,
-	)
+	return 0, fmt.Errorf("skipped %d without price, %d in cooldown", skippedNoPrice, skippedCooldown)
 }
 
 // listEligibleProducts returns the catalog products that are eligible for
-// pricing (simple, published, with a regular_price) and are not in the
-// cooldown skip set. Single cheap MCP call — no LLM, no web_search.
-// Decodes directly into the full `product` struct so Categories ride
-// along for bucket grouping (the WooCommerce REST list response includes
-// categories per product). v0.1 doesn't paginate; large catalogs (>~100
-// products) may need a follow-up.
+// pricing and are not in the cooldown skip set. Single cheap MCP call —
+// no LLM, no web_search. Decodes directly into the full `product` struct
+// so Categories ride along for bucket grouping (the WooCommerce REST list
+// response includes categories per product). v0.1 doesn't paginate; large
+// catalogs (>~100 products) may need a follow-up.
 func listEligibleProducts(ctx context.Context, c *mcp.Client, skip map[int]struct{}) ([]product, error) {
 	var listOut struct {
 		Products []product `json:"products"`
@@ -414,15 +419,20 @@ func listEligibleProducts(ctx context.Context, c *mcp.Client, skip map[int]struc
 		map[string]any{"per_page": 100}, &listOut); err != nil {
 		return nil, err
 	}
-	out := make([]product, 0, len(listOut.Products))
-	for _, p := range listOut.Products {
+	return filterEligible(listOut.Products, skip), nil
+}
+
+// filterEligible returns products that are published, not in the cooldown
+// skip set, and either (a) simple-type with a non-empty regular_price, or
+// (b) variable-type (variable parents have no own price; the bulk-update
+// path will write to their variations).
+func filterEligible(products []product, skip map[int]struct{}) []product {
+	out := make([]product, 0, len(products))
+	for _, p := range products {
 		if p.Status != "publish" && p.Status != "" {
 			continue
 		}
-		if p.Type == "variable" {
-			continue
-		}
-		if strings.TrimSpace(p.RegularPrice) == "" {
+		if p.Type != "variable" && strings.TrimSpace(p.RegularPrice) == "" {
 			continue
 		}
 		if _, blocked := skip[p.ID]; blocked {
@@ -430,7 +440,7 @@ func listEligibleProducts(ctx context.Context, c *mcp.Client, skip map[int]struc
 		}
 		out = append(out, p)
 	}
-	return out, nil
+	return out
 }
 
 type product struct {
