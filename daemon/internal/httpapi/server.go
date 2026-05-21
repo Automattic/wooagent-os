@@ -155,6 +155,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Get("/v1/runs", s.handleListRuns)
 		r.Get("/v1/runs/{id}", s.handleGetRun)
 		r.Post("/v1/runs", s.handleCreateRun)
+		r.Post("/v1/runs/{id}/cancel", s.handleCancelRun)
 		r.Post("/v1/ask", s.handleAsk)
 		r.Get("/v1/ask/events", s.handleAskEvents)
 		r.Get("/v1/ask/suggestions", s.handleAskSuggestions)
