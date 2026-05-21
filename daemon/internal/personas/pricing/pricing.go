@@ -219,15 +219,15 @@ func draftForProduct(
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
-	currentPrice, err := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
-	if err != nil || currentPrice <= 0 {
+	currentPrice, targetField, ok := pickAnchorPrice(p)
+	if !ok {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: fmt.Sprintf("product %d (%q) type=%q has no usable regular_price (raw=%q)", p.ID, p.Name, p.Type, p.RegularPrice),
+			SkipReason: fmt.Sprintf("product %d (%q) type=%q has no usable regular_price (raw regular=%q sale=%q)", p.ID, p.Name, p.Type, p.RegularPrice, p.SalePrice),
 		}, nil
 	}
 
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice)
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice, targetField)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
@@ -681,7 +681,11 @@ const userPromptTemplate = `Product to analyze:
 - sku: %s
 - category: %s
 - current regular_price: %.2f %s
+- current sale_price:    %s
+- anchor (the price customers pay today): %s = %.2f %s
 - description: %s
+
+Anchor your benchmark and the previous_price field of your output to the **anchor** value above — that is the price customers see right now. When the anchor is sale_price, your proposal updates the active sale; when the anchor is regular_price, the product is not on sale.
 
 Search the preferred retailers from the skill — start with site:-scoped queries against J.Crew, Madewell, Aritzia, Everlane, Quince, COS for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods. Pick the 4–6 retailers most likely to carry this product and run site:<retailer>.com <noun phrase> queries. Match on category, material, and tier — not just keywords.
 
@@ -721,13 +725,24 @@ func draftProposal(
 	p product,
 	currency string,
 	currentPrice float64,
+	anchorField string,
 ) (proposalOut, string, error) {
 	system := skillSystem + "\n\nWhen you respond, output ONLY a JSON object that matches the schema in skills/pricing-benchmark/v1.yaml output. No prose outside the JSON. No markdown code fences."
+
+	salePriceDisplay := "—"
+	if s := strings.TrimSpace(p.SalePrice); s != "" {
+		if sv, err := strconv.ParseFloat(s, 64); err == nil && sv > 0 {
+			salePriceDisplay = fmt.Sprintf("%.2f %s", sv, currency)
+		}
+	}
+	regularPrice, _ := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
 
 	user := fmt.Sprintf(
 		userPromptTemplate,
 		p.ID, p.Name, p.SKU, categoryString(p),
-		currentPrice, currency,
+		regularPrice, currency,
+		salePriceDisplay,
+		anchorField, currentPrice, currency,
 		strings.TrimSpace(p.Description),
 		currency,
 	)
