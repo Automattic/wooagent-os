@@ -606,25 +606,93 @@ a {
 /* ---------- Ask Agent drawer — chat surface (DSGWOO-1348) ---------- */
 
 /* Wrapper for the agent picker strip at the top of the drawer body.
-   Static in B1 — replaced by an interactive SelectControl in B2. */
+   Hosts the WPDS Dropdown that switches between live agents. */
 .wa-chat-picker {
   display: flex;
   align-items: center;
-  gap: var(--wpds-dimension-gap-sm);
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
   border-bottom: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   background: var(--wpds-color-bg-surface-neutral-weak);
 }
-.wa-chat-picker__label {
-  font-size: var(--wpds-typography-font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--wpds-color-fg-content-neutral-weak);
+.wa-chat-picker__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-sm);
+  background: transparent;
+  border: var(--wpds-border-width-sm) solid transparent;
+  border-radius: var(--wpds-border-radius-sm);
+  cursor: pointer;
+  color: var(--wpds-color-fg-content-neutral);
+  font-family: var(--wpds-typography-font-family-body);
+}
+.wa-chat-picker__toggle:hover {
+  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+}
+.wa-chat-picker__toggle:focus-visible {
+  outline: 2px solid var(--wpds-color-stroke-interactive-focus);
+  outline-offset: 2px;
 }
 .wa-chat-picker__name {
   font-size: var(--wpds-typography-font-size-sm);
   font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-chat-picker__menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: var(--wpds-dimension-padding-xs);
+}
+.wa-chat-picker__option {
+  display: flex;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm);
+  background: transparent;
+  border: 0;
+  border-radius: var(--wpds-border-radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--wpds-typography-font-family-body);
+  font-size: var(--wpds-typography-font-size-sm);
   color: var(--wpds-color-fg-content-neutral);
+}
+.wa-chat-picker__option:hover:not(:disabled) {
+  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+}
+.wa-chat-picker__option.is-active {
+  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+  font-weight: var(--wpds-typography-font-weight-medium);
+}
+.wa-chat-picker__option.is-disabled,
+.wa-chat-picker__option:disabled {
+  cursor: not-allowed;
+  color: var(--wpds-color-fg-content-neutral-weak);
+}
+.wa-chat-picker__option.is-disabled .wa-persona-avatar,
+.wa-chat-picker__option:disabled .wa-persona-avatar {
+  opacity: 0.45;
+}
+.wa-chat-picker__option-avatar {
+  position: relative;
+  display: inline-flex;
+}
+.wa-chat-picker__unread-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wpds-color-bg-interactive-brand-strong);
+  border: 2px solid var(--wpds-color-bg-surface-neutral-weak);
+}
+.wa-chat-picker__option-label {
+  flex: 1 1 auto;
+}
+.wa-chat-picker__option-hint {
+  font-size: var(--wpds-typography-font-size-xs);
+  color: var(--wpds-color-fg-content-neutral-weak);
 }
 
 /* Scrollable thread column. Sits between the picker and the input. */
