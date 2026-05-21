@@ -752,7 +752,6 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 	if err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_proposal_target", Message: err.Error()}
 	}
-	_ = applied // Task 6 wires this into the success-path UPDATE
 
 	// Race-hardening: claim the issue by flipping it to in_progress before
 	// invoking PEP. RowsAffected==1 means we won; ==0 means another approver
@@ -827,8 +826,13 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		return approveResult{}, &approveError{HTTPStatus: http.StatusBadGateway, Code: "ability_failed", Message: envelope.Error}
 	}
 
+	var appliedArg any = nil
+	if applied != "" {
+		appliedArg = applied
+	}
 	if _, err := s.store.DB.ExecContext(ctx,
-		`UPDATE issues SET status = 'done', updated_at = ? WHERE id = ?`, now, issueID,
+		`UPDATE issues SET status = 'done', applied_value = ?, updated_at = ? WHERE id = ?`,
+		appliedArg, now, issueID,
 	); err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
 	}
