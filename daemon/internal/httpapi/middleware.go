@@ -24,6 +24,13 @@ func (s *Server) bearerAuth(next http.Handler) http.Handler {
 		if strings.HasPrefix(header, "Bearer ") {
 			token = strings.TrimPrefix(header, "Bearer ")
 		}
+		// EventSource fallback (DSGWOO-1356): the browser EventSource
+		// API can't set custom headers, so SSE routes accept the
+		// session token via ?token= query as well. Header still wins
+		// when both are present.
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
 		if token == "" {
 			writeError(w, http.StatusUnauthorized, "auth_missing", "Authorization: Bearer <token> required")
 			return
