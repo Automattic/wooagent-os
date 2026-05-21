@@ -21,10 +21,11 @@ const (
 type Trigger string
 
 const (
-	TriggerTick      Trigger = "tick"
-	TriggerManual    Trigger = "manual"
-	TriggerBootstrap Trigger = "bootstrap"
-	TriggerRetry     Trigger = "retry"
+	TriggerTick          Trigger = "tick"
+	TriggerManual        Trigger = "manual"
+	TriggerBootstrap     Trigger = "bootstrap"
+	TriggerRetry         Trigger = "retry"
+	TriggerOperatorAsked Trigger = "operator-asked"
 )
 
 // FailureClass narrows how a failure should be handled. Transient → retry
