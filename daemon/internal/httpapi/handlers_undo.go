@@ -280,7 +280,7 @@ func fetchCurrentFieldValue(
 		Persona: persona,
 		Ability: "wooagent-products/get",
 		Args:    map[string]any{"id": productID},
-		Intent:  pep.IntentApply,
+		Intent:  pep.IntentRead,
 		Source:  pep.SourceOperator,
 		IssueID: issueID,
 		BatchID: batchID,
