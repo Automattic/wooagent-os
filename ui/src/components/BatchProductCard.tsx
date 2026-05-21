@@ -25,6 +25,12 @@ export interface BatchProduct {
 interface Props {
   product: BatchProduct;
   defaultExpanded?: boolean;
+  /** When true, the expanded state suppresses the per-card rationale + sources
+   *  blocks. Used by variable-product batches (intent='pricing_variable')
+   *  where all children share the same rationale/sources and the parent renders
+   *  them once below the row list — matches the single-product PriceIssueView
+   *  pattern. Defaults to false for category batches. */
+  hideRationaleAndSources?: boolean;
 }
 
 // CUSTOM: expandable product card for the pricing batch review. (a) WPDS
@@ -32,7 +38,11 @@ interface Props {
 // SectionHeader + a chevron toggle button. (b) The collapsed state is a
 // single horizontal row so 10+ rows can be skimmed without scroll.
 // (c) Documented in DESIGN.md Component inventory.
-export default function BatchProductCard({ product, defaultExpanded = false }: Props) {
+export default function BatchProductCard({
+  product,
+  defaultExpanded = false,
+  hideRationaleAndSources = false,
+}: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const toggle = () => setExpanded((v) => !v);
 
@@ -130,7 +140,7 @@ export default function BatchProductCard({ product, defaultExpanded = false }: P
         </Stack>
       </button>
 
-      {expanded && (
+      {expanded && !hideRationaleAndSources && (
         <Card.Content>
           <Stack direction="column" gap="md">
             <Text
