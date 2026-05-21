@@ -734,6 +734,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           variantId={approvedVariant ?? activeVariant?.id ?? 'A'}
           scope={scope}
           undoneAt={issue.undone_at ?? undefined}
+          busy={busy === 'undo' ? 'undo' : null}
           onUndo={handleUndo}
           onView={() => nav('/')}
         />
@@ -1095,6 +1096,7 @@ function PriceIssueView(props: PriceViewProps) {
           }
           scope={scope}
           undoneAt={props.issue.undone_at ?? undefined}
+          busy={props.busy === 'undo' ? 'undo' : null}
           onUndo={props.onUndo}
           onView={props.onView}
         />

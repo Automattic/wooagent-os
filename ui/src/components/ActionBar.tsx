@@ -113,6 +113,9 @@ interface DoneProps {
    *  DoneBar renders the undone state (neutral glyph, "reverted"
    *  headline, no Undo button — only View). */
   undoneAt?: string;
+  /** When 'undo', the Undo button is disabled to prevent double-click
+   *  firing two POSTs in flight. */
+  busy?: 'undo' | null;
   onUndo: () => void;
   onView: () => void;
 }
@@ -240,8 +243,13 @@ function DoneBar(props: DoneProps) {
         </div>
         <div className="wa-action-bar-actions">
           {!isUndone && !isMessage && (
-            <Button variant="tertiary" __next40pxDefaultSize onClick={props.onUndo}>
-              Undo
+            <Button
+              variant="tertiary"
+              __next40pxDefaultSize
+              onClick={props.onUndo}
+              disabled={props.busy === 'undo'}
+            >
+              {props.busy === 'undo' ? 'Undoing…' : 'Undo'}
             </Button>
           )}
           <Button variant="primary" __next40pxDefaultSize onClick={props.onView}>
