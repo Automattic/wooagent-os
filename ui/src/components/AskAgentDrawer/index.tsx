@@ -5,7 +5,6 @@ import { Text } from '@wordpress/ui';
 import ChatThread from './ChatThread';
 import MessageInput from './MessageInput';
 import Picker from './Picker';
-import { suggestionsForAgentAndPage } from './suggestions';
 import {
   api,
   type AskAgent,
@@ -14,6 +13,7 @@ import {
 } from '../../api/client';
 import { useAskAgentContextGetter } from '../../lib/askAgent';
 import { useAskAgentThinking } from '../../lib/useAskAgentThinking';
+import { useAskAgentSuggestions } from '../../lib/useAskAgentSuggestions';
 
 interface Props {
   isOpen: boolean;
@@ -149,11 +149,11 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
   };
 
   // Page label + active agent drive which suggestion set we surface on
-  // an empty thread. Reads the getter so suggestions reflect the page
-  // the operator is currently looking at (not whatever page was active
-  // when the drawer last rendered).
+  // an empty thread. The hook fetches from the daemon's queue-aware
+  // endpoint (60s TTL) and falls through to the static UI map on
+  // failure or for specialists.
   const pageLabel = isOpen ? getPageContext().page : '';
-  const suggestions = suggestionsForAgentAndPage(activeAgent, pageLabel);
+  const suggestions = useAskAgentSuggestions(connection, activeAgent, pageLabel);
 
   return (
     <>
