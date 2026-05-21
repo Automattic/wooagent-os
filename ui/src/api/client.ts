@@ -681,7 +681,7 @@ export interface Ability {
  *  selectable via the picker). Inventory / Accounting / Reporting are
  *  intentionally absent — they appear disabled in the picker, never as
  *  a valid `agent` value on the wire. */
-export type AskAgent = 'chief_of_staff' | 'marketing' | 'pricing' | 'sales_support';
+export type AskAgent = 'chief_of_staff' | 'marketing' | 'pricing' | 'sales-support';
 
 /** Structured reference returned by the daemon. The UI renders these
  *  as clickable chips below the assistant message — NOT by parsing
