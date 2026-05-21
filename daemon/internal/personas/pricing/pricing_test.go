@@ -317,3 +317,40 @@ func TestProductJSON_ImageFields(t *testing.T) {
 		t.Errorf("ImageAlt = %q", p.ImageAlt)
 	}
 }
+
+func TestPickAnchorPrice_PrefersSaleWhenPresent(t *testing.T) {
+	cases := []struct {
+		name      string
+		regular   string
+		sale      string
+		wantValue float64
+		wantField string
+		wantOK    bool
+	}{
+		{"only regular", "39.00", "", 39.00, "regular_price", true},
+		{"sale active", "39.00", "29.99", 29.99, "sale_price", true},
+		{"sale empty string", "39.00", "  ", 39.00, "regular_price", true},
+		{"sale zero", "39.00", "0.00", 39.00, "regular_price", true},
+		{"sale negative", "39.00", "-1.00", 39.00, "regular_price", true},
+		{"no regular, no sale", "", "", 0, "", false},
+		{"no regular but sale set — skip", "", "29.99", 0, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := product{RegularPrice: tc.regular, SalePrice: tc.sale}
+			value, field, ok := pickAnchorPrice(p)
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v, want %v", ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if value != tc.wantValue {
+				t.Errorf("value=%v, want %v", value, tc.wantValue)
+			}
+			if field != tc.wantField {
+				t.Errorf("field=%q, want %q", field, tc.wantField)
+			}
+		})
+	}
+}

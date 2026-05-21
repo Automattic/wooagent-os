@@ -179,6 +179,30 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 	)
 }
 
+// pickAnchorPrice chooses which price field the Pricing benchmark anchors
+// to. Sale price wins when set and parseable to a positive decimal —
+// that's what the customer pays right now, so it's the right reference
+// for "what should this product cost." Regular price is the fallback.
+// Returns (value, field, true) on success; (0, "", false) when neither
+// regular nor sale yields a usable positive decimal — in that case the
+// caller must skip the product.
+//
+// Note: a product with sale_price set but no regular_price is malformed
+// (Woo's UI doesn't let you do this); we treat it as "skip" rather than
+// silently anchoring to sale_price, because the dispatcher will need
+// regular_price downstream for back-compat reasons.
+func pickAnchorPrice(p product) (float64, string, bool) {
+	regular, _ := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
+	if regular <= 0 {
+		return 0, "", false
+	}
+	sale, _ := strconv.ParseFloat(strings.TrimSpace(p.SalePrice), 64)
+	if sale > 0 {
+		return sale, "sale_price", true
+	}
+	return regular, "regular_price", true
+}
+
 // draftForProduct does the per-product Pricing work: fetch + parse the
 // current price, call the LLM-with-web_search skill, validate the
 // proposal, assemble Drafted. Returns Drafted{Skipped:true} for any
