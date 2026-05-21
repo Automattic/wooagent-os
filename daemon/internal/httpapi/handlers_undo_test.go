@@ -365,6 +365,64 @@ func TestUndoIssue_AlreadyUndone(t *testing.T) {
 	}
 }
 
+func TestUndoIssue_DescriptionRewrite_HappyPath(t *testing.T) {
+	ts, st, mock := newUndoRig(t)
+
+	// Seed marketing agent (issues.persona FK).
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO agents(persona, name, enabled, created_at, updated_at) VALUES('marketing','Marketing',1,?,?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed marketing agent: %v", err)
+	}
+
+	id := approveAndGetID(t, ts, map[string]any{
+		"title":   "rewrite",
+		"persona": "marketing",
+		"status":  "in_review",
+		"proposal": map[string]any{
+			"type":    "product_description_rewrite",
+			"content": "Handcrafted from 100% merino wool, made to last.",
+			"target": map[string]any{
+				"product_id": 821,
+				"previous":   "Old description that needs rewriting.",
+			},
+		},
+	})
+
+	// Staleness check expects the description we wrote.
+	mock.getResponse = `{"success":true,"data":{"id":821,"description":"Handcrafted from 100% merino wool, made to last."}}`
+
+	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
+	if undoRes.StatusCode != http.StatusOK {
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(undoRes.Body)
+		undoRes.Body.Close()
+		t.Fatalf("undo: status=%d body=%s", undoRes.StatusCode, buf.String())
+	}
+	undoRes.Body.Close()
+
+	last := mock.calls[len(mock.calls)-1]
+	if last.params["ability_name"] != "wooagent-products/update" {
+		t.Errorf("final MCP call should be update; got %q", last.params["ability_name"])
+	}
+	inner, _ := last.params["parameters"].(map[string]any)
+	if inner["description"] != "Old description that needs rewriting." {
+		t.Errorf("undo MCP description = %v, want \"Old description that needs rewriting.\"", inner["description"])
+	}
+
+	var undoneAt sql.NullString
+	if err := st.DB.QueryRow(
+		`SELECT undone_at FROM issues WHERE id = ?`, id,
+	).Scan(&undoneAt); err != nil {
+		t.Fatalf("read undo state: %v", err)
+	}
+	if !undoneAt.Valid {
+		t.Errorf("undone_at should be populated")
+	}
+}
+
 func TestGetIssue_ExposesUndoneAt(t *testing.T) {
 	ts, _, mock := newUndoRig(t)
 
