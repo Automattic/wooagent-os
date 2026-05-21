@@ -68,7 +68,7 @@ const PERSONA_META: Record<string, PersonaMeta> = {
       'You are the Reporting agent. Generate weekly and monthly digests covering revenue, conversion, and operational anomalies. Investigate ad-hoc questions on request.',
   },
   'sales-support': {
-    mandate: 'Drafts replies to pre-sale and order inquiries.',
+    mandate: 'Drafts warm customer notes on recent orders.',
     systemPrompt:
       'You are the Sales Support agent. Draft customer replies, handle refund triage, and escalate edge cases. Never reply directly without human approval.',
   },
