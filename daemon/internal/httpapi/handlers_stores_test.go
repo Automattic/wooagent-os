@@ -30,10 +30,12 @@ type fakePairing struct {
 	PollResult pairing.PollResult
 	PollErr    error
 	RevokeErr  error
+	VerifyErr  error
 
 	RequestCalls []fakePairingCall
 	PollCalls    []fakePairingCall
 	RevokeCalls  []fakePairingCall
+	VerifyCalls  []fakePairingCall
 }
 
 type fakePairingCall struct {
@@ -62,6 +64,13 @@ func (f *fakePairing) Revoke(_ context.Context, storeURL, deviceToken string) er
 	defer f.mu.Unlock()
 	f.RevokeCalls = append(f.RevokeCalls, fakePairingCall{StoreURL: storeURL, DeviceToken: deviceToken})
 	return f.RevokeErr
+}
+
+func (f *fakePairing) VerifyDevice(_ context.Context, storeURL, deviceToken string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.VerifyCalls = append(f.VerifyCalls, fakePairingCall{StoreURL: storeURL, DeviceToken: deviceToken})
+	return f.VerifyErr
 }
 
 // memSecrets is a thin wrapper around the zalando/go-keyring mock backend.
@@ -549,4 +558,178 @@ func backdateExpiry(ts *httptest.Server, id string) error {
 func setTokenRef(ts *httptest.Server, id, ref string) error {
 	_, err := rigs.servers[ts.URL].store.DB.Exec(`UPDATE stores SET token_ref=? WHERE id=?`, ref, id)
 	return err
+}
+
+func clearLastVerifiedAt(ts *httptest.Server, id string) error {
+	_, err := rigs.servers[ts.URL].store.DB.Exec(
+		`UPDATE stores SET last_verified_at=NULL WHERE id=?`, id,
+	)
+	return err
+}
+
+// backdateLastVerifiedAt moves the row's last_verified_at outside the
+// verifyThrottle window so the next read fires a fresh probe — without
+// the test needing to time.Sleep.
+func backdateLastVerifiedAt(ts *httptest.Server, id string) error {
+	past := time.Now().UTC().Add(-2 * verifyThrottle).Format(time.RFC3339)
+	_, err := rigs.servers[ts.URL].store.DB.Exec(
+		`UPDATE stores SET last_verified_at=? WHERE id=?`, past, id,
+	)
+	return err
+}
+
+// ---------- staleness probe (DSGWOO-1275) ----------
+
+// drivePairedFixture is the shared setup for verify-probe tests:
+// POST → first GET (poll-approved transitions to 'paired' + writes the
+// keychain entry) → clear last_verified_at so the next GET runs a fresh
+// probe. Returns the row's id.
+func drivePairedFixture(t *testing.T, ts *httptest.Server, pair *fakePairing) string {
+	t.Helper()
+	pair.PollResult = pairing.PollResult{
+		Status:      pairing.StatusApproved,
+		DeviceID:    "dev_abc",
+		DeviceName:  "test-device",
+		DeviceToken: "secret-token",
+	}
+	created := decode[Store](t, postStore(t, ts, "https://mystore.com"))
+	res, err := http.Get(ts.URL + "/v1/stores/" + created.ID)
+	if err != nil {
+		t.Fatalf("get to drive paired: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "paired" {
+		t.Fatalf("fixture did not reach paired: status=%q", got.Status)
+	}
+	if err := clearLastVerifiedAt(ts, created.ID); err != nil {
+		t.Fatalf("clear last_verified_at: %v", err)
+	}
+	pair.VerifyCalls = nil // first GET didn't probe; reset for assertions
+	return created.ID
+}
+
+// On a paired row, the next GET fires VerifyDevice. A nil result keeps
+// the row paired and bumps last_verified_at — the throttle reads off it
+// for subsequent reads.
+func TestGetStore_VerifyKeepsPaired(t *testing.T) {
+	pair := &fakePairing{}
+	_, ts := newStoresTestRig(t, pair)
+	id := drivePairedFixture(t, ts, pair)
+
+	pair.VerifyErr = nil
+	res, err := http.Get(ts.URL + "/v1/stores/" + id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "paired" {
+		t.Errorf("verify-nil transitioned: status=%q", got.Status)
+	}
+	if len(pair.VerifyCalls) != 1 {
+		t.Errorf("VerifyCalls=%d, want 1", len(pair.VerifyCalls))
+	}
+	if pair.VerifyCalls[0].DeviceToken != "secret-token" {
+		t.Errorf("Verify bearer=%q, want secret-token", pair.VerifyCalls[0].DeviceToken)
+	}
+}
+
+// 401 from /devices/me means the operator removed the device (or the
+// devices option was reset) — the row flips to 'unpaired' and the
+// keychain entry is wiped so a future re-pair starts fresh.
+func TestGetStore_VerifyRevokedTransitionsToUnpaired(t *testing.T) {
+	pair := &fakePairing{}
+	_, ts := newStoresTestRig(t, pair)
+	id := drivePairedFixture(t, ts, pair)
+
+	pair.VerifyErr = pairing.ErrTokenRevoked
+	res, err := http.Get(ts.URL + "/v1/stores/" + id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "unpaired" {
+		t.Errorf("status=%q, want unpaired", got.Status)
+	}
+	if _, err := keyring.Get("WooAgent OS", "wooagent.stores."+id); !errors.Is(err, keyring.ErrNotFound) {
+		t.Errorf("keychain entry not wiped: %v", err)
+	}
+}
+
+// Throttle: within verifyThrottle, repeat reads skip the HTTP probe.
+// Backdating last_verified_at past the window reopens it.
+func TestGetStore_VerifyThrottled(t *testing.T) {
+	pair := &fakePairing{}
+	_, ts := newStoresTestRig(t, pair)
+	id := drivePairedFixture(t, ts, pair)
+
+	// First post-fixture GET probes (last_verified_at cleared).
+	http.Get(ts.URL + "/v1/stores/" + id)
+	if len(pair.VerifyCalls) != 1 {
+		t.Fatalf("first probe count=%d, want 1", len(pair.VerifyCalls))
+	}
+
+	// Second GET inside throttle window → no extra call.
+	http.Get(ts.URL + "/v1/stores/" + id)
+	if len(pair.VerifyCalls) != 1 {
+		t.Errorf("throttled GET fired probe: count=%d, want still 1", len(pair.VerifyCalls))
+	}
+
+	// Backdate, third GET fires again.
+	if err := backdateLastVerifiedAt(ts, id); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+	http.Get(ts.URL + "/v1/stores/" + id)
+	if len(pair.VerifyCalls) != 2 {
+		t.Errorf("post-backdate probe count=%d, want 2", len(pair.VerifyCalls))
+	}
+}
+
+// PluginNotInstalled (404 from /devices/me — typically a downgraded
+// plugin install post-pairing) is transient. The row stays 'paired';
+// the next probe outside the throttle window retries.
+func TestGetStore_VerifyPluginNotInstalledTransient(t *testing.T) {
+	pair := &fakePairing{}
+	_, ts := newStoresTestRig(t, pair)
+	id := drivePairedFixture(t, ts, pair)
+
+	pair.VerifyErr = pairing.PluginNotInstalled
+	res, err := http.Get(ts.URL + "/v1/stores/" + id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got := decode[Store](t, res)
+	if got.Status != "paired" {
+		t.Errorf("plugin-not-installed transitioned: status=%q", got.Status)
+	}
+	// Keychain entry must survive too — the bearer might still be valid.
+	if _, err := keyring.Get("WooAgent OS", "wooagent.stores."+id); err != nil {
+		t.Errorf("keychain entry wiped on transient: %v", err)
+	}
+}
+
+// GET /v1/stores (LIST) also runs verifyAllPaired, so the App.tsx gate's
+// list-based probe catches revoked devices on the very next page load —
+// not just on the GET-by-id path used by Step2Store.
+func TestListStores_VerifiesPaired(t *testing.T) {
+	pair := &fakePairing{}
+	_, ts := newStoresTestRig(t, pair)
+	id := drivePairedFixture(t, ts, pair)
+
+	pair.VerifyErr = pairing.ErrTokenRevoked
+	res, err := http.Get(ts.URL + "/v1/stores")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	got := decode[struct {
+		Stores []Store `json:"stores"`
+	}](t, res)
+	if len(got.Stores) != 1 {
+		t.Fatalf("len(stores)=%d, want 1", len(got.Stores))
+	}
+	if got.Stores[0].ID != id || got.Stores[0].Status != "unpaired" {
+		t.Errorf("LIST row=%+v, want id=%s status=unpaired", got.Stores[0], id)
+	}
+	if len(pair.VerifyCalls) != 1 {
+		t.Errorf("VerifyCalls=%d, want 1", len(pair.VerifyCalls))
+	}
 }
