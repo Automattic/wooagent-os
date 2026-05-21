@@ -45,6 +45,12 @@ type AskConfig struct {
 	// Agents enumerates the live chat-mode agents (CoS at minimum;
 	// Marketing / Pricing / Sales Support join under A2).
 	Agents map[ask.AgentSlug]AskAgent
+	// Events is the per-thread pub-sub for mid-flight progress events
+	// (DSGWOO-1356). The /v1/ask handler publishes thinking events
+	// via LoopOpts.OnToolStart; the SSE subscriber on
+	// GET /v1/ask/events?thread_id=<id> reads them. When nil, the
+	// handler runs uninstrumented — fine for tests, no SSE endpoint.
+	Events *ask.Broker
 	// GetStoreName returns the connected store's name (or empty). The
 	// handler invokes it on every request so multi-store futures are
 	// easy. May be nil — the prompt falls back to "the store".
@@ -122,6 +128,29 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 	handlers := anthropic.Handlers(agentCfg.Tools...)
 
+	loopOpts := anthropic.LoopOpts{MaxIterations: s.askCfg.MaxIterations}
+	if s.askCfg.Events != nil && req.ThreadID != "" {
+		// Mid-flight progress (DSGWOO-1356). Emit a thinking event the
+		// first moment a slow tool fires so the UI can render the
+		// transient block well before the model returns its final
+		// text. Only slow tools qualify — fast reads would just churn
+		// the SSE stream with noise.
+		threadID := req.ThreadID
+		agent := string(req.Agent)
+		broker := s.askCfg.Events
+		loopOpts.OnToolStart = func(name string, _ json.RawMessage) {
+			if !ask.SlowTools[name] {
+				return
+			}
+			broker.Publish(threadID, ask.Event{
+				Kind:    "thinking",
+				Agent:   agent,
+				Tool:    name,
+				Message: ask.ThinkingMessageFor(agent, name),
+			})
+		}
+	}
+
 	start := time.Now()
 	final, trace, loopErr := s.askCfg.Client.RunToolLoop(r.Context(),
 		anthropic.Request{
@@ -130,7 +159,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 			Tools:    tools,
 		},
 		handlers,
-		anthropic.LoopOpts{MaxIterations: s.askCfg.MaxIterations},
+		loopOpts,
 	)
 	latency := time.Since(start)
 

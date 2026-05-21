@@ -770,6 +770,10 @@ a {
 .wa-ref-chip--working {
   background: var(--wpds-color-bg-surface-info-weak);
 }
+.wa-ref-chip--failed {
+  background: var(--wpds-color-bg-surface-error-weak);
+  color: var(--wpds-color-fg-content-error);
+}
 .wa-ref-chip__spinner {
   display: inline-flex;
   width: 12px;
@@ -800,6 +804,40 @@ a {
   justify-content: center;
 }
 .wa-chat-thinking__spinner > * { width: 14px !important; height: 14px !important; margin: 0 !important; }
+
+/* SSE-driven mid-flight ThinkingBlock — replaces the generic spinner
+   above once at least one slow-tool event arrives. Multi-line because a
+   Pricing benchmark fires several web_search calls in sequence. */
+.wa-chat-thinking-block {
+  display: flex;
+  gap: var(--wpds-dimension-gap-sm);
+  padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  background: var(--wpds-color-bg-surface-neutral-weak);
+  border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
+  border-radius: var(--wpds-border-radius-md);
+  color: var(--wpds-color-fg-content-neutral-weak);
+  font-size: var(--wpds-typography-font-size-sm);
+  font-style: italic;
+  max-width: 90%;
+  align-self: flex-start;
+}
+.wa-chat-thinking-block__spinner {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+.wa-chat-thinking-block__spinner > * { width: 14px !important; height: 14px !important; margin: 0 !important; }
+.wa-chat-thinking-block__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wpds-dimension-gap-xs);
+}
+.wa-chat-thinking-block__row {
+  line-height: var(--wpds-typography-line-height-md);
+}
 
 /* Error notice container — keeps Notice off the bottom edge. */
 .wa-chat-error { padding: 0 var(--wpds-dimension-padding-md); }

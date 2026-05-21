@@ -1,9 +1,10 @@
-import type { AskMessage } from '../../api/client';
+import type { AskMessage, Connection } from '../../api/client';
 import ReferenceChip from './ReferenceChip';
 import DispatchChip from './DispatchChip';
 
 interface Props {
   message: AskMessage;
+  connection: Connection;
   onChipNavigated: () => void;
 }
 
@@ -19,7 +20,7 @@ interface Props {
 // turns. (c) Will collapse into a shared primitive if a second
 // product surface (e.g. specialist chat in Phase 2) needs the same
 // shape — current scope is just CoS chat.
-export default function Message({ message, onChipNavigated }: Props) {
+export default function Message({ message, connection, onChipNavigated }: Props) {
   if (message.role === 'user') {
     return (
       <div className="wa-chat-msg wa-chat-msg--user">
@@ -53,6 +54,7 @@ export default function Message({ message, onChipNavigated }: Props) {
             <DispatchChip
               key={d.run_id}
               dispatched={d}
+              connection={connection}
               onNavigated={onChipNavigated}
             />
           ))}
