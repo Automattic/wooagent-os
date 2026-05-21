@@ -719,15 +719,15 @@ a {
   min-width: 0;
 }
 
-/* Done-state ✓ icon — green filled circle on the left of the bar. */
+/* Done-state ✓ icon — outlined green check-circle (the SVG draws the
+   ring itself; no filled background). Color cascades to the SVG via
+   `currentColor`. Matches the Figma "Icon/ActionBar/Sucess" spec. */
 .wa-done-check {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  width: 28px;
-  border-radius: 50%;
-  background: var(--wpds-color-bg-surface-success);
+  height: 24px;
+  width: 24px;
   color: var(--wpds-color-fg-content-success);
   flex: none;
 }
