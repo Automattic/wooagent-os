@@ -74,7 +74,11 @@ const (
 	// "dismissed because wrong timing / out of stock / etc." The reason
 	// tag carries the dismiss dialog's chip value; ReasonText carries the
 	// optional free-text comment. DSGWOO-1235 / 1236.
-	VerdictDismiss          VerdictKind = "dismiss"
+	VerdictDismiss VerdictKind = "dismiss"
+	// VerdictUndo is the operator action of reversing an earlier approve.
+	// The original VerdictApprove row stays in the verdict history (the
+	// approval did happen); VerdictUndo records the subsequent reversal.
+	VerdictUndo VerdictKind = "undo"
 )
 
 type Verdict struct {
