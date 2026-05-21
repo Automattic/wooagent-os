@@ -156,6 +156,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Get("/v1/runs/{id}", s.handleGetRun)
 		r.Post("/v1/runs", s.handleCreateRun)
 		r.Post("/v1/ask", s.handleAsk)
+		r.Get("/v1/ask/events", s.handleAskEvents)
 	})
 
 	// Catch-all handler: API paths get the JSON 404 envelope (existing
