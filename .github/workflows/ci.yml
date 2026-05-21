@@ -38,7 +38,7 @@ jobs:
   go:
     name: Go (vet + build + test)
     needs: changes
-    if: ${{ needs.changes.outputs.go == 'true' }}
+    if: ${{ needs.changes.outputs.go == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,7 +58,7 @@ jobs:
   ui:
     name: UI (typecheck + build)
     needs: changes
-    if: ${{ needs.changes.outputs.ui == 'true' }}
+    if: ${{ needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     defaults:
       run:
