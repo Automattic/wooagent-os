@@ -322,8 +322,13 @@ func (s *Server) handleUndoVariablePriceChange(
 			writeError(w, http.StatusBadGateway, "stale_check_failed", gerr.Error())
 			return
 		}
-		for _, entry := range snapshot {
-			vidF, _ := entry["variation_id"].(float64)
+		for i, entry := range snapshot {
+			vidF, ok := entry["variation_id"].(float64)
+			if !ok || vidF <= 0 {
+				writeError(w, http.StatusInternalServerError, "bad_applied_value",
+					fmt.Sprintf("snapshot entry %d missing variation_id", i))
+				return
+			}
 			vid := int(vidF)
 			field, _ := entry["field"].(string)
 			expected, _ := entry["value"].(string)
@@ -356,10 +361,10 @@ func (s *Server) handleUndoVariablePriceChange(
 
 	// 2) Reverse write via PEP.
 	updates := make([]map[string]any, 0, len(reverse))
-	for _, r := range reverse {
+	for _, entry := range reverse {
 		updates = append(updates, map[string]any{
-			"variation_id": r.variationID,
-			r.field:        r.prevValue,
+			"variation_id": entry.variationID,
+			entry.field:    entry.prevValue,
 		})
 	}
 	decision, _, invokeErr := s.pep.Invoke(ctx, pep.Request{
