@@ -34,6 +34,12 @@ interface Props {
   /** Count of issues currently awaiting operator review, across all
       personas. Drives the badge on the Needs review nav entry. */
   inReviewCount: number;
+  /** Which Inbox section should render as active when the operator is on
+      a detail page. App computes this from the viewed issue/batch status so
+      a dismissed item keeps "Archived" highlighted, a done item keeps
+      "Done", and everything else stays on "Needs review." Null = let the
+      path-based fallback (current behavior) decide. */
+  activeInbox?: 'needs-review' | 'done' | 'archived' | null;
   /** Active daemon connection — drives the footer popover's URL + token
       preview. The hostname shown in the footer chip is derived from
       connection.daemonUrl. */
@@ -63,6 +69,7 @@ const FOOTER_MUTED = {
 
 export default function LeftNav({
   inReviewCount,
+  activeInbox = null,
   connection,
   store: pairedStore = null,
   embedded,
@@ -103,13 +110,25 @@ export default function LeftNav({
     ? `${pairedStore.url.replace(/\/$/, '')}/wp-admin/`
     : null;
   const loc = useLocation();
-  // Needs review is the "active" route while on the queue itself, an issue
-  // detail, or a batch detail — those drill in from a queue card.
+  // Inbox highlight resolution. App supplies `activeInbox` for detail pages
+  // (looked up from the entity status: dismissed → archived, done → done,
+  // else needs-review). When App has no answer yet — entity not loaded, or
+  // we're on a non-detail route — fall back to the original pathname rule
+  // (queue + drill-in paths land on Needs review).
+  const detailInboxPath =
+    activeInbox === 'archived'
+      ? '/archived'
+      : activeInbox === 'done'
+        ? '/done'
+        : activeInbox === 'needs-review'
+          ? '/needs-review'
+          : null;
   const onNeedsReview =
-    loc.pathname === '/' ||
-    loc.pathname === '/needs-review' ||
-    loc.pathname.startsWith('/issues/') ||
-    loc.pathname.startsWith('/batches/');
+    detailInboxPath === null &&
+    (loc.pathname === '/' ||
+      loc.pathname === '/needs-review' ||
+      loc.pathname.startsWith('/issues/') ||
+      loc.pathname.startsWith('/batches/'));
 
   const inbox_items: NavItem[] = [
     { to: '/my-issues', label: 'My issues', icon: inbox, paused: true },
@@ -180,7 +199,7 @@ export default function LeftNav({
             '0 var(--wpds-dimension-padding-xs) var(--wpds-dimension-padding-md)',
         }}
       >
-        <NavGroup label="Inbox" items={inbox_items} active={onNeedsReview ? '/needs-review' : loc.pathname} onItemClick={onItemClick} />
+        <NavGroup label="Inbox" items={inbox_items} active={detailInboxPath ?? (onNeedsReview ? '/needs-review' : loc.pathname)} onItemClick={onItemClick} />
         <NavGroup label="Fleet" items={fleet_items} active={loc.pathname.startsWith('/agents') ? '/agents' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Activity" items={activity_items} active={loc.pathname.startsWith('/runs') ? '/runs' : loc.pathname} onItemClick={onItemClick} />
         <NavGroup label="Settings" items={settings_items} active={loc.pathname} onItemClick={onItemClick} />
@@ -395,7 +414,7 @@ function NavGroup({ label, items, active, onItemClick }: NavGroupProps) {
               {item.label}
             </span>
             {item.badge !== undefined && (
-              <Badge intent="high" aria-label={`${item.badge} in review`}>
+              <Badge intent="medium" aria-label={`${item.badge} in review`}>
                 {String(item.badge)}
               </Badge>
             )}

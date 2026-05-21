@@ -7,8 +7,8 @@ const STATUS_LABEL: Record<Issue['status'], string> = {
   in_progress: 'Drafting',
   in_review: 'Needs Review',
   done: 'Done',
-  rejected: 'Dismissed',
-  dismissed: 'Dismissed',
+  rejected: 'Archived',
+  dismissed: 'Archived',
 };
 
 const STATUS_INTENT: Record<
@@ -18,7 +18,7 @@ const STATUS_INTENT: Record<
   backlog: 'none',
   todo: 'informational',
   in_progress: 'informational',
-  in_review: 'none',
+  in_review: 'medium',
   done: 'stable',
   rejected: 'none',
   dismissed: 'none',

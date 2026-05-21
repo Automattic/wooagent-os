@@ -699,9 +699,14 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ children }),
       }),
-    rejectAll: (c: Connection, id: string) =>
+    rejectAll: (
+      c: Connection,
+      id: string,
+      body?: { reason: DismissReason; comment?: string },
+    ) =>
       request<BatchOperationResult>(c, `/v1/batches/${id}/reject-all`, {
         method: 'POST',
+        body: body ? JSON.stringify(body) : undefined,
       }),
   },
   stores: {
