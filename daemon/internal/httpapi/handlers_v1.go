@@ -595,6 +595,83 @@ var approveDispatchByType = map[string]approveDispatch{
 			return map[string]any{"id": pid, field: price}, price, nil
 		},
 	},
+	// Pricing persona — variable parents. proposal.target.variations is
+	// an array of {variation_id, target_field, regular_price (decimal
+	// string), previous_price}. The dispatcher fans the array into a
+	// single wooagent-products/update-variations-bulk call. appliedValue
+	// is a JSON-encoded snapshot of the per-variation proposed prices —
+	// the undo handler reads this back as its drift-detection baseline.
+	"product_price_change_variable": {
+		ability: "wooagent-products/update-variations-bulk",
+		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
+			pidF, ok := target["product_id"].(float64)
+			if !ok {
+				return nil, "", fmt.Errorf("missing or non-numeric product_id")
+			}
+			parentID := int(pidF)
+
+			rawVars, ok := target["variations"].([]any)
+			if !ok || len(rawVars) == 0 {
+				return nil, "", fmt.Errorf("missing or empty variations[] in target")
+			}
+
+			updates := make([]map[string]any, 0, len(rawVars))
+			snapshot := make([]map[string]any, 0, len(rawVars))
+			for i, raw := range rawVars {
+				v, ok := raw.(map[string]any)
+				if !ok {
+					return nil, "", fmt.Errorf("variations[%d] is not an object", i)
+				}
+				vidF, ok := v["variation_id"].(float64)
+				if !ok {
+					return nil, "", fmt.Errorf("variations[%d].variation_id missing or non-numeric", i)
+				}
+				vid := int(vidF)
+
+				field := "regular_price"
+				if rawField, present := v["target_field"]; present {
+					s, ok := rawField.(string)
+					if !ok {
+						return nil, "", fmt.Errorf("variations[%d].target_field must be a string, got %T", i, rawField)
+					}
+					s = strings.TrimSpace(s)
+					switch s {
+					case "regular_price", "sale_price":
+						field = s
+					case "":
+						// back-compat: empty falls back to regular_price
+					default:
+						return nil, "", fmt.Errorf("variations[%d] invalid target_field %q", i, s)
+					}
+				}
+
+				price, ok := v["regular_price"].(string)
+				if !ok || strings.TrimSpace(price) == "" {
+					return nil, "", fmt.Errorf("variations[%d].regular_price (proposed-price string) missing or non-string", i)
+				}
+
+				updates = append(updates, map[string]any{
+					"variation_id": vid,
+					field:          price,
+				})
+				snapshot = append(snapshot, map[string]any{
+					"variation_id": vid,
+					"field":        field,
+					"value":        price,
+				})
+			}
+
+			snapBytes, err := json.Marshal(snapshot)
+			if err != nil {
+				return nil, "", fmt.Errorf("marshal applied snapshot: %w", err)
+			}
+
+			return map[string]any{
+				"parent_id": parentID,
+				"updates":   updates,
+			}, string(snapBytes), nil
+		},
+	},
 	// Sales Support persona. proposal.content is the message body (plain
 	// text, ready for WP to email to the customer). target carries the
 	// order id and a note_type discriminator — "customer" sets
