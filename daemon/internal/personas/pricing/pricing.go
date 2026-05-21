@@ -219,6 +219,9 @@ func draftForProduct(
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
+	if p.Type == "variable" {
+		return draftForVariableParent(ctx, deps, p, skillDescription, model, currency)
+	}
 	currentPrice, targetField, ok := pickAnchorPrice(p)
 	if !ok {
 		return personas.Drafted{
