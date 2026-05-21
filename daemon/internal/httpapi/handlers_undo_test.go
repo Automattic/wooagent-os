@@ -99,6 +99,7 @@ func newUndoRig(t *testing.T) (*httptest.Server, *store.Store, *undoMCP) {
 	r.Post("/v1/issues", s.handleCreateIssue)
 	r.Post("/v1/issues/{id}/approve", s.handleApproveIssue)
 	r.Post("/v1/issues/{id}/undo", s.handleUndoIssue)
+	r.Get("/v1/issues/{id}", s.handleGetIssue)
 
 	ts := httptest.NewServer(r)
 	t.Cleanup(ts.Close)
@@ -361,5 +362,53 @@ func TestUndoIssue_AlreadyUndone(t *testing.T) {
 	errObj, _ := body["error"].(map[string]any)
 	if errObj["code"] != "already_undone" {
 		t.Errorf("code = %v, want already_undone", errObj["code"])
+	}
+}
+
+func TestGetIssue_ExposesUndoneAt(t *testing.T) {
+	ts, _, mock := newUndoRig(t)
+
+	id := approveAndGetID(t, ts, map[string]any{
+		"title":   "p",
+		"persona": "pricing",
+		"status":  "in_review",
+		"proposal": map[string]any{
+			"type":    "product_price_change",
+			"content": "rationale",
+			"target": map[string]any{
+				"product_id":     821,
+				"currency":       "USD",
+				"previous_price": 39.00,
+				"proposed_price": 44.99,
+				"regular_price":  "44.99",
+				"target_field":   "regular_price",
+				"percent_change": 15.4,
+				"direction":      "increase",
+				"sources":        []map[string]any{{"url": "u", "comparable_product": "c", "observed_price": 45.0}},
+			},
+		},
+	})
+	mock.getResponse = `{"success":true,"data":{"id":821,"regular_price":"44.99"}}`
+	undoRes := httpPostJSON(t, ts.URL+"/v1/issues/"+id+"/undo", map[string]any{})
+	if undoRes.StatusCode != http.StatusOK {
+		t.Fatalf("undo: status=%d", undoRes.StatusCode)
+	}
+	undoRes.Body.Close()
+
+	getRes, err := http.Get(ts.URL + "/v1/issues/" + id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer getRes.Body.Close()
+	var payload map[string]any
+	if err := json.NewDecoder(getRes.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	issue, _ := payload["issue"].(map[string]any)
+	if issue == nil {
+		t.Fatalf("payload missing issue: %v", payload)
+	}
+	if _, present := issue["undone_at"]; !present {
+		t.Errorf("issue payload missing undone_at: %v", issue)
 	}
 }
