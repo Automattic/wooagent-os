@@ -114,18 +114,6 @@
       "description": "List all enabled, priced variations of a variable product."
     },
     {
-      "ability": "wooagent-products/update-variations-bulk",
-      "namespace_owner": "wooagent-os/companion-plugin",
-      "source_url": "",
-      "schema_hash": "pending",
-      "scope": "propose",
-      "reversibility": 0.6,
-      "personas": [
-        "pricing"
-      ],
-      "description": "Update regular_price/sale_price across multiple variations of one parent in a single call. Pricing-only initially."
-    },
-    {
       "ability": "wooagent-orders/list",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
