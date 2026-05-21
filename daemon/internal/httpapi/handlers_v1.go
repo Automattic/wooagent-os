@@ -78,6 +78,10 @@ type Issue struct {
 	DismissReason  string     `json:"dismiss_reason,omitempty"`
 	DismissComment string     `json:"dismiss_comment,omitempty"`
 	DismissedAt    *time.Time `json:"dismissed_at,omitempty"`
+	// UndoneAt is set by POST /v1/issues/:id/undo. When non-nil the
+	// issue's approve has been reversed; status remains 'done'. The UI's
+	// DoneBar uses this to render the "undone" affordance instead of Undo.
+	UndoneAt *time.Time `json:"undone_at,omitempty"`
 	// Target is the proposal's per-target payload (product_id, image_url,
 	// etc.). Surfaced on list responses so queue card UIs can read fields
 	// without fetching the full IssueDetail. Omitted when not set.
@@ -333,7 +337,7 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	persona := r.URL.Query().Get("persona")
 	batchID := r.URL.Query().Get("batch_id")
 
-	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, COALESCE(proposal_target, 'null') FROM issues`
+	q := `SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, undone_at, COALESCE(proposal_target, 'null') FROM issues`
 	args := []any{}
 	where := []string{}
 	if status != "" {
@@ -364,9 +368,9 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var i Issue
 		var createdAt, updatedAt string
-		var dismissedAt sql.NullString
+		var dismissedAt, undoneAt sql.NullString
 		var targetRaw string
-		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &i.DismissReason, &i.DismissComment, &dismissedAt, &targetRaw); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &i.DismissReason, &i.DismissComment, &dismissedAt, &undoneAt, &targetRaw); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
@@ -375,6 +379,11 @@ func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {
 		if dismissedAt.Valid && dismissedAt.String != "" {
 			if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
 				i.DismissedAt = &t
+			}
+		}
+		if undoneAt.Valid && undoneAt.String != "" {
+			if t, err := time.Parse(time.RFC3339, undoneAt.String); err == nil {
+				i.UndoneAt = &t
 			}
 		}
 		if targetRaw != "" && targetRaw != "null" {
@@ -477,10 +486,10 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var i Issue
 	var createdAt, updatedAt string
-	var proposalType, proposalContent, proposalTarget, dismissedAt sql.NullString
+	var proposalType, proposalContent, proposalTarget, dismissedAt, undoneAt sql.NullString
 	err := s.store.DB.QueryRowContext(r.Context(),
-		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at FROM issues WHERE id = ?`, id,
-	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget, &i.DismissReason, &i.DismissComment, &dismissedAt)
+		`SELECT id, title, COALESCE(description, ''), COALESCE(persona, ''), status, priority, COALESCE(batch_id, ''), created_at, updated_at, proposal_type, proposal_content, proposal_target, COALESCE(dismiss_reason, ''), COALESCE(dismiss_comment, ''), dismissed_at, undone_at FROM issues WHERE id = ?`, id,
+	).Scan(&i.ID, &i.Title, &i.Description, &i.Persona, &i.Status, &i.Priority, &i.BatchID, &createdAt, &updatedAt, &proposalType, &proposalContent, &proposalTarget, &i.DismissReason, &i.DismissComment, &dismissedAt, &undoneAt)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "not_found", "no issue with that id")
 		return
@@ -490,6 +499,11 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 	if dismissedAt.Valid && dismissedAt.String != "" {
 		if t, err := time.Parse(time.RFC3339, dismissedAt.String); err == nil {
 			i.DismissedAt = &t
+		}
+	}
+	if undoneAt.Valid && undoneAt.String != "" {
+		if t, err := time.Parse(time.RFC3339, undoneAt.String); err == nil {
+			i.UndoneAt = &t
 		}
 	}
 
