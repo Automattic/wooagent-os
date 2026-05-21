@@ -18,6 +18,8 @@ import {
   type Variant,
 } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
+import { useAskAgentContext } from '../lib/askAgent';
+import { issueToVisible } from '../lib/visibleItems';
 import Kpi from '../components/Kpi';
 import type { KpiTone } from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
@@ -97,6 +99,14 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   } | null>(null);
   const [approvedVariant, setApprovedVariant] = useState<string | null>(null);
   const [dismissOpen, setDismissOpen] = useState(false);
+
+  useAskAgentContext(
+    () => ({
+      page: 'proposal-detail',
+      visible_items: data?.issue ? [issueToVisible(data.issue)] : [],
+    }),
+    [data],
+  );
 
   useEffect(() => {
     if (!id) return;

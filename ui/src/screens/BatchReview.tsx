@@ -18,6 +18,8 @@ import Kpi from '../components/Kpi';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import BatchProductCard, { type BatchProduct } from '../components/BatchProductCard';
+import { useAskAgentContext } from '../lib/askAgent';
+import { issueToVisible } from '../lib/visibleItems';
 import DismissDialog from '../components/DismissDialog';
 import ProductThumbnail from '../components/ProductThumbnail';
 import ProposalHeader from '../components/ProposalHeader';
@@ -55,6 +57,14 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     text: string;
   } | null>(null);
   const [dismissOpen, setDismissOpen] = useState(false);
+
+  useAskAgentContext(
+    () => ({
+      page: 'batch-detail',
+      visible_items: (data?.issues ?? []).map((row) => issueToVisible(row.issue)),
+    }),
+    [data],
+  );
 
   const refresh = async () => {
     if (!id) return;

@@ -16,6 +16,8 @@ import {
   relativeTime,
   type BoardItem,
 } from '../lib/boardItems';
+import { useAskAgentContext } from '../lib/askAgent';
+import { batchToVisible, issueToVisible } from '../lib/visibleItems';
 
 interface Props {
   issues: Issue[] | null;
@@ -88,6 +90,19 @@ const DEFAULT_VIEW: View = {
 export default function Done({ issues, batches, error, onAskAgent }: Props) {
   const nav = useNavigate();
   const [view, setView] = useState<View>(DEFAULT_VIEW);
+
+  useAskAgentContext(
+    () => ({
+      page: 'done',
+      visible_items: [
+        ...(issues ?? [])
+          .filter((i) => i.status === 'done')
+          .map(issueToVisible),
+        ...batches.filter((b) => b.pending === 0 && b.approved > 0).map(batchToVisible),
+      ],
+    }),
+    [issues, batches],
+  );
 
   const rows = useMemo<Row[]>(() => {
     if (!issues) return [];

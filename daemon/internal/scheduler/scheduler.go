@@ -112,6 +112,18 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 // EnqueueManual is the API/CLI entry point for manual runs.
 func (s *Scheduler) EnqueueManual(ctx context.Context, personaSlug string) (Run, error) {
+	return s.enqueueWithTrigger(ctx, personaSlug, TriggerManual)
+}
+
+// EnqueueOperatorAsked is the entry point for runs kicked off by the
+// operator from the Ask Agent drawer (DSGWOO-1348). Same enable check
+// and queue path as EnqueueManual — the only difference is the Trigger
+// stamped on the resulting Run row.
+func (s *Scheduler) EnqueueOperatorAsked(ctx context.Context, personaSlug string) (Run, error) {
+	return s.enqueueWithTrigger(ctx, personaSlug, TriggerOperatorAsked)
+}
+
+func (s *Scheduler) enqueueWithTrigger(ctx context.Context, personaSlug string, trigger Trigger) (Run, error) {
 	if s.queue == nil {
 		return Run{}, fmt.Errorf("scheduler: not started")
 	}
@@ -123,7 +135,7 @@ func (s *Scheduler) EnqueueManual(ctx context.Context, personaSlug string) (Run,
 		return Run{}, fmt.Errorf("%w: %q", ErrPersonaUnavailable, personaSlug)
 	}
 	return s.queue.Enqueue(ctx, EnqueueParams{
-		Persona: personaSlug, Trigger: TriggerManual, ScheduledAt: s.Now(),
+		Persona: personaSlug, Trigger: trigger, ScheduledAt: s.Now(),
 	})
 }
 

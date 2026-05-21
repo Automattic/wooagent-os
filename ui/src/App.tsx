@@ -30,6 +30,7 @@ import {
   api,
 } from './api/client';
 import { useIsMobile } from './lib/useMediaQuery';
+import { AskAgentProvider } from './lib/askAgent';
 
 // Mirror of AUTH_NOTICE_FLAG in api/client.ts. Kept inline (rather than
 // imported) because the flag is a private state-machine detail of the
@@ -219,7 +220,6 @@ export default function App() {
   ).length;
   const batchesInReview = batches.filter((b) => b.pending > 0).length;
   const inReview = standaloneInReview + batchesInReview;
-  const askAgentContext = `Needs review · ${inReview} item${inReview === 1 ? '' : 's'}`;
 
   // Resolve which Inbox section LeftNav should highlight when on a detail
   // page (/issues/:id or /batches/:id). The entity's status carries this:
@@ -248,7 +248,7 @@ export default function App() {
   })();
 
   return (
-    <>
+    <AskAgentProvider>
       {authExpired && <AuthExpiredModal />}
       <Shell>
       {(drawer) => (
@@ -298,7 +298,7 @@ export default function App() {
             <AskAgentDrawer
               isOpen={askAgentOpen}
               onClose={() => setAskAgentOpen(false)}
-              contextLabel={askAgentContext}
+              connection={connection}
             />
         <Routes>
           <Route path="/" element={<Navigate to="/needs-review" replace />} />
@@ -553,7 +553,7 @@ export default function App() {
         </>
       )}
     </Shell>
-    </>
+    </AskAgentProvider>
   );
 }
 
