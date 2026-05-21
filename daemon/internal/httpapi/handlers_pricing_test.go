@@ -268,7 +268,7 @@ func newPricingTestRig(t *testing.T) *pricingRig {
 	return &pricingRig{ts: ts, store: st, rec: rec}
 }
 
-func TestApproveIssue_PersistsAppliedValue_SalePrice(t *testing.T) {
+func TestApproveIssue_PersistsAppliedValue(t *testing.T) {
 	rig := newPricingTestRig(t)
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := rig.store.DB.ExecContext(context.Background(),
@@ -279,7 +279,7 @@ func TestApproveIssue_PersistsAppliedValue_SalePrice(t *testing.T) {
 	}
 
 	createBody := map[string]any{
-		"title":    "Sale price change",
+		"title":    "Regular price change",
 		"persona":  "pricing",
 		"status":   "in_review",
 		"priority": "medium",
@@ -294,7 +294,6 @@ func TestApproveIssue_PersistsAppliedValue_SalePrice(t *testing.T) {
 				"previous_price": 35.00,
 				"proposed_price": 40.00,
 				"regular_price":  "40.00",
-				"target_field":   "sale_price",
 				"percent_change": 14.3,
 				"direction":      "increase",
 				"sources": []map[string]any{
@@ -325,17 +324,17 @@ func TestApproveIssue_PersistsAppliedValue_SalePrice(t *testing.T) {
 	}
 	approveRes.Body.Close()
 
-	// MCP must have been called with sale_price, NOT regular_price.
+	// MCP got the regular_price write (this branch ships without
+	// target_field awareness; sale-price-aware writes land in the
+	// dsgwoo-sale-price-aware branch).
 	pmap, _ := rig.rec.params.(map[string]any)
 	inner, _ := pmap["parameters"].(map[string]any)
-	if _, present := inner["regular_price"]; present {
-		t.Errorf("MCP must not receive regular_price for sale_price proposal; got %v", inner)
-	}
-	if inner["sale_price"] != "40.00" {
-		t.Errorf("MCP sale_price = %v, want \"40.00\"", inner["sale_price"])
+	if inner["regular_price"] != "40.00" {
+		t.Errorf("MCP regular_price = %v, want \"40.00\"", inner["regular_price"])
 	}
 
-	// applied_value must be persisted as the value we wrote.
+	// applied_value must be persisted as the value we wrote — that is
+	// the comparable the undo handler's staleness check will use.
 	var applied sql.NullString
 	if err := rig.store.DB.QueryRow(
 		`SELECT applied_value FROM issues WHERE id = ?`, created.Issue.ID,
