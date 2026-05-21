@@ -354,3 +354,64 @@ func TestPickAnchorPrice_PrefersSaleWhenPresent(t *testing.T) {
 		})
 	}
 }
+
+func TestDraftForProduct_TargetShape_SalePrice(t *testing.T) {
+	// Build a Drafted directly from the pieces draftForProduct assembles.
+	// We construct the target manually to assert the contract we promise
+	// to the dispatcher + UI: target_field present, observed values
+	// captured, regular_price holds the value to write into target_field.
+	p := product{ID: 821, Name: "Wool Throw", SKU: "WT-1", RegularPrice: "39.00", SalePrice: "35.00"}
+	currentPrice, targetField, ok := pickAnchorPrice(p)
+	if !ok {
+		t.Fatalf("pickAnchorPrice returned !ok for valid sale product")
+	}
+	out := proposalOut{
+		PreviousPrice: currentPrice, // 35.00
+		ProposedPrice: 40.00,
+		PercentChange: 14.3,
+		Direction:     "increase",
+	}
+	target := buildPricingTarget(p, out, "USD", targetField)
+	if got := target["target_field"]; got != "sale_price" {
+		t.Errorf("target_field=%v, want sale_price", got)
+	}
+	if got := target["regular_price"]; got != "40.00" {
+		t.Errorf("regular_price=%v, want \"40.00\" (the value to WRITE into target_field)", got)
+	}
+	if got := target["regular_price_observed"]; got != "39.00" {
+		t.Errorf("regular_price_observed=%v, want \"39.00\"", got)
+	}
+	if got := target["sale_price_observed"]; got != "35.00" {
+		t.Errorf("sale_price_observed=%v, want \"35.00\"", got)
+	}
+	if got := target["previous_price"]; got != 35.00 {
+		t.Errorf("previous_price=%v, want 35.00 (the sale anchor)", got)
+	}
+}
+
+func TestDraftForProduct_TargetShape_RegularPriceBackcompat(t *testing.T) {
+	p := product{ID: 7, Name: "Mug", SKU: "MUG-1", RegularPrice: "12.00", SalePrice: ""}
+	currentPrice, targetField, ok := pickAnchorPrice(p)
+	if !ok {
+		t.Fatalf("pickAnchorPrice returned !ok for regular-only product")
+	}
+	out := proposalOut{
+		PreviousPrice: currentPrice,
+		ProposedPrice: 14.50,
+		PercentChange: 20.8,
+		Direction:     "increase",
+	}
+	target := buildPricingTarget(p, out, "USD", targetField)
+	if got := target["target_field"]; got != "regular_price" {
+		t.Errorf("target_field=%v, want regular_price", got)
+	}
+	if got := target["regular_price"]; got != "14.50" {
+		t.Errorf("regular_price=%v, want \"14.50\"", got)
+	}
+	if got := target["regular_price_observed"]; got != "12.00" {
+		t.Errorf("regular_price_observed=%v, want \"12.00\"", got)
+	}
+	if _, hasSaleObs := target["sale_price_observed"]; hasSaleObs {
+		t.Errorf("sale_price_observed should be absent when no sale price is set; target=%v", target)
+	}
+}
