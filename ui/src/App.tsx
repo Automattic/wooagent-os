@@ -40,8 +40,10 @@ export default function App() {
   // Every screen renders its own header via the WPDS <Page> component
   // (heading + global search + Ask agent on a single row, via the shared
   // PageGlobalActions helper), so the standalone TopBar component has been
-  // retired. `useLocation` is still used by the inner Shell to auto-close
-  // the mobile drawer on route changes.
+  // retired. `useLocation` here drives the Inbox-section highlight in
+  // LeftNav based on the entity status of the currently viewed detail page;
+  // the inner Shell uses its own useLocation to auto-close the mobile drawer.
+  const location = useLocation();
   const [connection, setConnection] = useState<Connection | null>(null);
   const [probed, setProbed] = useState(false);
   // Onboarding gate. Tri-state until probed: null = checking, true = ready
@@ -206,8 +208,44 @@ export default function App() {
     );
   }
 
-  const inReview = (issues ?? []).filter((i) => i.status === 'in_review').length;
+  // Badge mirrors what the operator sees on the Needs review board: batched
+  // children collapse to a single batch row, so a 9-child marketing batch
+  // counts as 1, not 9. Stand-alone issues (no batch_id, or batch_id refers
+  // to a missing batch) still count individually.
+  const batchIDs = new Set(batches.map((b) => b.id));
+  const standaloneInReview = (issues ?? []).filter(
+    (i) =>
+      i.status === 'in_review' && (!i.batch_id || !batchIDs.has(i.batch_id)),
+  ).length;
+  const batchesInReview = batches.filter((b) => b.pending > 0).length;
+  const inReview = standaloneInReview + batchesInReview;
   const askAgentContext = `Needs review · ${inReview} item${inReview === 1 ? '' : 's'}`;
+
+  // Resolve which Inbox section LeftNav should highlight when on a detail
+  // page (/issues/:id or /batches/:id). The entity's status carries this:
+  // dismissed/rejected → Archived, done → Done, otherwise Needs review.
+  // Falls back to null while the entity hasn't loaded yet so LeftNav keeps
+  // its path-based default instead of flashing the wrong selection.
+  const detailInbox = ((): 'needs-review' | 'done' | 'archived' | null => {
+    const issueMatch = location.pathname.match(/^\/issues\/([^/]+)/);
+    if (issueMatch) {
+      const issue = (issues ?? []).find((i) => i.id === issueMatch[1]);
+      if (!issue) return null;
+      if (issue.status === 'dismissed' || issue.status === 'rejected')
+        return 'archived';
+      if (issue.status === 'done') return 'done';
+      return 'needs-review';
+    }
+    const batchMatch = location.pathname.match(/^\/batches\/([^/]+)/);
+    if (batchMatch) {
+      const batch = batches.find((b) => b.id === batchMatch[1]);
+      if (!batch) return null;
+      if (batch.pending > 0) return 'needs-review';
+      if (batch.approved === 0 && batch.rejected > 0) return 'archived';
+      return 'done';
+    }
+    return null;
+  })();
 
   return (
     <>
@@ -217,6 +255,7 @@ export default function App() {
         <>
           <LeftNav
             inReviewCount={inReview}
+            activeInbox={detailInbox}
             connection={connection}
             store={pairedStore}
             embedded={isEmbedded()}

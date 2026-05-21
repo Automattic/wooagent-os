@@ -227,6 +227,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   const personaLabel = personaLabelFrom(issue.persona);
   const reviewable = issue.status === 'in_review';
   const isDone = issue.status === 'done';
+  const isArchived = issue.status === 'dismissed' || issue.status === 'rejected';
 
   // DismissDialog for the Price/Message early-return branches below. The
   // prose-path render at the bottom has its own DismissDialog because it
@@ -257,6 +258,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           busy={busy}
           reviewable={reviewable}
           isDone={isDone}
+          isArchived={isArchived}
           connection={connection}
           onApprove={onApprove}
           onReject={onReject}
@@ -282,6 +284,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           busy={busy}
           reviewable={reviewable}
           isDone={isDone}
+          isArchived={isArchived}
           connection={connection}
           onApprove={onApprove}
           onReject={onReject}
@@ -685,7 +688,9 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         </div>
       </Page>
 
-      {isDone ? (
+      {isArchived ? (
+        <ActionBar state="archived" dismissedAt={issue.dismissed_at} />
+      ) : isDone ? (
         <ActionBar
           state="done"
           variantId={approvedVariant ?? activeVariant?.id ?? 'A'}
@@ -729,6 +734,7 @@ interface PriceViewProps {
   busy: 'approve' | 'reject' | null;
   reviewable: boolean;
   isDone: boolean;
+  isArchived: boolean;
   connection: Connection;
   onApprove: () => void;
   onReject: () => void;
@@ -888,18 +894,10 @@ function PriceIssueView(props: PriceViewProps) {
                       {formatPrice(proposal.proposedPrice, currency)}
                     </Text>
                   </Stack>
-                  <span
-                    style={{
-                      marginLeft: 'auto',
-                      padding: '6px 14px',
-                      borderRadius: 'var(--wpds-border-radius-md)',
-                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                      fontSize: 'var(--wpds-typography-font-size-md)',
-                      background: directionTone.bg,
-                      color: directionTone.fg,
-                    }}
-                  >
-                    {arrow} {deltaLabel} · {percentLabel}
+                  <span style={{ marginLeft: 'auto' }}>
+                    <Badge intent="none">
+                      {`${arrow} ${deltaLabel} · ${percentLabel}`}
+                    </Badge>
                   </span>
                 </Stack>
               </Card.Content>
@@ -1032,7 +1030,9 @@ function PriceIssueView(props: PriceViewProps) {
         </div>
       </Page>
 
-      {props.isDone ? (
+      {props.isArchived ? (
+        <ActionBar state="archived" dismissedAt={props.issue.dismissed_at} />
+      ) : props.isDone ? (
         <ActionBar
           state="done"
           entity="price"
@@ -1185,6 +1185,7 @@ interface MessageViewProps {
   busy: 'approve' | 'reject' | null;
   reviewable: boolean;
   isDone: boolean;
+  isArchived: boolean;
   connection: Connection;
   onApprove: () => void;
   onReject: () => void;
@@ -1428,7 +1429,9 @@ function MessageIssueView(props: MessageViewProps) {
         </div>
       </Page>
 
-      {props.isDone ? (
+      {props.isArchived ? (
+        <ActionBar state="archived" dismissedAt={props.issue.dismissed_at} />
+      ) : props.isDone ? (
         <ActionBar
           state="done"
           entity="message"
