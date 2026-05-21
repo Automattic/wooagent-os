@@ -179,6 +179,30 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 	)
 }
 
+// pickAnchorPrice chooses which price field the Pricing benchmark anchors
+// to. Sale price wins when set and parseable to a positive decimal —
+// that's what the customer pays right now, so it's the right reference
+// for "what should this product cost." Regular price is the fallback.
+// Returns (value, field, true) on success; (0, "", false) when neither
+// regular nor sale yields a usable positive decimal — in that case the
+// caller must skip the product.
+//
+// Note: a product with sale_price set but no regular_price is malformed
+// (Woo's UI doesn't let you do this); we treat it as "skip" rather than
+// silently anchoring to sale_price, because the dispatcher will need
+// regular_price downstream for back-compat reasons.
+func pickAnchorPrice(p product) (float64, string, bool) {
+	regular, _ := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
+	if regular <= 0 {
+		return 0, "", false
+	}
+	sale, _ := strconv.ParseFloat(strings.TrimSpace(p.SalePrice), 64)
+	if sale > 0 {
+		return sale, "sale_price", true
+	}
+	return regular, "regular_price", true
+}
+
 // draftForProduct does the per-product Pricing work: fetch + parse the
 // current price, call the LLM-with-web_search skill, validate the
 // proposal, assemble Drafted. Returns Drafted{Skipped:true} for any
@@ -195,15 +219,15 @@ func draftForProduct(
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("get product %d: %w", productID, err)
 	}
-	currentPrice, err := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
-	if err != nil || currentPrice <= 0 {
+	currentPrice, targetField, ok := pickAnchorPrice(p)
+	if !ok {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: fmt.Sprintf("product %d (%q) type=%q has no usable regular_price (raw=%q)", p.ID, p.Name, p.Type, p.RegularPrice),
+			SkipReason: fmt.Sprintf("product %d (%q) type=%q has no usable regular_price (raw regular=%q sale=%q)", p.ID, p.Name, p.Type, p.RegularPrice, p.SalePrice),
 		}, nil
 	}
 
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice)
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice, targetField)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
@@ -233,10 +257,13 @@ func draftForProduct(
 		return personas.Drafted{}, fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
 	}
 
-	regularPriceStr := strconv.FormatFloat(out.ProposedPrice, 'f', 2, 64)
-	title := fmt.Sprintf("Price change · %s · %s%.2f → %s%.2f (%+.1f%%)",
+	saleSuffix := ""
+	if targetField == "sale_price" {
+		saleSuffix = " (sale)"
+	}
+	title := fmt.Sprintf("Price change · %s · %s%.2f → %s%.2f (%+.1f%%)%s",
 		p.Name, currencySymbol(currency), out.PreviousPrice,
-		currencySymbol(currency), out.ProposedPrice, out.PercentChange)
+		currencySymbol(currency), out.ProposedPrice, out.PercentChange, saleSuffix)
 
 	return personas.Drafted{
 		Title: title,
@@ -249,23 +276,7 @@ func draftForProduct(
 		ProposalContent: out.Rationale,
 		// Belt over the existing product_id Cooldown.
 		DedupKey: fmt.Sprintf("product:%d", p.ID),
-		Target: map[string]any{
-			"product_id":      p.ID,
-			"product_name":    p.Name,
-			"product_sku":     p.SKU,
-			"image_url":       p.ImageURL,
-			"image_alt":       p.ImageAlt,
-			"currency":        currency,
-			"previous_price":  out.PreviousPrice,
-			"proposed_price":  out.ProposedPrice,
-			"regular_price":   regularPriceStr,
-			"percent_change":  out.PercentChange,
-			"direction":       out.Direction,
-			"observed_median": out.ObservedMedian,
-			"observed_low":    out.ObservedLow,
-			"observed_high":   out.ObservedHigh,
-			"sources":         out.Sources,
-		},
+		Target:   buildPricingTarget(p, out, currency, targetField),
 	}, nil
 }
 
@@ -534,6 +545,52 @@ func packAsBatch(drafts []personas.Drafted, category string) personas.Drafted {
 	return primary
 }
 
+// buildPricingTarget composes the proposal.target payload for a product
+// price change. target_field discriminates which Woo field the dispatcher
+// will write into ("regular_price" or "sale_price"); the "regular_price"
+// key in the target carries the decimal string to write into that field
+// (name kept for back-compat with existing in-flight proposals — the
+// dispatcher reads this key regardless of which field it writes into).
+// regular_price_observed / sale_price_observed snapshot the product's
+// current values so the UI can render "regular $39 unchanged" alongside
+// the sale-price delta.
+func buildPricingTarget(p product, out proposalOut, currency, targetField string) map[string]any {
+	t := map[string]any{
+		"product_id":             p.ID,
+		"product_name":           p.Name,
+		"product_sku":            p.SKU,
+		"image_url":              p.ImageURL,
+		"image_alt":              p.ImageAlt,
+		"currency":               currency,
+		"previous_price":         out.PreviousPrice,
+		"proposed_price":         out.ProposedPrice,
+		"regular_price":          strconv.FormatFloat(out.ProposedPrice, 'f', 2, 64),
+		"target_field":           targetField,
+		"regular_price_observed": canonDecimal(p.RegularPrice),
+		"percent_change":         out.PercentChange,
+		"direction":              out.Direction,
+		"observed_median":        out.ObservedMedian,
+		"observed_low":           out.ObservedLow,
+		"observed_high":          out.ObservedHigh,
+		"sources":                out.Sources,
+	}
+	if s := canonDecimal(p.SalePrice); s != "" {
+		t["sale_price_observed"] = s
+	}
+	return t
+}
+
+// canonDecimal returns s parsed as float and reformatted to 2dp. Empty/
+// invalid/zero/negative input returns "" (the caller treats "" as "no
+// sale_price set" so we can omit the key entirely).
+func canonDecimal(s string) string {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || v <= 0 {
+		return ""
+	}
+	return strconv.FormatFloat(v, 'f', 2, 64)
+}
+
 // ---------------------------------------------------------------- Anthropic
 
 type proposalSource struct {
@@ -657,7 +714,11 @@ const userPromptTemplate = `Product to analyze:
 - sku: %s
 - category: %s
 - current regular_price: %.2f %s
+- current sale_price:    %s
+- anchor (the price customers pay today): %s = %.2f %s
 - description: %s
+
+Anchor your benchmark and the previous_price field of your output to the **anchor** value above — that is the price customers see right now. When the anchor is sale_price, your proposal updates the active sale; when the anchor is regular_price, the product is not on sale.
 
 Search the preferred retailers from the skill — start with site:-scoped queries against J.Crew, Madewell, Aritzia, Everlane, Quince, COS for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods. Pick the 4–6 retailers most likely to carry this product and run site:<retailer>.com <noun phrase> queries. Match on category, material, and tier — not just keywords.
 
@@ -697,13 +758,24 @@ func draftProposal(
 	p product,
 	currency string,
 	currentPrice float64,
+	anchorField string,
 ) (proposalOut, string, error) {
 	system := skillSystem + "\n\nWhen you respond, output ONLY a JSON object that matches the schema in skills/pricing-benchmark/v1.yaml output. No prose outside the JSON. No markdown code fences."
+
+	salePriceDisplay := "—"
+	if s := strings.TrimSpace(p.SalePrice); s != "" {
+		if sv, err := strconv.ParseFloat(s, 64); err == nil && sv > 0 {
+			salePriceDisplay = fmt.Sprintf("%.2f %s", sv, currency)
+		}
+	}
+	regularPrice, _ := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
 
 	user := fmt.Sprintf(
 		userPromptTemplate,
 		p.ID, p.Name, p.SKU, categoryString(p),
-		currentPrice, currency,
+		regularPrice, currency,
+		salePriceDisplay,
+		anchorField, currentPrice, currency,
 		strings.TrimSpace(p.Description),
 		currency,
 	)
