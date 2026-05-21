@@ -513,30 +513,33 @@ func (s *Server) handleGetIssue(w http.ResponseWriter, r *http.Request) {
 
 // approveDispatch maps a proposal_type to (a) the MCP ability that applies it
 // and (b) a function that builds the ability's parameters from the proposal
-// content + target. Adding new proposal types is purely additive — register a
-// new dispatcher here, and the approve handler picks it up.
+// content + target. buildParams returns the params payload AND the string
+// snapshot of the value we wrote (decimal string for prices, full body for
+// rewrites). approveOne persists the snapshot into issues.applied_value so
+// the undo handler's staleness check has a comparable. Dispatchers that
+// can't be undone (cold-draft, customer-reply) return "" as appliedValue.
 //
 // selectedVariant is the full variant map chosen by the operator (nil when
 // no variant_id was supplied). Dispatchers that only need the content string
 // (rewrite, price-change, customer-reply) ignore it; cold-draft reads
 // body_short/body_long from it.
 type approveDispatch struct {
-	ability    string
-	buildParams func(content string, selectedVariant map[string]any, target map[string]any) (map[string]any, error)
+	ability     string
+	buildParams func(content string, selectedVariant map[string]any, target map[string]any) (params map[string]any, appliedValue string, err error)
 }
 
 var approveDispatchByType = map[string]approveDispatch{
 	"product_description_rewrite": {
 		ability: "wooagent-products/update",
-		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			return map[string]any{
 				"id":          pid,
 				"description": content,
-			}, nil
+			}, content, nil
 		},
 	},
 	// Pricing persona. proposal.content is the operator-facing rationale
@@ -546,36 +549,38 @@ var approveDispatchByType = map[string]approveDispatch{
 	// fields-shipped subset is the only difference.
 	"product_price_change": {
 		ability: "wooagent-products/update",
-		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			price, err := requireDecimalStringFromTarget(target, "regular_price")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			return map[string]any{
 				"id":            pid,
 				"regular_price": price,
-			}, nil
+			}, price, nil
 		},
 	},
 	// Sales Support persona. proposal.content is the message body (plain
 	// text, ready for WP to email to the customer). target carries the
 	// order id and a note_type discriminator — "customer" sets
 	// is_customer_note=true so WP emails the note; "internal" leaves it
-	// off so it shows only in wp-admin.
+	// off so it shows only in wp-admin. Not undoable in v1 — the
+	// dispatcher returns "" as appliedValue so the undo handler will
+	// reject any attempt with code=not_undoable.
 	"customer_reply_draft": {
 		ability: "wooagent-orders/add-note",
-		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(content string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
 			oid, err := requireIntFromTarget(target, "order_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			note := strings.TrimSpace(content)
 			if note == "" {
-				return nil, fmt.Errorf("proposal content (note body) is empty")
+				return nil, "", fmt.Errorf("proposal content (note body) is empty")
 			}
 			isCustomer := true // default: customer-facing
 			if v, ok := target["note_type"]; ok {
@@ -587,56 +592,58 @@ var approveDispatchByType = map[string]approveDispatch{
 				"id":               oid,
 				"note":             note,
 				"is_customer_note": isCustomer,
-			}, nil
+			}, "", nil
 		},
 	},
 	// Marketing persona — cold-draft path. proposal.target.drafting lists
 	// which description fields to fill ("short" and/or "long"); the selected
 	// variant carries body_short and/or body_long. The payload writes only
 	// the previously-empty fields; existing copy in non-drafted fields is
-	// preserved because we only include keys named in drafting.
+	// preserved because we only include keys named in drafting. Not undoable
+	// in v1 (the natural reverse — writing an empty string back — is
+	// rarely what an operator wants); dispatcher returns "" as appliedValue.
 	"product_cold_draft": {
 		ability: "wooagent-products/update",
-		buildParams: func(_ string, selectedVariant map[string]any, target map[string]any) (map[string]any, error) {
+		buildParams: func(_ string, selectedVariant map[string]any, target map[string]any) (map[string]any, string, error) {
 			pid, err := requireIntFromTarget(target, "product_id")
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if selectedVariant == nil {
-				return nil, fmt.Errorf("cold-draft approval requires a variant_id")
+				return nil, "", fmt.Errorf("cold-draft approval requires a variant_id")
 			}
 			rawDrafting, ok := target["drafting"]
 			if !ok {
-				return nil, fmt.Errorf("missing drafting in proposal target")
+				return nil, "", fmt.Errorf("missing drafting in proposal target")
 			}
 			drafting, ok := rawDrafting.([]any)
 			if !ok {
-				return nil, fmt.Errorf("drafting is not an array")
+				return nil, "", fmt.Errorf("drafting is not an array")
 			}
 			params := map[string]any{"id": pid}
 			for _, f := range drafting {
 				field, ok := f.(string)
 				if !ok {
-					return nil, fmt.Errorf("drafting entry %v is not a string", f)
+					return nil, "", fmt.Errorf("drafting entry %v is not a string", f)
 				}
 				switch field {
 				case "short":
 					short, ok := selectedVariant["body_short"].(string)
 					if !ok || short == "" {
-						return nil, fmt.Errorf("variant missing body_short (drafting requires it)")
+						return nil, "", fmt.Errorf("variant missing body_short (drafting requires it)")
 					}
 					params["short_description"] = short
 				case "long":
 					long, ok := selectedVariant["body_long"].(string)
 					if !ok || long == "" {
-						return nil, fmt.Errorf("variant missing body_long (drafting requires it)")
+						return nil, "", fmt.Errorf("variant missing body_long (drafting requires it)")
 					}
 					params["description"] = long
 				default:
-					return nil, fmt.Errorf("unknown drafting field %q (expected short|long)", field)
+					return nil, "", fmt.Errorf("unknown drafting field %q (expected short|long)", field)
 				}
 			}
-			return params, nil
+			return params, "", nil
 		},
 	},
 }
@@ -741,10 +748,11 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 		}
 	}
 
-	params, err := dispatch.buildParams(contentToShip, selectedVariant, target)
+	params, applied, err := dispatch.buildParams(contentToShip, selectedVariant, target)
 	if err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusUnprocessableEntity, Code: "bad_proposal_target", Message: err.Error()}
 	}
+	_ = applied // Task 6 wires this into the success-path UPDATE
 
 	// Race-hardening: claim the issue by flipping it to in_progress before
 	// invoking PEP. RowsAffected==1 means we won; ==0 means another approver
