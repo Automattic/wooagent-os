@@ -30,6 +30,7 @@ import {
   api,
 } from './api/client';
 import { useIsMobile } from './lib/useMediaQuery';
+import { AskAgentProvider } from './lib/askAgent';
 
 // Mirror of AUTH_NOTICE_FLAG in api/client.ts. Kept inline (rather than
 // imported) because the flag is a private state-machine detail of the
@@ -248,7 +249,7 @@ export default function App() {
   })();
 
   return (
-    <>
+    <AskAgentProvider>
       {authExpired && <AuthExpiredModal />}
       <Shell>
       {(drawer) => (
@@ -553,7 +554,7 @@ export default function App() {
         </>
       )}
     </Shell>
-    </>
+    </AskAgentProvider>
   );
 }
 
