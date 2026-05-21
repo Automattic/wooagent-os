@@ -13,6 +13,7 @@ import {
   type Connection,
 } from '../../api/client';
 import { useAskAgentContextGetter } from '../../lib/askAgent';
+import { useAskAgentThinking } from '../../lib/useAskAgentThinking';
 
 interface Props {
   isOpen: boolean;
@@ -66,6 +67,13 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
 
   const messages = threads[activeAgent];
   const isLoading = loadingAgent === activeAgent;
+
+  // SSE-driven mid-flight progress for slow tools (Pricing's
+  // web_search benchmark in particular). The hook opens an EventSource
+  // when isLoading transitions true and closes when it goes false.
+  // Events are surfaced as a transient ThinkingBlock between the last
+  // user turn and the assistant reply.
+  const thinking = useAskAgentThinking(connection, threadId, isLoading);
 
   // Focus the input when the drawer opens.
   useEffect(() => {
@@ -178,6 +186,8 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
         <ChatThread
           messages={messages}
           isLoading={isLoading}
+          thinking={thinking}
+          connection={connection}
           onChipNavigated={onClose}
         />
 
