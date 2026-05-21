@@ -6,6 +6,7 @@ import { Page } from '@wordpress/admin-ui';
 import {
   ApiError,
   api,
+  isReversibleProposalType,
   messageProposalFromProposal,
   priceProposalFromProposal,
   variantsFromProposal,
@@ -771,6 +772,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           busy={busy as 'approve' | 'reject' | null}
           disabled={!reviewable || !proposal}
           selectedVariantId={activeVariant?.id ?? null}
+          reversible={isReversibleProposalType(proposal?.type)}
           onApprove={onApprove}
           onReject={onReject}
           onCancel={() => nav('/')}
@@ -1134,6 +1136,7 @@ function PriceIssueView(props: PriceViewProps) {
           busy={props.busy as 'approve' | 'reject' | null}
           disabled={!props.reviewable}
           priceSummary={summary}
+          reversible
           onApprove={props.onApprove}
           onReject={props.onReject}
           onCancel={props.onCancel}

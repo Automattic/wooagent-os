@@ -343,6 +343,20 @@ export interface Proposal {
   };
 }
 
+// Mirrors daemon/internal/httpapi/handlers_undo.go's undoableProposalTypes
+// map. Used by the "Reversible · always" badge to decide whether to show
+// up at all — proposal types whose approve path returns an empty
+// applied_value (cold-draft, customer-reply) can't be reversed and the
+// badge would mislead. Keep in lockstep with the daemon allowlist when
+// new proposal types ship with undo support.
+export function isReversibleProposalType(
+  type: string | undefined | null,
+): boolean {
+  return (
+    type === 'product_description_rewrite' || type === 'product_price_change'
+  );
+}
+
 // Pull a typed variants list out of proposal.target.variants. Returns null
 // when the proposal is single-shot (no variants array). Filters out
 // malformed entries so the UI never has to defensively check shape.
