@@ -257,10 +257,13 @@ func draftForProduct(
 		return personas.Drafted{}, fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
 	}
 
-	regularPriceStr := strconv.FormatFloat(out.ProposedPrice, 'f', 2, 64)
-	title := fmt.Sprintf("Price change · %s · %s%.2f → %s%.2f (%+.1f%%)",
+	saleSuffix := ""
+	if targetField == "sale_price" {
+		saleSuffix = " (sale)"
+	}
+	title := fmt.Sprintf("Price change · %s · %s%.2f → %s%.2f (%+.1f%%)%s",
 		p.Name, currencySymbol(currency), out.PreviousPrice,
-		currencySymbol(currency), out.ProposedPrice, out.PercentChange)
+		currencySymbol(currency), out.ProposedPrice, out.PercentChange, saleSuffix)
 
 	return personas.Drafted{
 		Title: title,
@@ -273,23 +276,7 @@ func draftForProduct(
 		ProposalContent: out.Rationale,
 		// Belt over the existing product_id Cooldown.
 		DedupKey: fmt.Sprintf("product:%d", p.ID),
-		Target: map[string]any{
-			"product_id":      p.ID,
-			"product_name":    p.Name,
-			"product_sku":     p.SKU,
-			"image_url":       p.ImageURL,
-			"image_alt":       p.ImageAlt,
-			"currency":        currency,
-			"previous_price":  out.PreviousPrice,
-			"proposed_price":  out.ProposedPrice,
-			"regular_price":   regularPriceStr,
-			"percent_change":  out.PercentChange,
-			"direction":       out.Direction,
-			"observed_median": out.ObservedMedian,
-			"observed_low":    out.ObservedLow,
-			"observed_high":   out.ObservedHigh,
-			"sources":         out.Sources,
-		},
+		Target:   buildPricingTarget(p, out, currency, targetField),
 	}, nil
 }
 
@@ -556,6 +543,52 @@ func packAsBatch(drafts []personas.Drafted, category string) personas.Drafted {
 	)
 	primary.BatchIntent = "pricing_bulk"
 	return primary
+}
+
+// buildPricingTarget composes the proposal.target payload for a product
+// price change. target_field discriminates which Woo field the dispatcher
+// will write into ("regular_price" or "sale_price"); the "regular_price"
+// key in the target carries the decimal string to write into that field
+// (name kept for back-compat with existing in-flight proposals — the
+// dispatcher reads this key regardless of which field it writes into).
+// regular_price_observed / sale_price_observed snapshot the product's
+// current values so the UI can render "regular $39 unchanged" alongside
+// the sale-price delta.
+func buildPricingTarget(p product, out proposalOut, currency, targetField string) map[string]any {
+	t := map[string]any{
+		"product_id":             p.ID,
+		"product_name":           p.Name,
+		"product_sku":            p.SKU,
+		"image_url":              p.ImageURL,
+		"image_alt":              p.ImageAlt,
+		"currency":               currency,
+		"previous_price":         out.PreviousPrice,
+		"proposed_price":         out.ProposedPrice,
+		"regular_price":          strconv.FormatFloat(out.ProposedPrice, 'f', 2, 64),
+		"target_field":           targetField,
+		"regular_price_observed": canonDecimal(p.RegularPrice),
+		"percent_change":         out.PercentChange,
+		"direction":              out.Direction,
+		"observed_median":        out.ObservedMedian,
+		"observed_low":           out.ObservedLow,
+		"observed_high":          out.ObservedHigh,
+		"sources":                out.Sources,
+	}
+	if s := canonDecimal(p.SalePrice); s != "" {
+		t["sale_price_observed"] = s
+	}
+	return t
+}
+
+// canonDecimal returns s parsed as float and reformatted to 2dp. Empty/
+// invalid/zero/negative input returns "" (the caller treats "" as "no
+// sale_price set" so we can omit the key entirely).
+func canonDecimal(s string) string {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || v <= 0 {
+		return ""
+	}
+	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 
 // ---------------------------------------------------------------- Anthropic
