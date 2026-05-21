@@ -58,23 +58,44 @@ func TestApproveDispatch_ProductPriceChange_BuildParamsShape(t *testing.T) {
 	cases := []struct {
 		name      string
 		target    map[string]any
+		wantField string // which key the dispatch writes into; default regular_price
 		wantPrice string
 		wantErr   bool
 	}{
 		{
-			name:      "string price preserved",
+			name:      "string price preserved (default target_field)",
 			target:    map[string]any{"product_id": 821, "regular_price": "29.99"},
+			wantField: "regular_price",
 			wantPrice: "29.99",
 		},
 		{
 			name:      "float price canonicalised to 2dp",
 			target:    map[string]any{"product_id": 821, "regular_price": 29.9},
+			wantField: "regular_price",
 			wantPrice: "29.90",
 		},
 		{
 			name:      "int price canonicalised",
 			target:    map[string]any{"product_id": 821, "regular_price": 30},
+			wantField: "regular_price",
 			wantPrice: "30.00",
+		},
+		{
+			name:      "explicit target_field=regular_price",
+			target:    map[string]any{"product_id": 821, "regular_price": "29.99", "target_field": "regular_price"},
+			wantField: "regular_price",
+			wantPrice: "29.99",
+		},
+		{
+			name:      "target_field=sale_price writes sale_price",
+			target:    map[string]any{"product_id": 821, "regular_price": "40.00", "target_field": "sale_price"},
+			wantField: "sale_price",
+			wantPrice: "40.00",
+		},
+		{
+			name:    "invalid target_field rejected",
+			target:  map[string]any{"product_id": 821, "regular_price": "29.99", "target_field": "msrp"},
+			wantErr: true,
 		},
 		{
 			name:    "zero price rejected",
@@ -112,8 +133,16 @@ func TestApproveDispatch_ProductPriceChange_BuildParamsShape(t *testing.T) {
 			if params["id"] != 821 {
 				t.Errorf("id = %v, want 821", params["id"])
 			}
-			if got := params["regular_price"]; got != tc.wantPrice {
-				t.Errorf("regular_price = %q, want %q", got, tc.wantPrice)
+			if got := params[tc.wantField]; got != tc.wantPrice {
+				t.Errorf("params[%q] = %q, want %q", tc.wantField, got, tc.wantPrice)
+			}
+			// Only the chosen field should be present, not both.
+			other := "regular_price"
+			if tc.wantField == "regular_price" {
+				other = "sale_price"
+			}
+			if _, present := params[other]; present {
+				t.Errorf("params should not carry %q when target_field=%q; got %v", other, tc.wantField, params)
 			}
 			if _, hasDesc := params["description"]; hasDesc {
 				t.Errorf("price-change params should NOT carry description; got %v", params)

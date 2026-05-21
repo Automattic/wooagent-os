@@ -559,8 +559,12 @@ var approveDispatchByType = map[string]approveDispatch{
 	// Pricing persona. proposal.content is the operator-facing rationale
 	// (sources cited, observed range, reasoning); the numeric payload lives
 	// in proposal.target.regular_price (decimal string — Woo's update path
-	// wants "19.99" not 19.99). Same MCP ability as the prose rewrite; the
-	// fields-shipped subset is the only difference.
+	// wants "19.99" not 19.99). target.target_field selects which Woo field
+	// receives the new value ("regular_price" or "sale_price"); the
+	// dispatcher reads target["regular_price"] as the decimal string to
+	// write regardless of which field it targets (key name kept for
+	// back-compat with in-flight proposals). Same MCP ability as the prose
+	// rewrite; the fields-shipped subset is the only difference.
 	"product_price_change": {
 		ability: "wooagent-products/update",
 		buildParams: func(_ string, _ map[string]any, target map[string]any) (map[string]any, string, error) {
@@ -568,14 +572,27 @@ var approveDispatchByType = map[string]approveDispatch{
 			if err != nil {
 				return nil, "", err
 			}
+			field := "regular_price"
+			if v, present := target["target_field"]; present {
+				s, ok := v.(string)
+				if !ok {
+					return nil, "", fmt.Errorf("target_field must be a string, got %T", v)
+				}
+				s = strings.TrimSpace(s)
+				switch s {
+				case "regular_price", "sale_price":
+					field = s
+				case "":
+					// back-compat: empty falls back to regular_price
+				default:
+					return nil, "", fmt.Errorf("invalid target_field %q (expected regular_price|sale_price)", s)
+				}
+			}
 			price, err := requireDecimalStringFromTarget(target, "regular_price")
 			if err != nil {
 				return nil, "", err
 			}
-			return map[string]any{
-				"id":            pid,
-				"regular_price": price,
-			}, price, nil
+			return map[string]any{"id": pid, field: price}, price, nil
 		},
 	},
 	// Sales Support persona. proposal.content is the message body (plain
