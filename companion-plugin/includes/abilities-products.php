@@ -314,7 +314,8 @@ function wooagent_companion_register_product_abilities(): void {
 					'updates'   => array(
 						'type'        => 'array',
 						'minItems'    => 1,
-						'description' => 'List of per-variation field changes.',
+						'maxItems'    => 100,
+						'description' => 'List of per-variation field changes. Cap matches the wooagent-products/list per_page ceiling.',
 						'items'       => array(
 							'type'       => 'object',
 							'properties' => array(
@@ -574,9 +575,30 @@ function wooagent_products_update_variations_bulk_execute( array $args ) {
 
 	$child_ids = array_map( 'intval', $parent->get_children() );
 
-	$updated = array();
+	$updated  = array();
+	$seen_ids = array();
 	foreach ( $args['updates'] as $idx => $update ) {
 		$variation_id = (int) $update['variation_id'];
+
+		// Reject duplicate variation_id within a single request. Two updates
+		// pointing at the same variation race themselves to the DB and produce
+		// a wasteful, confusing response.
+		if ( isset( $seen_ids[ $variation_id ] ) ) {
+			return new WP_Error(
+				'wooagent_duplicate_variation_id',
+				sprintf(
+					/* translators: %d: variation id */
+					__( 'Duplicate variation_id %d in updates array.', 'wooagent-companion' ),
+					$variation_id
+				),
+				array(
+					'status'         => 422,
+					'failed_at'      => $idx,
+					'updated_so_far' => $updated,
+				)
+			);
+		}
+		$seen_ids[ $variation_id ] = true;
 
 		// Belt: variation must belong to the named parent. Guards against a
 		// malformed proposal accidentally writing to an unrelated product.
@@ -641,14 +663,14 @@ function wooagent_products_update_variations_bulk_execute( array $args ) {
 
 		try {
 			$variation->save();
-		} catch ( Exception $e ) {
+		} catch ( \Throwable $e ) {
 			return new WP_Error(
 				'wooagent_variation_save_failed',
 				sprintf(
 					/* translators: 1: variation id, 2: error message */
 					__( 'Saving variation %1$d failed: %2$s', 'wooagent-companion' ),
 					$variation_id,
-					$e->getMessage()
+					substr( wp_strip_all_tags( (string) $e->getMessage() ), 0, 200 )
 				),
 				array(
 					'status'        => 500,
