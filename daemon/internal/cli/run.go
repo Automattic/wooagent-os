@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/scheduler"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/sweeper"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 
 	// Side-effect imports register the persona implementations. Adding a
@@ -162,6 +165,20 @@ func newRunCmd() *cobra.Command {
 			go srv.Abilities().RunAll(ctx)
 			srv.Abilities().SchedulePeriodic(ctx)
 
+			// 30-day TTL purge for dismissed issues (DSGWOO-1277). Runs
+			// once at startup then every 24h until shutdown. Override the
+			// window via WOOAGENT_DISMISS_TTL_DAYS (e.g., 0 for immediate
+			// during demos).
+			ttlDays := dismissTTLDays(cmd.OutOrStdout())
+			sw := &sweeper.Sweeper{
+				DB:    st.DB,
+				TTL:   time.Duration(ttlDays) * 24 * time.Hour,
+				Every: 24 * time.Hour,
+				Out:   cmd.OutOrStdout(),
+			}
+			go sw.Start(ctx)
+			fmt.Fprintf(cmd.OutOrStdout(), "→ sweeper: dismiss-TTL active (%d days; override via WOOAGENT_DISMISS_TTL_DAYS)\n", ttlDays)
+
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)
 			if mcpClient != nil {
@@ -280,6 +297,24 @@ func probeBindAddr(addr string) error {
 	}
 	_ = ln.Close()
 	return nil
+}
+
+// dismissTTLDays reads the override env var and returns a positive
+// integer day count. Falls back to the package default and logs a
+// warning when the var is set but doesn't parse. Zero is allowed (the
+// demo / dogfood escape hatch).
+func dismissTTLDays(out io.Writer) int {
+	const defaultDays = 30
+	raw := os.Getenv("WOOAGENT_DISMISS_TTL_DAYS")
+	if raw == "" {
+		return defaultDays
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		fmt.Fprintf(out, "→ sweeper: ignoring invalid WOOAGENT_DISMISS_TTL_DAYS=%q; using default %d\n", raw, defaultDays)
+		return defaultDays
+	}
+	return n
 }
 
 // portFromAddr extracts the port suffix from a host:port string, falling
