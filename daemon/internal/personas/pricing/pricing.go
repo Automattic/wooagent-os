@@ -377,7 +377,7 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{})
 	}
 	return 0, fmt.Errorf("no priceable products in first %d (%s); "+
 		"approved proposals cool down for 7d, dismissed for 30d; "+
-		"set a regular_price on a simple product in wp-admin or pass PERSONA_PRODUCT_ID=<id>",
+		"ensure at least one published product has a regular_price (or add a variable product), or pass PERSONA_PRODUCT_ID=<id>",
 		len(summaries), ferr.Error())
 }
 
