@@ -5,6 +5,8 @@ import { plus } from '@wordpress/icons';
 import { Page } from '@wordpress/admin-ui';
 import { api, type Connection, type ModelProvider } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
+import { useAskAgentContext } from '../lib/askAgent';
+import { modelProviderToVisible } from '../lib/visibleItems';
 
 interface Props {
   connection: Connection;
@@ -39,6 +41,14 @@ function relativeTime(iso?: string): string {
 export default function Models({ connection, onAskAgent }: Props) {
   const [providers, setProviders] = useState<ModelProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'models',
+      visible_items: (providers ?? []).map(modelProviderToVisible),
+    }),
+    [providers],
+  );
 
   useEffect(() => {
     let cancelled = false;

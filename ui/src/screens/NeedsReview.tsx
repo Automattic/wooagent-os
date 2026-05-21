@@ -17,6 +17,8 @@ import {
   relativeTime,
   type BoardItem,
 } from '../lib/boardItems';
+import { useAskAgentContext } from '../lib/askAgent';
+import { batchToVisible, issueToVisible } from '../lib/visibleItems';
 
 interface Props {
   issues: Issue[] | null;
@@ -235,6 +237,22 @@ export default function NeedsReview({
   // filter on first mount. Subsequent user changes to the filter live
   // in DataViews state and don't write back to the URL.
   const [view, setView] = useState<View>(() => buildDefaultView(initialPersona));
+
+  // Publish current visible items + page tag for the Ask Agent drawer
+  // (DSGWOO-1348 B4). Includes both standalone in-review issues and
+  // batches (which collapse multiple issues into one row).
+  useAskAgentContext(
+    () => ({
+      page: 'needs-review',
+      visible_items: [
+        ...(issues ?? [])
+          .filter((i) => i.status === 'in_review')
+          .map(issueToVisible),
+        ...batches.filter((b) => b.pending > 0).map(batchToVisible),
+      ],
+    }),
+    [issues, batches],
+  );
 
   // Toast handoff from IssueDetail / BatchReview (same pattern as the old
   // Kanban): read once, then clear history state so refresh doesn't repeat.

@@ -16,6 +16,8 @@ import {
   type Connection,
 } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
+import { useAskAgentContext } from '../lib/askAgent';
+import { abilityToVisible } from '../lib/visibleItems';
 
 interface Props {
   connection: Connection | null;
@@ -354,6 +356,14 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   const [revokeBusy, setRevokeBusy] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'abilities',
+      visible_items: (abilities ?? []).map(abilityToVisible),
+    }),
+    [abilities],
+  );
 
   useEffect(() => {
     if (!restoreError) return;

@@ -3,6 +3,7 @@ import { Card, Stack, Text } from '@wordpress/ui';
 import { Button } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import PageGlobalActions from '../components/PageGlobalActions';
+import { useAskAgentContext } from '../lib/askAgent';
 
 interface Props {
   area: string;
@@ -22,6 +23,10 @@ export default function Placeholder({
   onAskAgent,
 }: Props) {
   const nav = useNavigate();
+  useAskAgentContext(
+    () => ({ page: `placeholder:${area}`, visible_items: [] }),
+    [area],
+  );
   return (
     <Page
       title={area}
