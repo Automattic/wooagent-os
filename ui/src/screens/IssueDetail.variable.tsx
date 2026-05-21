@@ -72,10 +72,10 @@ export function VariablePriceIssueView(props: VariableViewProps) {
   const isReversible = isDone && !isArchived;
 
   return (
-    <Stack gap="xl">
+    <Stack direction="column" gap="xl">
       <Card.Root>
         <Card.Header>
-          <Stack gap="md">
+          <Stack direction="column" gap="md">
             <Text
               variant="body-md"
               style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
@@ -102,7 +102,7 @@ export function VariablePriceIssueView(props: VariableViewProps) {
               value={`${formatPrice(proposal.proposedPriceMin, currency)} – ${formatPrice(proposal.proposedPriceMax, currency)}`}
             />
             {isReversible && (
-              <Stack gap="xs">
+              <Stack direction="column" gap="xs">
                 <Text
                   variant="body-sm"
                   style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
@@ -126,10 +126,10 @@ export function VariablePriceIssueView(props: VariableViewProps) {
           </Text>
         </Card.Header>
         <Card.Content>
-          <Stack gap="md">
+          <Stack direction="column" gap="md">
             <Text variant="body-md">{rationale}</Text>
             {proposal.sources.length > 0 && (
-              <Stack gap="sm">
+              <Stack direction="column" gap="sm">
                 {proposal.sources.map((s) => (
                   <Stack key={s.url} direction="row" gap="sm" align="center">
                     <Text variant="body-sm">
@@ -154,7 +154,7 @@ export function VariablePriceIssueView(props: VariableViewProps) {
           </Text>
         </Card.Header>
         <Card.Content>
-          <Stack gap="sm">
+          <Stack direction="column" gap="sm">
             {proposal.variations.map((v) => (
               <VariationRow key={v.variationId} variation={v} currency={currency} />
             ))}
@@ -245,7 +245,7 @@ export function VariablePriceIssueView(props: VariableViewProps) {
 
 function KpiTile({ label, value }: { label: string; value: string }) {
   return (
-    <Stack gap="xs">
+    <Stack direction="column" gap="xs">
       <Text
         variant="body-sm"
         style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
@@ -326,7 +326,7 @@ function VariationRow({
           </Stack>
         </Stack>
         {expanded && (
-          <Stack gap="sm" style={{ marginTop: 'var(--wpds-dimension-gap-sm)' }}>
+          <Stack direction="column" gap="sm" style={{ marginTop: 'var(--wpds-dimension-gap-sm)' }}>
             <Text
               variant="body-sm"
               style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
