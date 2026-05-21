@@ -693,13 +693,18 @@ export interface AskReference {
   state?: string;
 }
 
-/** Receipt for a `dispatch_persona` tool call. The proposal already
- *  exists on the board in "working" state when this message arrives;
- *  the chip in the UI shows "Working" until the persona run completes
- *  and the proposal title is filled in. */
+/** Receipt for a `dispatch_persona` tool call. Carries the id of the
+ *  persona run the daemon enqueued — the chip in the UI shows
+ *  "Working" until the run completes, then links to the resulting
+ *  proposal on the board (separate render path, no chip mutation).
+ *
+ *  Note: the field is `run_id`, not `proposal_id`. The dispatch tool
+ *  doesn't create a placeholder Issue at enqueue time; the chat
+ *  references the run while it's in flight and the operator sees the
+ *  resulting proposal land on the board through the existing feed. */
 export interface AskDispatched {
   persona: string;
-  proposal_id: string;
+  run_id: string;
   eta_seconds: number;
 }
 

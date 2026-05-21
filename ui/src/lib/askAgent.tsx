@@ -110,3 +110,15 @@ export function useAskAgentContextSnapshot(): PageContext {
   if (!provider) return EMPTY;
   return provider.ref.current;
 }
+
+/** Return a getter that yields the current page context when invoked.
+ *  Use this over useAskAgentContextSnapshot when the value is needed
+ *  inside an event handler or async callback that fires after render —
+ *  the returned closure reads ref.current at call time, so it always
+ *  sees the most recent screen's context, not a stale render-time
+ *  snapshot. The function identity is stable across renders. */
+export function useAskAgentContextGetter(): () => PageContext {
+  const provider = useContext(AskAgentContext);
+  if (!provider) return () => EMPTY;
+  return () => provider.ref.current;
+}

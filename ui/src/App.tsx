@@ -220,7 +220,6 @@ export default function App() {
   ).length;
   const batchesInReview = batches.filter((b) => b.pending > 0).length;
   const inReview = standaloneInReview + batchesInReview;
-  const askAgentContext = `Needs review · ${inReview} item${inReview === 1 ? '' : 's'}`;
 
   // Resolve which Inbox section LeftNav should highlight when on a detail
   // page (/issues/:id or /batches/:id). The entity's status carries this:
@@ -299,7 +298,7 @@ export default function App() {
             <AskAgentDrawer
               isOpen={askAgentOpen}
               onClose={() => setAskAgentOpen(false)}
-              contextLabel={askAgentContext}
+              connection={connection}
             />
         <Routes>
           <Route path="/" element={<Navigate to="/needs-review" replace />} />
