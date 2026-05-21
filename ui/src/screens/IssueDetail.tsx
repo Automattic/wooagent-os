@@ -9,7 +9,6 @@ import {
   isReversibleProposalType,
   messageProposalFromProposal,
   priceProposalFromProposal,
-  variablePriceProposalFromProposal,
   variantsFromProposal,
   type Connection,
   type DismissReason,
@@ -19,7 +18,6 @@ import {
   type Proposal,
   type Variant,
 } from '../api/client';
-import { VariablePriceIssueView } from './IssueDetail.variable';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAskAgentContext } from '../lib/askAgent';
 import { issueToVisible } from '../lib/visibleItems';
@@ -217,14 +215,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         let displayCurrent = rawCurrent;
         if (rawCurrent) {
           const proposalType = data?.proposal?.type;
-          if (proposalType === 'product_price_change_variable') {
-            const parsed = parseFloat(rawCurrent);
-            if (Number.isFinite(parsed)) {
-              const vp = variablePriceProposalFromProposal(data?.proposal);
-              const currency = vp?.currency ?? 'USD';
-              displayCurrent = formatPrice(parsed, currency);
-            }
-          } else if (proposalType === 'product_price_change') {
+          if (proposalType === 'product_price_change') {
             const parsed = parseFloat(rawCurrent);
             if (Number.isFinite(parsed)) {
               const priceProposal = priceProposalFromProposal(data?.proposal);
@@ -306,39 +297,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       busy={busy === 'reject'}
     />
   );
-
-  const variablePriceProposal = variablePriceProposalFromProposal(proposal);
-  if (variablePriceProposal !== null) {
-    return (
-      <>
-        <VariablePriceIssueView
-          issue={issue}
-          proposal={variablePriceProposal}
-          rawProposal={proposal}
-          rationale={proposal?.content ?? ''}
-          personaLabel={personaLabel}
-          actionMsg={
-            actionMsg
-              ? { kind: actionMsg.kind === 'error' ? 'error' : 'info', text: actionMsg.text }
-              : null
-          }
-          undoStale={undoStale !== null}
-          busy={busy}
-          reviewable={reviewable}
-          isDone={isDone}
-          isArchived={isArchived}
-          connection={connection}
-          onApprove={onApprove}
-          onReject={onReject}
-          onCancel={() => nav('/')}
-          onUndo={handleUndo}
-          onView={() => nav('/')}
-          onAskAgent={onAskAgent}
-        />
-        {dismissDialog}
-      </>
-    );
-  }
 
   const priceProposal = priceProposalFromProposal(proposal);
   if (priceProposal !== null) {
