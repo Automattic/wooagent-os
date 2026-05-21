@@ -302,11 +302,16 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     void fetchAgents(signal);
   };
 
-  // Run-now state: tracks which persona is being triggered (busy) and the
+  // Run-now state: tracks which persona is in flight (busy) and the
   // per-persona outcome surfaced after a non-success terminal status. Skips
   // (daemon said "won't seed right now") are an info-level outcome, not an
   // error; failures (request threw, run.status=failed) are error-level.
-  const [runBusy, setRunBusy] = useState<string | null>(null);
+  // Carries the runId so the inline Cancel-run button has a target.
+  const [runBusy, setRunBusy] = useState<{
+    persona: string;
+    runId: string;
+  } | null>(null);
+  const [cancelBusy, setCancelBusy] = useState<string | null>(null);
   const [runOutcomes, setRunOutcomes] = useState<
     Record<string, { message: string; isSkip: boolean }>
   >({});
@@ -367,7 +372,6 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   const handleRunNow = useCallback(
     async (persona: Persona) => {
       if (!isOperable(persona)) return;
-      setRunBusy(persona.persona);
       setRunOutcomes((prev) => {
         const next = { ...prev };
         delete next[persona.persona];
@@ -393,6 +397,7 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         setRunBusy(null);
         return;
       }
+      setRunBusy({ persona: persona.persona, runId });
 
       // Poll the run until terminal. Pricing routinely takes 30-60s
       // (web_search across retailers); a 2s cadence keeps the perceived
@@ -451,6 +456,33 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
     [connection, onChanged],
   );
 
+  // Cancels the in-flight run for a persona. The endpoint marks the row
+  // failed_permanent; the polling loop in handleRunNow detects that
+  // terminal status on its next tick (≤2s) and surfaces the cancel reason
+  // as an outcome — no separate cleanup path needed here.
+  const handleCancelRun = useCallback(
+    async (personaSlug: string, runId: string) => {
+      setCancelBusy(personaSlug);
+      try {
+        await api.runs.cancel(connection, runId);
+      } catch (e) {
+        const msg =
+          e instanceof ApiError
+            ? `${e.code}: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        setRunOutcomes((prev) => ({
+          ...prev,
+          [personaSlug]: { message: `Cancel failed: ${msg}`, isSkip: false },
+        }));
+      } finally {
+        setCancelBusy(null);
+      }
+    },
+    [connection],
+  );
+
   const fields = useMemo<Field<Persona>[]>(
     () => [
       {
@@ -492,14 +524,38 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         getValue: () => '',
         render: ({ item }) => {
           if (!isOperable(item)) return null;
-          const isBusy = runBusy === item.persona;
+          const inFlight =
+            runBusy?.persona === item.persona ? runBusy.runId : null;
+          const isCancelling = cancelBusy === item.persona;
+          if (inFlight) {
+            return (
+              <NoRowClick>
+                <Button
+                  variant="secondary"
+                  __next40pxDefaultSize
+                  isDestructive
+                  disabled={isCancelling}
+                  isBusy={isCancelling}
+                  onClick={() => void handleCancelRun(item.persona, inFlight)}
+                >
+                  <Stack direction="row" gap="xs" align="center">
+                    {/* CUSTOM: @wordpress/components Spinner ships with a
+                        legacy admin-bar margin (5px 11px 0 0) that pushes
+                        it low + adds dead space inside the button. Zero
+                        it out so Stack's align="center" + gap="xs" govern
+                        the layout. Tracked: DESIGN.md anti-rolls. */}
+                    <Spinner style={{ margin: 0 }} />
+                    <span>Cancel run</span>
+                  </Stack>
+                </Button>
+              </NoRowClick>
+            );
+          }
           return (
             <NoRowClick>
               <Button
                 variant="secondary"
                 __next40pxDefaultSize
-                isBusy={isBusy}
-                disabled={isBusy}
                 onClick={() => void handleRunNow(item)}
               >
                 Run now
@@ -509,7 +565,14 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         },
       },
     ],
-    [runBusy, handleRunNow, patchBusy, handleToggleEnabled],
+    [
+      runBusy,
+      cancelBusy,
+      handleRunNow,
+      handleCancelRun,
+      patchBusy,
+      handleToggleEnabled,
+    ],
   );
 
   // Row click drives the edit flow via `onClickItem`. The actions are also

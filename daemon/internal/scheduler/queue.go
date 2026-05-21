@@ -3,11 +3,20 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// ErrRunNotFound is returned by Cancel when no run with the given id exists.
+var ErrRunNotFound = errors.New("scheduler: run not found")
+
+// ErrRunNotCancellable is returned by Cancel when the run is already in a
+// terminal state (succeeded / skipped / failed / failed_permanent). The
+// operator can only cancel rows that are still queued or running.
+var ErrRunNotCancellable = errors.New("scheduler: run is already terminal")
 
 // Queue wraps the runs table. All scheduler DB access goes through here so
 // the worker and loop never write raw SQL.
@@ -146,6 +155,51 @@ func (q *Queue) MarkTerminal(ctx context.Context, p MarkTerminalParams) error {
 		return fmt.Errorf("bump last_run_at: %w", err)
 	}
 	return tx.Commit()
+}
+
+// Cancel transitions a queued or running row to failed_permanent with a
+// fixed failure_reason. Used by POST /v1/runs/:id/cancel to unstick rows
+// the worker abandoned mid-flight (or to abort a queued row before it
+// claims). Returns ErrRunNotFound / ErrRunNotCancellable on the obvious
+// failure cases so handlers can map to the right HTTP status.
+//
+// Does not bump agents.last_run_at — mirroring the orphan sweep on
+// startup. last_run_at is the timestamp of the last *legitimate* run;
+// leaving it alone means the persona becomes eligible for the next tick
+// (or a manual Run-now) immediately, which is what the operator wants
+// when cancelling a stuck row.
+//
+// Race note: the worker's MarkTerminal is unconditional and will overwrite
+// this status if a hung run finishes after the cancel lands. For the
+// "stuck row" use case this is acceptable — by definition we cancel rows
+// the worker is no longer making progress on.
+func (q *Queue) Cancel(ctx context.Context, id string) (*Run, error) {
+	now := q.Now().UTC().Format(time.RFC3339)
+	res, err := q.DB.ExecContext(ctx, `
+		UPDATE runs
+		   SET status = 'failed_permanent',
+		       completed_at = ?,
+		       failure_reason = 'cancelled by operator',
+		       failure_class = 'permanent'
+		 WHERE id = ? AND status IN ('queued', 'running')
+	`, now, id)
+	if err != nil {
+		return nil, fmt.Errorf("cancel: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 1 {
+		return q.Get(ctx, id)
+	}
+	// Zero rows updated — either the row doesn't exist or it's already
+	// terminal. One SELECT to distinguish.
+	existing, err := q.Get(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrRunNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cancel lookup: %w", err)
+	}
+	return existing, ErrRunNotCancellable
 }
 
 // --- helpers ---

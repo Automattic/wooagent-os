@@ -26,6 +26,7 @@ func newRunsTestRig(t *testing.T) (*Server, *httptest.Server, *store.Store) {
 	r.Get("/v1/runs", srv.handleListRuns)
 	r.Get("/v1/runs/{id}", srv.handleGetRun)
 	r.Post("/v1/runs", srv.handleCreateRun)
+	r.Post("/v1/runs/{id}/cancel", srv.handleCancelRun)
 
 	ts := httptest.NewServer(r)
 	t.Cleanup(ts.Close)
@@ -155,6 +156,104 @@ func TestGetRun_NotFound(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != 404 {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestCancelRun_HappyPath(t *testing.T) {
+	srv, ts, st := newRunsTestRig(t)
+	defer ts.Close()
+	srv.store.DB.SetMaxOpenConns(1)
+	sch := &scheduler.Scheduler{Store: srv.store, Now: time.Now}
+	_ = sch.Start(context.Background())
+	srv.SetScheduler(sch)
+
+	// Seed a running row directly so we don't race the worker.
+	fixed := time.Now().UTC().Format(time.RFC3339)
+	if _, err := st.DB.Exec(
+		`INSERT INTO runs(id, persona, trigger, status, scheduled_at, claimed_at, created_at)
+		 VALUES('r-stuck','marketing','tick','running',?,?,?)`,
+		fixed, fixed, fixed,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/v1/runs/r-stuck/cancel", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body struct {
+		Run scheduler.Run `json:"run"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Run.Status != scheduler.StatusFailedPermanent {
+		t.Errorf("status = %s, want failed_permanent", body.Run.Status)
+	}
+	if body.Run.FailureReason == nil || *body.Run.FailureReason != "cancelled by operator" {
+		t.Errorf("failure_reason = %v, want \"cancelled by operator\"", body.Run.FailureReason)
+	}
+}
+
+func TestCancelRun_NotFound(t *testing.T) {
+	srv, ts, _ := newRunsTestRig(t)
+	defer ts.Close()
+	srv.store.DB.SetMaxOpenConns(1)
+	sch := &scheduler.Scheduler{Store: srv.store, Now: time.Now}
+	_ = sch.Start(context.Background())
+	srv.SetScheduler(sch)
+
+	resp, err := http.Post(ts.URL+"/v1/runs/nope/cancel", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestCancelRun_AlreadyTerminal(t *testing.T) {
+	srv, ts, st := newRunsTestRig(t)
+	defer ts.Close()
+	srv.store.DB.SetMaxOpenConns(1)
+	sch := &scheduler.Scheduler{Store: srv.store, Now: time.Now}
+	_ = sch.Start(context.Background())
+	srv.SetScheduler(sch)
+
+	fixed := time.Now().UTC().Format(time.RFC3339)
+	if _, err := st.DB.Exec(
+		`INSERT INTO runs(id, persona, trigger, status, scheduled_at, completed_at, created_at)
+		 VALUES('r-done','marketing','tick','succeeded',?,?,?)`,
+		fixed, fixed, fixed,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/v1/runs/r-done/cancel", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 409 {
+		t.Errorf("status = %d, want 409", resp.StatusCode)
+	}
+}
+
+func TestCancelRun_NoScheduler_503(t *testing.T) {
+	_, ts, _ := newRunsTestRig(t)
+	defer ts.Close()
+	resp, err := http.Post(ts.URL+"/v1/runs/anything/cancel", "application/json", nil)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 503 {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
 	}
 }
 
