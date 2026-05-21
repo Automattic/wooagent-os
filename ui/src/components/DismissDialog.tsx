@@ -12,6 +12,14 @@ interface Props {
   /** Number of variants under the proposal. Drives the title pluralization
    *  ("Dismiss all variants?" vs "Dismiss this draft?"). */
   variantCount?: number;
+  /** Optional title override. When set, replaces the kind-based default —
+   *  used by the BatchReview dismiss flow where the subject is N products,
+   *  not a single proposal's variants. */
+  titleOverride?: string;
+  /** Optional body override. Pair with titleOverride for the batch case. */
+  bodyOverride?: string;
+  /** Optional confirm-button label override. Mirrors titleOverride. */
+  confirmLabelOverride?: string;
   onConfirm(payload: { reason: DismissReason; comment?: string }): void;
   /** True while the dismiss request is in-flight. Disables Confirm + Cancel. */
   busy?: boolean;
@@ -67,6 +75,9 @@ export default function DismissDialog({
   onOpenChange,
   persona,
   variantCount = 1,
+  titleOverride,
+  bodyOverride,
+  confirmLabelOverride,
   onConfirm,
   busy = false,
 }: Props) {
@@ -85,8 +96,8 @@ export default function DismissDialog({
   const kind = kindFromPersonaSlug(persona);
   const agentDisplay = persona ? PERSONA_DISPLAY[persona] ?? persona : 'Agent';
   const deletionDate = formatDeletionDate();
-  const title = titleFor(kind, variantCount);
-  const body = bodyFor(agentDisplay, kind);
+  const title = titleOverride ?? titleFor(kind, variantCount);
+  const body = bodyOverride ?? bodyFor(agentDisplay, kind);
 
   const handleConfirm = () => {
     if (!reason) return;
@@ -180,11 +191,10 @@ export default function DismissDialog({
           >
             {busy
               ? 'Dismissing…'
-              : variantCount > 1 &&
-                  kind !== 'price' &&
-                  kind !== 'message'
-                ? 'Dismiss all variants'
-                : 'Dismiss'}
+              : confirmLabelOverride ??
+                (variantCount > 1 && kind !== 'price' && kind !== 'message'
+                  ? 'Dismiss all variants'
+                  : 'Dismiss')}
           </Button>
         </Dialog.Footer>
       </Dialog.Popup>

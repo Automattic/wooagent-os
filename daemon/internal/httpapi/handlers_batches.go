@@ -408,9 +408,27 @@ func (s *Server) handleApproveBatch(w http.ResponseWriter, r *http.Request) {
 // bulk UPDATE; children that aren't in_review (already done/rejected) come
 // back as ok=false with code=wrong_status rather than failing the whole
 // batch. Always 200 — same best-effort shape as approve-all.
+//
+// Optional body: {"reason": "...", "comment": "..."}. When supplied (the UI
+// always sends one via the DismissDialog flow), the reason/comment are
+// persisted per child via dismiss_reason / dismiss_comment / dismissed_at —
+// mirroring single-issue dismiss so the Archive screen can render the same
+// chip + tooltip for batch-dismissed children. An empty body keeps the
+// pre-DSGWOO-1282 behavior so scripted callers don't break.
 func (s *Server) handleRejectBatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	batchID := chi.URLParam(r, "id")
+
+	var req struct {
+		Reason  string `json:"reason"`
+		Comment string `json:"comment,omitempty"`
+	}
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_body", err.Error())
+			return
+		}
+	}
 
 	var batchExists int
 	err := s.store.DB.QueryRowContext(ctx, `SELECT 1 FROM batches WHERE id = ?`, batchID).Scan(&batchExists)
@@ -456,12 +474,32 @@ func (s *Server) handleRejectBatch(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE issues SET status = 'rejected', updated_at = ? WHERE batch_id = ? AND status = 'in_review'`,
-		now, batchID,
-	); err != nil {
-		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
-		return
+	if req.Reason != "" {
+		var commentArg any
+		if req.Comment != "" {
+			commentArg = req.Comment
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE issues
+			 SET status = 'rejected',
+			     dismiss_reason = ?,
+			     dismiss_comment = ?,
+			     dismissed_at = ?,
+			     updated_at = ?
+			 WHERE batch_id = ? AND status = 'in_review'`,
+			req.Reason, commentArg, now, now, batchID,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE issues SET status = 'rejected', updated_at = ? WHERE batch_id = ? AND status = 'in_review'`,
+			now, batchID,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
