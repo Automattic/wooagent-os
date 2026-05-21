@@ -247,6 +247,56 @@ function wooagent_companion_register_product_abilities(): void {
 			),
 		)
 	);
+
+	wp_register_ability(
+		'wooagent-products/variations-list',
+		array(
+			'label'               => __( 'List product variations', 'wooagent-companion' ),
+			'description'         => __( 'List all enabled, priced variations of a variable product. Returns id, attribute label, regular_price, sale_price, and stock_status per variation.', 'wooagent-companion' ),
+			'input_schema'        => array(
+				'type'       => 'object',
+				'properties' => array(
+					'product_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => 'Variable parent product ID.',
+					),
+				),
+				'required'             => array( 'product_id' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'parent_id'  => array( 'type' => 'integer' ),
+					'variations' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'id'               => array( 'type' => 'integer' ),
+								'attributes_label' => array( 'type' => 'string', 'description' => 'Human-readable attribute summary, e.g., "Small / Blue".' ),
+								'regular_price'    => array( 'type' => 'string' ),
+								'sale_price'       => array( 'type' => 'string' ),
+								'stock_status'     => array( 'type' => 'string' ),
+								'menu_order'       => array( 'type' => 'integer' ),
+							),
+							'required'   => array( 'id', 'attributes_label', 'regular_price', 'stock_status' ),
+						),
+					),
+				),
+				'required'   => array( 'parent_id', 'variations' ),
+			),
+			'category'            => 'wooagent-products',
+			'execute_callback'    => 'wooagent_products_variations_list_execute',
+			'permission_callback' => 'wooagent_products_read_permission',
+			'meta'                => array(
+				'show_in_rest' => true,
+				'mcp'          => array( 'public' => true ),
+				'annotations'  => array( 'readonly' => true, 'idempotent' => true ),
+			),
+		)
+	);
 }
 
 function wooagent_products_read_permission(): bool {
@@ -374,6 +424,77 @@ function wooagent_products_get_execute( array $args ) {
 		'date_modified'     => $product->get_date_modified() ? $product->get_date_modified()->date( 'c' ) : '',
 		'image_url'         => $image_url,
 		'image_alt'         => $image_alt,
+	);
+}
+
+function wooagent_products_variations_list_execute( array $args ) {
+	$parent = wc_get_product( (int) $args['product_id'] );
+	if ( ! $parent ) {
+		return new WP_Error( 'wooagent_product_not_found', __( 'Product not found.', 'wooagent-companion' ), array( 'status' => 404 ) );
+	}
+	if ( ! $parent->is_type( 'variable' ) ) {
+		return new WP_Error( 'wooagent_not_variable_product', __( 'Product is not a variable product.', 'wooagent-companion' ), array( 'status' => 422 ) );
+	}
+
+	$variations = array();
+	foreach ( $parent->get_children() as $variation_id ) {
+		$variation = wc_get_product( (int) $variation_id );
+		if ( ! $variation || ! $variation->is_type( 'variation' ) ) {
+			continue;
+		}
+		// Skip disabled variations — Pricing should never propose changes
+		// to a variation that's not for sale.
+		if ( 'publish' !== $variation->get_status() ) {
+			continue;
+		}
+
+		// Build "Small / Blue" from attribute values. WC stores
+		// attribute keys as pa_size, pa_color, attribute_pa_size, etc.;
+		// get_variation_attributes() returns the keyed array.
+		$attribute_values = array();
+		foreach ( $variation->get_variation_attributes() as $key => $value ) {
+			if ( '' === $value ) {
+				continue;
+			}
+			// Strip 'attribute_' prefix; wc_attribute_label gives the
+			// display name for the taxonomy. Term names come from the
+			// variation value (which is a slug for global attributes).
+			$taxonomy = preg_replace( '/^attribute_/', '', $key );
+			$label    = '';
+			if ( taxonomy_exists( $taxonomy ) ) {
+				$term = get_term_by( 'slug', $value, $taxonomy );
+				if ( $term && ! is_wp_error( $term ) ) {
+					$label = $term->name;
+				}
+			}
+			if ( '' === $label ) {
+				$label = $value;
+			}
+			$attribute_values[] = $label;
+		}
+		$attributes_label = implode( ' / ', $attribute_values );
+
+		$variations[] = array(
+			'id'               => (int) $variation->get_id(),
+			'attributes_label' => $attributes_label,
+			'regular_price'    => (string) $variation->get_regular_price(),
+			'sale_price'       => (string) $variation->get_sale_price(),
+			'stock_status'     => (string) $variation->get_stock_status(),
+			'menu_order'       => (int) $variation->get_menu_order(),
+		);
+	}
+
+	// Sort by menu_order so the UI ordering is stable across requests.
+	usort(
+		$variations,
+		static function ( $a, $b ) {
+			return $a['menu_order'] <=> $b['menu_order'];
+		}
+	);
+
+	return array(
+		'parent_id'  => (int) $parent->get_id(),
+		'variations' => $variations,
 	);
 }
 
