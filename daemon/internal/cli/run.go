@@ -210,7 +210,7 @@ func newRunCmd() *cobra.Command {
 				// disabled (the cadence-mode personas keep working
 				// against their own API-key access path).
 				if env.AnthropicAPIKey != "" {
-					srv.SetAsk(buildAskConfig(env, st, sch))
+					srv.SetAsk(buildAskConfig(env, st, sch, mcpClient))
 				} else {
 					fmt.Fprintln(out, "→ ask: ANTHROPIC_API_KEY not set; /v1/ask disabled")
 				}
@@ -293,25 +293,59 @@ func portFromAddr(addr string) string {
 	return port
 }
 
-// buildAskConfig wires the Ask Agent drawer dependencies (DSGWOO-1348).
+// buildAskConfig wires the Ask Agent drawer dependencies (DSGWOO-1347).
 // Called from the `run` command after the scheduler has started, when
-// the Anthropic API key is set in env. CoS is the only chat-mode agent
-// registered today; the three specialist agents land under task A2 and
-// add themselves alongside CoS.
-func buildAskConfig(env personas.Env, st *store.Store, sch *scheduler.Scheduler) httpapi.AskConfig {
+// the Anthropic API key is set in env. Registers all four live
+// chat-mode agents — Chief of Staff (CoS) plus the three specialists
+// (Marketing, Pricing, Sales Support). MCP-backed tools (list_products,
+// get_product, list_orders, get_order) skip registration when mcpClient
+// is nil; the agents still load but those reads will return "MCP not
+// configured" if invoked. The picker's disabled Inventory / Accounting /
+// Reporting entries have no daemon-side equivalent — they're handled
+// entirely client-side via the picker's disabled state.
+func buildAskConfig(env personas.Env, st *store.Store, sch *scheduler.Scheduler, mcpClient *mcp.Client) httpapi.AskConfig {
 	client := anthropic.New(env.AnthropicAPIKey, askModel(env))
 
-	cosTools := []anthropic.ToolHandler{
+	// Shared read tools — same handlers across every agent. Each agent's
+	// prompt narrows scope ("your past work") so the doc-strings stay
+	// agent-agnostic and the model only sees the slice it should care
+	// about. Cheaper than four near-duplicate handler types per persona.
+	sharedReads := []anthropic.ToolHandler{
 		&asktools.ListProposalsTool{DB: st.DB},
 		&asktools.GetProposalTool{DB: st.DB},
 		&asktools.ListRunsTool{DB: st.DB},
 		&asktools.GetRunTool{DB: st.DB},
 		&asktools.ListAgentsTool{DB: st.DB},
-		&asktools.DispatchTool{
-			Enqueue: sch.EnqueueOperatorAsked,
-			Limiter: asktools.DefaultRateLimiter(),
-		},
 	}
+
+	cosTools := append([]anthropic.ToolHandler{}, sharedReads...)
+	cosTools = append(cosTools, &asktools.DispatchTool{
+		Enqueue: sch.EnqueueOperatorAsked,
+		Limiter: asktools.DefaultRateLimiter(),
+	})
+
+	marketingTools := append([]anthropic.ToolHandler{}, sharedReads...)
+	marketingTools = append(marketingTools,
+		&asktools.ListProductsTool{MCP: mcpClient},
+		&asktools.GetProductTool{MCP: mcpClient},
+		&asktools.ProduceDescriptionRewriteTool{DB: st.DB},
+		&asktools.ProduceSocialPostTool{DB: st.DB},
+		&asktools.ProduceLaunchCopyTool{DB: st.DB},
+	)
+
+	pricingTools := append([]anthropic.ToolHandler{}, sharedReads...)
+	pricingTools = append(pricingTools,
+		&asktools.ListProductsTool{MCP: mcpClient},
+		&asktools.GetProductTool{MCP: mcpClient},
+		&asktools.ProduceRecommendationTool{DB: st.DB},
+	)
+
+	salesSupportTools := append([]anthropic.ToolHandler{}, sharedReads...)
+	salesSupportTools = append(salesSupportTools,
+		&asktools.ListOrdersTool{MCP: mcpClient},
+		&asktools.GetOrderTool{MCP: mcpClient},
+		&asktools.ProduceReplyDraftTool{DB: st.DB},
+	)
 
 	return httpapi.AskConfig{
 		Client:  client,
@@ -320,6 +354,21 @@ func buildAskConfig(env personas.Env, st *store.Store, sch *scheduler.Scheduler)
 			ask.AgentChiefOfStaff: {
 				Prompt: agents.CoSPrompt,
 				Tools:  cosTools,
+			},
+			ask.AgentMarketing: {
+				Prompt: agents.MarketingPrompt,
+				Tools:  marketingTools,
+			},
+			ask.AgentPricing: {
+				Prompt: agents.PricingPrompt,
+				Tools:  pricingTools,
+				ServerTools: []anthropic.ToolDef{
+					asktools.WebSearchToolDef,
+				},
+			},
+			ask.AgentSalesSupport: {
+				Prompt: agents.SalesSupportPrompt,
+				Tools:  salesSupportTools,
 			},
 		},
 		GetStoreName: func(ctx context.Context) string {

@@ -26,6 +26,13 @@ type AskAgent struct {
 	// doesn't affect routing — the model picks by name — but matching
 	// Definitions() / Handlers() output keeps registration honest.
 	Tools []anthropic.ToolHandler
+	// ServerTools is the slot for Anthropic server-managed tools
+	// (currently just web_search_20250305 for Pricing). These are
+	// merged into the Tools array on the request but never dispatched
+	// to a local handler — Anthropic executes them server-side and
+	// returns results inline. Keep this empty for agents that don't
+	// use server tools.
+	ServerTools []anthropic.ToolDef
 }
 
 // AskConfig is the bundle of dependencies the /v1/ask handler needs.
@@ -110,6 +117,9 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	system := agentCfg.Prompt(storeName)
 
 	tools := anthropic.Definitions(agentCfg.Tools...)
+	if len(agentCfg.ServerTools) > 0 {
+		tools = append(tools, agentCfg.ServerTools...)
+	}
 	handlers := anthropic.Handlers(agentCfg.Tools...)
 
 	start := time.Now()
