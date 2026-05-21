@@ -10,6 +10,8 @@
 // :5173, hosted UI later), the token isn't there and the manual form takes
 // over via the localStorage fallback.
 
+import type { PageContext } from '../lib/askAgent';
+
 const STORAGE_KEY = 'wooagent.connection';
 const AUTH_RELOAD_FLAG = 'wooagent.authReloadAttempted';
 const AUTH_NOTICE_FLAG = 'wooagent.authNoticeReason';
@@ -672,6 +674,68 @@ export interface Ability {
   last_seen_at?: string;
 }
 
+// --- Ask Agent (DSGWOO-1348) -----------------------------------------------
+
+/** The set of agents the drawer can chat with. Phase 1 ships all four
+ *  as live agents (CoS default; Marketing / Pricing / Sales Support
+ *  selectable via the picker). Inventory / Accounting / Reporting are
+ *  intentionally absent — they appear disabled in the picker, never as
+ *  a valid `agent` value on the wire. */
+export type AskAgent = 'chief_of_staff' | 'marketing' | 'pricing' | 'sales-support';
+
+/** Structured reference returned by the daemon. The UI renders these
+ *  as clickable chips below the assistant message — NOT by parsing
+ *  `[proposal #1247]` syntax out of the prose. */
+export interface AskReference {
+  kind: 'proposal' | 'run' | 'agent';
+  id: string;
+  title: string;
+  state?: string;
+}
+
+/** Receipt for a `dispatch_persona` tool call. Carries the id of the
+ *  persona run the daemon enqueued — the chip in the UI shows
+ *  "Working" until the run completes, then links to the resulting
+ *  proposal on the board (separate render path, no chip mutation).
+ *
+ *  Note: the field is `run_id`, not `proposal_id`. The dispatch tool
+ *  doesn't create a placeholder Issue at enqueue time; the chat
+ *  references the run while it's in flight and the operator sees the
+ *  resulting proposal land on the board through the existing feed. */
+export interface AskDispatched {
+  persona: string;
+  run_id: string;
+  eta_seconds: number;
+}
+
+/** One turn in a chat thread. The wire shape is the same for what we
+ *  send (user) and what we receive (assistant) — the daemon decides
+ *  which fields are meaningful based on `role`.
+ *
+ *  - `page_context` is sent on user turns so the agent has situational
+ *    awareness about what the operator is looking at.
+ *  - `references` / `dispatched` appear on assistant turns only. */
+export interface AskMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  page_context?: PageContext;
+  references?: AskReference[];
+  dispatched?: AskDispatched[];
+}
+
+export interface AskRequest {
+  agent: AskAgent;
+  /** Opaque per-session id. The daemon keys per-agent thread state by
+   *  (operator, agent) so the thread id is currently informational —
+   *  reserved for the cross-session persistence follow-up. */
+  thread_id: string;
+  messages: AskMessage[];
+}
+
+export interface AskResponse {
+  message: AskMessage;
+}
+
 export const api = {
   health: (c: Connection) => request<Health>(c, '/v1/health'),
   agents: (c: Connection) => request<{ agents: Persona[] }>(c, '/v1/agents'),
@@ -801,4 +865,14 @@ export const api = {
     delete: (c: Connection, id: string) =>
       request<void>(c, `/v1/model-providers/${id}`, { method: 'DELETE' }),
   },
+  /** POST /v1/ask — one chat turn against the named agent. The caller
+   *  passes the full conversation history; the daemon keys per-agent
+   *  thread state by (operator, agent) and persists turns on its side
+   *  but we send the messages anyway so the UI is the source of truth
+   *  for what the model sees. */
+  ask: (c: Connection, body: AskRequest) =>
+    request<AskResponse>(c, '/v1/ask', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

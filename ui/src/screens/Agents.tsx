@@ -19,6 +19,8 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import { useAskAgentContext } from '../lib/askAgent';
+import { personaToVisible } from '../lib/visibleItems';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -261,6 +263,14 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
   // "View board" action navigates to /. Auto-dismisses via the WPDS
   // Snackbar default timeout; operator can also dismiss manually.
   const [toast, setToast] = useState<{ text: string } | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'agents',
+      visible_items: (personas ?? []).map(personaToVisible),
+    }),
+    [personas],
+  );
 
   const fetchAgents = useCallback(
     async (signal: { cancelled: boolean }) => {

@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { Page } from '@wordpress/admin-ui';
 import { api, type Connection, type Store } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
+import { useAskAgentContext } from '../lib/askAgent';
+import { storeToVisible } from '../lib/visibleItems';
 
 interface Props {
   connection: Connection;
@@ -24,6 +26,14 @@ export default function Stores({
   const [confirmStore, setConfirmStore] = useState<Store | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'stores',
+      visible_items: (stores ?? []).map(storeToVisible),
+    }),
+    [stores],
+  );
   const navigate = useNavigate();
 
   useEffect(() => {

@@ -7,6 +7,8 @@ import { api, type Connection, type Run } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
+import { useAskAgentContext } from '../lib/askAgent';
+import { runToVisible } from '../lib/visibleItems';
 
 const PAGE_SIZE = 50;
 
@@ -62,6 +64,14 @@ export default function Runs({ connection, onAskAgent }: Props) {
   const [paginated, setPaginated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useAskAgentContext(
+    () => ({
+      page: 'runs',
+      visible_items: (runs ?? []).map(runToVisible),
+    }),
+    [runs],
+  );
 
   const fetchFirstPage = useCallback(
     async (signal: { cancelled: boolean }) => {

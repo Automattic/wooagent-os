@@ -15,9 +15,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/ask"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/ask/agents"
+	asktools "github.com/wooagent-os/wooagent-os/daemon/internal/ask/tools"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/httpapi"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
@@ -199,6 +203,17 @@ func newRunCmd() *cobra.Command {
 					return fmt.Errorf("start scheduler: %w", err)
 				}
 				srv.SetScheduler(sch)
+
+				// Ask Agent drawer (DSGWOO-1348). Wires the /v1/ask
+				// handler if the Anthropic API key is configured;
+				// otherwise the route returns 503 and the chat is
+				// disabled (the cadence-mode personas keep working
+				// against their own API-key access path).
+				if env.AnthropicAPIKey != "" {
+					srv.SetAsk(buildAskConfig(env, st, sch))
+				} else {
+					fmt.Fprintln(out, "→ ask: ANTHROPIC_API_KEY not set; /v1/ask disabled")
+				}
 			}
 
 			return httpapi.Run(ctx, cfg.BindAddr, srv.Handler())
@@ -276,4 +291,75 @@ func portFromAddr(addr string) string {
 		return addr
 	}
 	return port
+}
+
+// buildAskConfig wires the Ask Agent drawer dependencies (DSGWOO-1348).
+// Called from the `run` command after the scheduler has started, when
+// the Anthropic API key is set in env. CoS is the only chat-mode agent
+// registered today; the three specialist agents land under task A2 and
+// add themselves alongside CoS.
+func buildAskConfig(env personas.Env, st *store.Store, sch *scheduler.Scheduler) httpapi.AskConfig {
+	client := anthropic.New(env.AnthropicAPIKey, askModel(env))
+
+	cosTools := []anthropic.ToolHandler{
+		&asktools.ListProposalsTool{DB: st.DB},
+		&asktools.GetProposalTool{DB: st.DB},
+		&asktools.ListRunsTool{DB: st.DB},
+		&asktools.GetRunTool{DB: st.DB},
+		&asktools.ListAgentsTool{DB: st.DB},
+		&asktools.DispatchTool{
+			Enqueue: sch.EnqueueOperatorAsked,
+			Limiter: asktools.DefaultRateLimiter(),
+		},
+	}
+
+	return httpapi.AskConfig{
+		Client:  client,
+		Threads: ask.NewThreadStore(0), // default cap (50)
+		Agents: map[ask.AgentSlug]httpapi.AskAgent{
+			ask.AgentChiefOfStaff: {
+				Prompt: agents.CoSPrompt,
+				Tools:  cosTools,
+			},
+		},
+		GetStoreName: func(ctx context.Context) string {
+			return lookupPairedStoreName(ctx, st)
+		},
+	}
+}
+
+// askModel picks the model the /v1/ask handler will use. Defaults to
+// Sonnet 4.6 (the model the CoS prompt was eval'd against). Operators
+// can override via ANTHROPIC_MODEL the same way the cadence personas
+// already do.
+func askModel(env personas.Env) string {
+	if env.AnthropicModel != "" {
+		return env.AnthropicModel
+	}
+	return "claude-sonnet-4-6"
+}
+
+// lookupPairedStoreName returns a short display name for the currently
+// paired store, used to template the {{store_name}} token in the CoS
+// system prompt. The stores table doesn't store a human name today
+// (DSGWOO-1348 scout finding) — derive it from the store URL host.
+// Returns empty string when no paired store is configured; the prompt
+// substitutes "the store" as a fallback.
+func lookupPairedStoreName(ctx context.Context, st *store.Store) string {
+	if st == nil || st.DB == nil {
+		return ""
+	}
+	var rawURL string
+	err := st.DB.QueryRowContext(ctx,
+		`SELECT url FROM stores WHERE status = 'paired' ORDER BY paired_at DESC LIMIT 1`,
+	).Scan(&rawURL)
+	if err != nil || rawURL == "" {
+		return ""
+	}
+	// Strip scheme + path; keep host. "https://store.example.com/wp-json" → "store.example.com".
+	s := strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+	if i := strings.IndexAny(s, "/?"); i >= 0 {
+		s = s[:i]
+	}
+	return s
 }
