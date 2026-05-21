@@ -825,7 +825,13 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         {/* Branch body on first child's proposal type. Marketing keeps the
             existing variant-accordion + Marketing KPI strip; pricing renders
             BatchProductCard rows with a pricing KPI strip. */}
-        {isPricingBatch ? renderPricingBody(data, counterStrip) : renderMarketingBody()}
+        {isPricingBatch
+          ? renderPricingBody(data, counterStrip, {
+              busy,
+              onApprove: approveRow,
+              onReject: rejectRow,
+            })
+          : renderMarketingBody()}
 
         {actionMsg && (
           <div style={{ marginTop: 'var(--wpds-dimension-gap-md)' }}>
@@ -983,11 +989,22 @@ function Counter({ label, value, tone }: CounterProps) {
 }
 
 // Pricing-shape body: KPI strip aggregated across the batch + counter
-// strip + a vertical list of BatchProductCards. Pure: no closure over
-// component state — the Approve / Reject wiring still flows through the
-// sticky action bar in the parent. The counter strip is passed in by
+// strip + a vertical list of BatchProductCards. Per-row Approve / Dismiss
+// callbacks come from the parent's batch-level state machine — the cards
+// render the buttons themselves but the network calls live in
+// approveRow / rejectRow in the parent. The counter strip is passed in by
 // the caller so the same JSX serves marketing and pricing bodies.
-function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
+interface PricingBodyHandlers {
+  busy: string | null;
+  onApprove: (issueId: string) => void;
+  onReject: (issueId: string) => void;
+}
+
+function renderPricingBody(
+  data: BatchDetail,
+  counterStrip: ReactNode,
+  handlers: PricingBodyHandlers,
+) {
   const products: BatchProduct[] = data.issues.map((iwp) => {
     const t = (iwp.proposal?.target ?? {}) as Record<string, unknown>;
     const direction: BatchProduct['direction'] =
@@ -995,6 +1012,8 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
         ? t.direction
         : 'flat';
     return {
+      issueId: iwp.issue.id,
+      status: iwp.issue.status,
       productId: typeof t.product_id === 'number' ? t.product_id : 0,
       sku: typeof t.product_sku === 'string' ? t.product_sku : '',
       name: typeof t.product_name === 'string' ? t.product_name : iwp.issue.title,
@@ -1009,6 +1028,11 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
       currency: typeof t.currency === 'string' ? t.currency : 'USD',
       rationale: iwp.proposal?.content ?? '',
       sources: Array.isArray(t.sources) ? (t.sources as PriceSource[]) : [],
+      observedLow: typeof t.observed_low === 'number' ? t.observed_low : undefined,
+      observedMedian:
+        typeof t.observed_median === 'number' ? t.observed_median : undefined,
+      observedHigh:
+        typeof t.observed_high === 'number' ? t.observed_high : undefined,
     };
   });
 
@@ -1083,10 +1107,14 @@ function renderPricingBody(data: BatchDetail, counterStrip: ReactNode) {
       <Stack direction="column" gap="sm">
         {products.map((p, idx) => (
           <BatchProductCard
-            key={p.productId || idx}
+            key={p.issueId || idx}
             product={p}
             defaultExpanded={idx === 0}
             hideRationaleAndSources={isVariableBatch}
+            busy={handlers.busy}
+            reviewable={p.status === 'in_review'}
+            onApprove={handlers.onApprove}
+            onReject={handlers.onReject}
           />
         ))}
       </Stack>
