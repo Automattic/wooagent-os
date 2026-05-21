@@ -174,6 +174,33 @@ func loadRetryChain(ctx context.Context, db *sql.DB, r *scheduler.Run) ([]schedu
 	return out, nil
 }
 
+// handleCancelRun: POST /v1/runs/:id/cancel
+//
+// Marks a queued or running row as failed_permanent so a stuck run no
+// longer blocks the persona's Loop.hasActiveRun gate. 404 if the row
+// doesn't exist; 409 if it's already terminal. Body: none.
+func (s *Server) handleCancelRun(w http.ResponseWriter, r *http.Request) {
+	if s.scheduler == nil {
+		writeError(w, http.StatusServiceUnavailable, "scheduler_unavailable", "scheduler not running")
+		return
+	}
+	id := chi.URLParam(r, "id")
+	run, err := s.scheduler.CancelRun(r.Context(), id)
+	if errors.Is(err, scheduler.ErrRunNotFound) {
+		writeError(w, http.StatusNotFound, "run_not_found", "no run with that id")
+		return
+	}
+	if errors.Is(err, scheduler.ErrRunNotCancellable) {
+		writeError(w, http.StatusConflict, "run_not_cancellable", "run is already in a terminal state")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "cancel_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": run})
+}
+
 // handleCreateRun: POST /v1/runs body: { "persona": "marketing" }
 func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	if s.scheduler == nil {

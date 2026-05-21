@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
-import { Spinner } from '@wordpress/components';
+import { Button, Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import {
+  ApiError,
   api,
   type Connection,
   type Run,
@@ -171,6 +172,30 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<RunDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const handleCancel = useCallback(async () => {
+    if (!id) return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const res = await api.runs.cancel(connection, id);
+      // Optimistically reflect the new terminal status in the header so the
+      // operator sees the cancel land before the next 2s poll tick.
+      setData((prev) => (prev ? { ...prev, run: res.run } : prev));
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? `${e.code}: ${e.message}`
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      setCancelError(msg);
+    } finally {
+      setCancelBusy(false);
+    }
+  }, [connection, id]);
 
   useAskAgentContext(
     () => ({
@@ -288,20 +313,48 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
     >
       <div className="wa-subpage-content">
       <Stack direction="column" gap="lg">
+        {cancelError && (
+          <Notice.Root intent="error">
+            <Notice.Description>Cancel failed: {cancelError}</Notice.Description>
+          </Notice.Root>
+        )}
+
         {/* Header card */}
         <Card.Root>
           <Card.Header>
-            <Stack direction="row" gap="sm" align="center">
-              <PersonaAvatar persona={personaKey} size="md" />
-              <Text
-                variant="body-sm"
-                style={{
-                  fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                }}
-              >
-                {personaDisplayName(run.persona)}
-              </Text>
-              <RunStatusBadge status={run.status} />
+            <Stack direction="row" gap="sm" align="center" justify="space-between">
+              <Stack direction="row" gap="sm" align="center">
+                <PersonaAvatar persona={personaKey} size="md" />
+                <Text
+                  variant="body-sm"
+                  style={{
+                    fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                  }}
+                >
+                  {personaDisplayName(run.persona)}
+                </Text>
+                <RunStatusBadge status={run.status} />
+              </Stack>
+              {(run.status === 'queued' || run.status === 'running') && (
+                <Button
+                  variant="secondary"
+                  __next40pxDefaultSize
+                  isDestructive
+                  disabled={cancelBusy}
+                  isBusy={cancelBusy}
+                  onClick={() => void handleCancel()}
+                >
+                  <Stack direction="row" gap="xs" align="center">
+                    {/* CUSTOM: @wordpress/components Spinner ships with a
+                        legacy admin-bar margin (5px 11px 0 0) that pushes
+                        it low + adds dead space inside the button. Zero
+                        it out so Stack's align="center" + gap="xs" govern
+                        the layout. */}
+                    <Spinner style={{ margin: 0 }} />
+                    <span>Cancel run</span>
+                  </Stack>
+                </Button>
+              )}
             </Stack>
           </Card.Header>
           <Card.Content>
