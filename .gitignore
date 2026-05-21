@@ -63,6 +63,7 @@ yarn-error.log*
 
 # Personal brainstorming/spec workspace (superpowers workflow)
 /docs/superpowers/
+/.superpowers/
 
 # Root-level plan/design/proposal/brief docs are scratch by default.
 # Tracked specs go in docs/specs/; tracked plans (if any) go in docs/plans/.
