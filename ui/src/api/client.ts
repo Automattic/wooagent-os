@@ -60,6 +60,11 @@ export function clearConnection(): void {
 }
 
 export class ApiError extends Error {
+  /** The decoded `error` object from the response body, when available.
+   *  Callers can read extra fields such as `current` from undo-stale (409)
+   *  responses without re-parsing the body. */
+  payload?: Record<string, unknown>;
+
   constructor(
     public status: number,
     public code: string,
@@ -120,16 +125,20 @@ async function request<T>(
   if (!res.ok) {
     let code = 'http_error';
     let message = `${res.status} ${res.statusText}`;
+    let errorPayload: Record<string, unknown> | undefined;
     try {
-      const payload = await res.json();
-      if (payload?.error) {
-        code = payload.error.code ?? code;
-        message = payload.error.message ?? message;
+      const body = await res.json();
+      if (body?.error) {
+        errorPayload = body.error as Record<string, unknown>;
+        code = (errorPayload.code as string) ?? code;
+        message = (errorPayload.message as string) ?? message;
       }
     } catch {
       /* body may not be JSON */
     }
-    throw new ApiError(res.status, code, message);
+    const err = new ApiError(res.status, code, message);
+    err.payload = errorPayload;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -252,6 +261,9 @@ export interface Issue {
   };
   created_at: string;
   updated_at: string;
+  /** Set by POST /v1/issues/:id/undo. When present, status stays 'done'
+   *  but the DoneBar should render the undone state instead of Undo. */
+  undone_at?: string;
 }
 
 export interface Batch {
@@ -399,6 +411,17 @@ export interface PriceProposal {
   observedMedian?: number;
   observedHigh?: number;
   sources: PriceSource[];
+  /** Which Woo field the approval writes into. Defaults to 'regular_price'
+   *  for backwards compat with proposals created before the sale-price
+   *  work landed. */
+  targetField: 'regular_price' | 'sale_price';
+  /** Snapshot of the product's regular_price at draft time (decimal
+   *  string). The UI renders this as the strike-through reference when
+   *  targetField=sale_price so the operator sees "regular $39 unchanged"
+   *  alongside the sale-price delta. */
+  regularPriceObserved?: string;
+  /** Snapshot of the product's sale_price at draft time, if any. */
+  salePriceObserved?: string;
 }
 
 export function priceProposalFromProposal(
@@ -433,6 +456,10 @@ export function priceProposalFromProposal(
       note: typeof r.note === 'string' ? r.note : undefined,
     });
   }
+  const targetFieldRaw = typeof t.target_field === 'string' ? t.target_field : '';
+  const targetField: PriceProposal['targetField'] =
+    targetFieldRaw === 'sale_price' ? 'sale_price' : 'regular_price';
+
   return {
     productId: typeof t.product_id === 'number' ? t.product_id : undefined,
     productName: typeof t.product_name === 'string' ? t.product_name : undefined,
@@ -450,6 +477,11 @@ export function priceProposalFromProposal(
       typeof t.observed_median === 'number' ? t.observed_median : undefined,
     observedHigh: typeof t.observed_high === 'number' ? t.observed_high : undefined,
     sources,
+    targetField,
+    regularPriceObserved:
+      typeof t.regular_price_observed === 'string' ? t.regular_price_observed : undefined,
+    salePriceObserved:
+      typeof t.sale_price_observed === 'string' ? t.sale_price_observed : undefined,
   };
 }
 
@@ -600,6 +632,14 @@ export interface ApproveResult {
   updated_at: string;
 }
 
+export interface UndoResult {
+  id: string;
+  status: 'done';
+  undone_at: string;
+  ability?: string;
+  updated_at: string;
+}
+
 // Abilities domain — discovered per paired store via the WP MCP Adapter.
 // trust_state is the daemon's three-state machine; the UI surfaces it as
 // a Badge intent and uses it to gate the per-row "Trust" action.
@@ -691,6 +731,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  undo: (c: Connection, id: string) =>
+    request<UndoResult>(c, `/v1/issues/${id}/undo`, { method: 'POST' }),
   batches: {
     list: (c: Connection) => request<{ batches: Batch[] }>(c, '/v1/batches'),
     get: (c: Connection, id: string) => request<BatchDetail>(c, `/v1/batches/${id}`),

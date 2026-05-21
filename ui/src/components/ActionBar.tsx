@@ -28,6 +28,32 @@ function CheckCircleIcon() {
   );
 }
 
+// CUSTOM: outlined u-turn arrow for the DoneBar undone-state affordance.
+// (a) @wordpress/icons exposes only forward/back chevrons and a curved
+// arrow that visually reads as "redo" not "undo." (b) Inline SVG so it
+// picks up the neutral foreground token via .wa-undo-arrow. (c) Used
+// only in DoneBar's undone-state — documented in the IssueDetail
+// undo-affordance spec (~/Documents/wooagent-internal/2026-05-20-
+// undo-and-sale-price-design.md).
+function UndoArrowIcon() {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 14l-4-4 4-4" />
+      <path d="M5 10h11a4 4 0 010 8h-2" />
+    </svg>
+  );
+}
+
 // Entity discriminator. 'variant' is the prose-rewrite default (Marketing).
 // 'price' is the pricing-persona path. 'message' is the sales-support path
 // — the primary button reads "Approve & send" and helper text names the
@@ -83,6 +109,13 @@ interface DoneProps {
   messageNoteType?: 'customer' | 'internal';
   /** Product / scope label, e.g., "Handwoven Wool Throw - Slate". */
   scope: string;
+  /** RFC3339 timestamp when the operator clicked Undo. When set, the
+   *  DoneBar renders the undone state (neutral glyph, "reverted"
+   *  headline, no Undo button — only View). */
+  undoneAt?: string;
+  /** When 'undo', the Undo button is disabled to prevent double-click
+   *  firing two POSTs in flight. */
+  busy?: 'undo' | null;
   onUndo: () => void;
   onView: () => void;
 }
@@ -164,8 +197,23 @@ function ArchivedBar(props: ArchivedProps) {
 
 function DoneBar(props: DoneProps) {
   const entity = props.entity ?? 'variant';
+  const isUndone = !!props.undoneAt;
+  const isMessage = entity === 'message';
+
   let headlineText: string;
-  if (entity === 'price') {
+  if (isUndone) {
+    if (entity === 'price') {
+      // priceSummary in undone mode is the value we reverted TO, e.g. "$35".
+      headlineText = props.priceSummary
+        ? `Price reverted to ${props.priceSummary}`
+        : 'Price reverted';
+    } else if (entity === 'message') {
+      // Messages aren't undoable; this branch is defensive.
+      headlineText = 'Reverted';
+    } else {
+      headlineText = 'Description reverted';
+    }
+  } else if (entity === 'price') {
     headlineText = 'Price change written to WooCommerce';
   } else if (entity === 'message') {
     headlineText =
@@ -175,12 +223,16 @@ function DoneBar(props: DoneProps) {
   } else {
     headlineText = `Variant ${variantLetterFromId(props.variantId)} written to WooCommerce`;
   }
+
   return (
     <div className="wa-action-bar">
       <div className="wa-action-bar-row">
         <div className="wa-action-bar__left">
-          <span className="wa-done-check" aria-hidden="true">
-            <CheckCircleIcon />
+          <span
+            className={isUndone ? 'wa-undo-arrow' : 'wa-done-check'}
+            aria-hidden="true"
+          >
+            {isUndone ? <UndoArrowIcon /> : <CheckCircleIcon />}
           </span>
           <Text
             variant="body-sm"
@@ -190,9 +242,16 @@ function DoneBar(props: DoneProps) {
           </Text>
         </div>
         <div className="wa-action-bar-actions">
-          <Button variant="tertiary" __next40pxDefaultSize onClick={props.onUndo}>
-            Undo
-          </Button>
+          {!isUndone && !isMessage && (
+            <Button
+              variant="tertiary"
+              __next40pxDefaultSize
+              onClick={props.onUndo}
+              disabled={props.busy === 'undo'}
+            >
+              {props.busy === 'undo' ? 'Undoing…' : 'Undo'}
+            </Button>
+          )}
           <Button variant="primary" __next40pxDefaultSize onClick={props.onView}>
             View in WooCommerce
           </Button>

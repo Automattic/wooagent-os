@@ -732,6 +732,14 @@ a {
   flex: none;
 }
 
+/* Undone-state ↩ icon — neutral u-turn arrow shown after Undo is
+   confirmed. Color cascades to the SVG via `currentColor`. */
+.wa-undo-arrow {
+  display: inline-flex;
+  align-items: center;
+  color: var(--wpds-color-fg-content-neutral);
+}
+
 /* ---------- Batch review ---------- */
 /* Counter strip: Approved / Rejected / Pending cells + a labelled progress
    bar, all on one row separated by vertical dividers. Mirrors the i3.2

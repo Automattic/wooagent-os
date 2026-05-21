@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -119,7 +120,7 @@ func TestApproveDispatch_ProductPriceChange_BuildParamsShape(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			params, err := d.buildParams("rationale ignored for price changes", nil, tc.target)
+			params, _, err := d.buildParams("rationale ignored for price changes", nil, tc.target)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got params=%v", params)
@@ -295,3 +296,82 @@ func newPricingTestRig(t *testing.T) *pricingRig {
 	t.Cleanup(ts.Close)
 	return &pricingRig{ts: ts, store: st, rec: rec}
 }
+
+func TestApproveIssue_PersistsAppliedValue(t *testing.T) {
+	rig := newPricingTestRig(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := rig.store.DB.ExecContext(context.Background(),
+		`INSERT INTO agents(persona, name, enabled, created_at, updated_at) VALUES('pricing', 'Pricing', 1, ?, ?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed agent: %v", err)
+	}
+
+	createBody := map[string]any{
+		"title":    "Regular price change",
+		"persona":  "pricing",
+		"status":   "in_review",
+		"priority": "medium",
+		"proposal": map[string]any{
+			"type":    "product_price_change",
+			"content": "rationale",
+			"target": map[string]any{
+				"product_id":     821,
+				"product_name":   "Wool Throw",
+				"product_sku":    "WT-1",
+				"currency":       "USD",
+				"previous_price": 35.00,
+				"proposed_price": 40.00,
+				"regular_price":  "40.00",
+				"percent_change": 14.3,
+				"direction":      "increase",
+				"sources": []map[string]any{
+					{"url": "https://a/", "comparable_product": "X", "observed_price": 42.0},
+					{"url": "https://b/", "comparable_product": "Y", "observed_price": 39.0},
+					{"url": "https://c/", "comparable_product": "Z", "observed_price": 41.0},
+				},
+			},
+		},
+	}
+	res := httpPostJSON(t, rig.ts.URL+"/v1/issues", createBody)
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create: status=%d", res.StatusCode)
+	}
+	var created struct {
+		Issue struct {
+			ID string `json:"id"`
+		} `json:"issue"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	res.Body.Close()
+
+	approveRes := httpPostJSON(t, rig.ts.URL+"/v1/issues/"+created.Issue.ID+"/approve", map[string]any{})
+	if approveRes.StatusCode != http.StatusOK {
+		t.Fatalf("approve: status=%d", approveRes.StatusCode)
+	}
+	approveRes.Body.Close()
+
+	// MCP got the regular_price write (this branch ships without
+	// target_field awareness; sale-price-aware writes land in the
+	// dsgwoo-sale-price-aware branch).
+	pmap, _ := rig.rec.params.(map[string]any)
+	inner, _ := pmap["parameters"].(map[string]any)
+	if inner["regular_price"] != "40.00" {
+		t.Errorf("MCP regular_price = %v, want \"40.00\"", inner["regular_price"])
+	}
+
+	// applied_value must be persisted as the value we wrote — that is
+	// the comparable the undo handler's staleness check will use.
+	var applied sql.NullString
+	if err := rig.store.DB.QueryRow(
+		`SELECT applied_value FROM issues WHERE id = ?`, created.Issue.ID,
+	).Scan(&applied); err != nil {
+		t.Fatalf("read applied_value: %v", err)
+	}
+	if !applied.Valid || applied.String != "40.00" {
+		t.Errorf("applied_value = %v (valid=%v), want \"40.00\"", applied.String, applied.Valid)
+	}
+}
+
