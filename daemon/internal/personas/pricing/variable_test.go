@@ -62,81 +62,64 @@ func TestMedianAnchor_NoPricedVariations(t *testing.T) {
 	}
 }
 
-func TestBuildPricingTargetVariable_PerVariationTargetField(t *testing.T) {
-	p := product{ID: 4012, Name: "V-Neck T-Shirt", SKU: "VN-001", ImageURL: "https://example.com/v.jpg", Type: "variable"}
-	vs := []variation{
-		{ID: 4013, AttributesLabel: "Small / Blue", RegularPrice: "19.99", SalePrice: ""},
-		{ID: 4014, AttributesLabel: "Medium / Blue", RegularPrice: "30.00", SalePrice: "25.00"},
-	}
+func TestBuildVariationChildTarget_RegularPricePath(t *testing.T) {
+	parent := product{ID: 4012, Name: "V-Neck T-Shirt", SKU: "VN-001", ImageURL: "https://example.com/v.jpg"}
+	v := variation{ID: 4013, AttributesLabel: "Small / Blue", RegularPrice: "19.99", SalePrice: ""}
 	out := proposalOut{
-		PreviousPrice:  22.49,
-		ProposedPrice:  24.29,
 		PercentChange:  8.0,
 		Direction:      "increase",
-		Rationale:      "Comparables suggest +8% headroom.",
-		Sources:        []proposalSource{{URL: "https://example.com/a", ComparableProduct: "Linen Tee", ObservedPrice: 24.0}},
 		ObservedMedian: 24.0,
+		Sources:        []proposalSource{{URL: "https://example.com/a", ComparableProduct: "Linen Tee", ObservedPrice: 24.0}},
 	}
-	target := buildPricingTargetVariable(p, vs, out, "USD")
+	target := buildVariationChildTarget(parent, v, out, "USD", 19.99, "regular_price", 21.59)
 
-	if target["product_id"].(int) != 4012 {
-		t.Fatalf("product_id = %v; want 4012", target["product_id"])
+	if target["product_id"].(int) != 4013 {
+		t.Fatalf("product_id should be the variation_id (4013); got %v", target["product_id"])
 	}
-	if target["percent_change"].(float64) != 8.0 {
-		t.Fatalf("percent_change = %v; want 8.0", target["percent_change"])
+	if target["product_name"].(string) != "V-Neck T-Shirt — Small / Blue" {
+		t.Fatalf("product_name = %q; want \"V-Neck T-Shirt — Small / Blue\"", target["product_name"])
 	}
-	if target["variation_count"].(int) != 2 {
-		t.Fatalf("variation_count = %v; want 2", target["variation_count"])
+	if target["target_field"].(string) != "regular_price" {
+		t.Fatalf("target_field = %q; want regular_price", target["target_field"])
 	}
-
-	variations := target["variations"].([]map[string]any)
-	if len(variations) != 2 {
-		t.Fatalf("variations len = %d; want 2", len(variations))
+	if target["regular_price"].(string) != "21.59" {
+		t.Fatalf("regular_price (decimal string) = %q; want \"21.59\"", target["regular_price"])
 	}
-
-	v0 := variations[0]
-	if v0["target_field"].(string) != "regular_price" {
-		t.Fatalf("v0 target_field = %q; want regular_price", v0["target_field"])
+	if math.Abs(target["previous_price"].(float64)-19.99) > 0.001 {
+		t.Fatalf("previous_price = %v; want 19.99", target["previous_price"])
 	}
-	if v0["regular_price"].(string) != "21.59" {
-		t.Fatalf("v0 regular_price = %q; want \"21.59\"", v0["regular_price"])
+	if math.Abs(target["proposed_price"].(float64)-21.59) > 0.001 {
+		t.Fatalf("proposed_price = %v; want 21.59", target["proposed_price"])
 	}
-	if math.Abs(v0["previous_price"].(float64)-19.99) > 0.001 {
-		t.Fatalf("v0 previous_price = %v; want 19.99", v0["previous_price"])
+	if target["product_sku"].(string) != "VN-001" {
+		t.Fatalf("product_sku should inherit parent's sku; got %q", target["product_sku"])
 	}
-
-	v1 := variations[1]
-	if v1["target_field"].(string) != "sale_price" {
-		t.Fatalf("v1 target_field = %q; want sale_price", v1["target_field"])
-	}
-	if v1["regular_price"].(string) != "27.00" {
-		t.Fatalf("v1 proposed-price string (keyed regular_price for back-compat with dispatcher) = %q; want \"27.00\"", v1["regular_price"])
-	}
-	if math.Abs(v1["previous_price"].(float64)-25.00) > 0.001 {
-		t.Fatalf("v1 previous_price = %v; want 25.00 (sale)", v1["previous_price"])
+	// sale_price_observed should NOT be in the target when SalePrice is empty.
+	if _, present := target["sale_price_observed"]; present {
+		t.Fatalf("sale_price_observed should be omitted when variation has no sale price; got %v", target["sale_price_observed"])
 	}
 }
 
-func TestBuildPricingTargetVariable_RollupTotals(t *testing.T) {
-	p := product{ID: 1, Name: "X"}
-	vs := []variation{
-		{ID: 10, AttributesLabel: "S", RegularPrice: "10.00"},
-		{ID: 11, AttributesLabel: "M", RegularPrice: "20.00"},
-		{ID: 12, AttributesLabel: "L", RegularPrice: "30.00"},
-	}
-	out := proposalOut{PercentChange: 10.0, ProposedPrice: 22.0, PreviousPrice: 20.0}
-	target := buildPricingTargetVariable(p, vs, out, "USD")
+func TestBuildVariationChildTarget_SalePricePath(t *testing.T) {
+	parent := product{ID: 4012, Name: "V-Neck T-Shirt", SKU: "VN-001"}
+	v := variation{ID: 4014, AttributesLabel: "Medium / Blue", RegularPrice: "30.00", SalePrice: "25.00"}
+	out := proposalOut{PercentChange: 8.0, Direction: "increase"}
+	// Anchor is the sale price (25.00); proposed = 25.00 * 1.08 = 27.00
+	target := buildVariationChildTarget(parent, v, out, "USD", 25.00, "sale_price", 27.00)
 
-	if math.Abs(target["previous_price_min"].(float64)-10.00) > 0.001 {
-		t.Fatalf("previous_price_min = %v", target["previous_price_min"])
+	if target["target_field"].(string) != "sale_price" {
+		t.Fatalf("target_field = %q; want sale_price", target["target_field"])
 	}
-	if math.Abs(target["previous_price_max"].(float64)-30.00) > 0.001 {
-		t.Fatalf("previous_price_max = %v", target["previous_price_max"])
+	if target["regular_price"].(string) != "27.00" {
+		t.Fatalf("regular_price (decimal string the dispatcher writes — keyed regular_price for back-compat with the simple shape, even when target_field=sale_price) = %q; want \"27.00\"", target["regular_price"])
 	}
-	if math.Abs(target["proposed_price_min"].(float64)-11.00) > 0.001 {
-		t.Fatalf("proposed_price_min = %v", target["proposed_price_min"])
+	if math.Abs(target["previous_price"].(float64)-25.00) > 0.001 {
+		t.Fatalf("previous_price = %v; want 25.00 (sale anchor)", target["previous_price"])
 	}
-	if math.Abs(target["proposed_price_max"].(float64)-33.00) > 0.001 {
-		t.Fatalf("proposed_price_max = %v", target["proposed_price_max"])
+	if target["sale_price_observed"].(string) != "25.00" {
+		t.Fatalf("sale_price_observed = %q; want \"25.00\"", target["sale_price_observed"])
+	}
+	if target["regular_price_observed"].(string) != "30.00" {
+		t.Fatalf("regular_price_observed = %q; want \"30.00\"", target["regular_price_observed"])
 	}
 }

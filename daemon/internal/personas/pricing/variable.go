@@ -82,80 +82,51 @@ func listVariations(ctx context.Context, c *mcp.Client, parentID int) ([]variati
 	return out.Variations, nil
 }
 
-// buildPricingTargetVariable composes the proposal.target payload for a
-// variable-product price change. percent_change is parent-level; each
-// variations[] entry carries its own previous/proposed_price + target_field.
-// The decimal string keyed "regular_price" inside each variation is what
-// the dispatcher writes — keyed for parity with the simple shape's target
-// payload regardless of which Woo field it lands in.
-func buildPricingTargetVariable(p product, vs []variation, out proposalOut, currency string) map[string]any {
-	pct := out.PercentChange
-	variationsOut := make([]map[string]any, 0, len(vs))
-
-	var prevMin, prevMax, propMin, propMax float64
-	first := true
-	for _, v := range vs {
-		anchor, field, ok := pickVariationAnchor(v)
-		if !ok {
-			continue
-		}
-		proposed := roundCents(anchor * (1 + pct/100.0))
-		variationsOut = append(variationsOut, map[string]any{
-			"variation_id":     v.ID,
-			"attributes_label": v.AttributesLabel,
-			"target_field":     field,
-			"previous_price":   anchor,
-			"proposed_price":   proposed,
-			"regular_price":    strconv.FormatFloat(proposed, 'f', 2, 64),
-			"stock_status":     v.StockStatus,
-		})
-		if first {
-			prevMin, prevMax = anchor, anchor
-			propMin, propMax = proposed, proposed
-			first = false
-			continue
-		}
-		if anchor < prevMin {
-			prevMin = anchor
-		}
-		if anchor > prevMax {
-			prevMax = anchor
-		}
-		if proposed < propMin {
-			propMin = proposed
-		}
-		if proposed > propMax {
-			propMax = proposed
-		}
+// buildVariationChildTarget composes the proposal.target payload for ONE
+// variation, in the same simple-product shape buildPricingTarget produces
+// for non-variable products. The dispatcher's existing
+// "product_price_change" entry then writes via wooagent-products/update
+// with id=<variation_id> — WC_Product_Variation supports set_regular_price
+// / set_sale_price exactly like simple WC_Product does.
+//
+// product_id is set to the variation_id (not the parent), so the existing
+// dispatcher, undo handler, and Pricing cooldown logic all work without
+// further changes.
+func buildVariationChildTarget(parent product, v variation, out proposalOut, currency string, anchor float64, field string, proposed float64) map[string]any {
+	t := map[string]any{
+		"product_id":             v.ID,
+		"product_name":           fmt.Sprintf("%s — %s", parent.Name, v.AttributesLabel),
+		"product_sku":            parent.SKU,
+		"image_url":              parent.ImageURL,
+		"image_alt":              parent.ImageAlt,
+		"currency":               currency,
+		"previous_price":         anchor,
+		"proposed_price":         proposed,
+		"regular_price":          strconv.FormatFloat(proposed, 'f', 2, 64),
+		"target_field":           field,
+		"regular_price_observed": canonDecimal(v.RegularPrice),
+		"percent_change":         out.PercentChange,
+		"direction":              out.Direction,
+		"observed_median":        out.ObservedMedian,
+		"observed_low":           out.ObservedLow,
+		"observed_high":          out.ObservedHigh,
+		"sources":                out.Sources,
 	}
-
-	return map[string]any{
-		"product_id":         p.ID,
-		"product_name":       p.Name,
-		"product_sku":        p.SKU,
-		"image_url":          p.ImageURL,
-		"image_alt":          p.ImageAlt,
-		"currency":           currency,
-		"percent_change":     out.PercentChange,
-		"direction":          out.Direction,
-		"observed_median":    out.ObservedMedian,
-		"observed_low":       out.ObservedLow,
-		"observed_high":      out.ObservedHigh,
-		"sources":            out.Sources,
-		"variations":         variationsOut,
-		"variation_count":    len(variationsOut),
-		"previous_price_min": prevMin,
-		"previous_price_max": prevMax,
-		"proposed_price_min": propMin,
-		"proposed_price_max": propMax,
+	if s := canonDecimal(v.SalePrice); s != "" {
+		t["sale_price_observed"] = s
 	}
+	return t
 }
 
-// draftForVariableParent fetches variations, asks the LLM to benchmark
-// against the median anchor (one parent-level call), then fans the
-// returned percent out to every variation. Returns Drafted{Skipped:true}
-// for any LLM-level skip (no_proposal, insufficient sources, etc.) —
-// the outer Draft loop treats that as "try the next product."
+// draftForVariableParent fetches the parent's variations, runs the LLM
+// once against the median anchor for benchmarking, then emits a BATCH of
+// product_price_change child drafts — one per variation. The existing
+// BatchReview UI renders this exactly like a category-batch pricing run,
+// and the existing per-issue approve/undo dispatcher writes each variation
+// via wooagent-products/update on approve.
+//
+// Returns Drafted{Skipped:true} for any LLM-level skip (no_proposal,
+// insufficient sources) or when no variation has a usable anchor.
 func draftForVariableParent(
 	ctx context.Context,
 	deps personas.Deps,
@@ -175,9 +146,8 @@ func draftForVariableParent(
 	}
 
 	// Synthesize a parent struct for the LLM prompt with the median anchor
-	// in RegularPrice. This reuses draftProposal's prompt verbatim — the
-	// model doesn't need to know it's variable; it benchmarks one price
-	// and we fan the percent out below.
+	// in RegularPrice. The model doesn't need to know it's variable — it
+	// benchmarks one price; we fan the returned percent out below.
 	parentForLLM := parent
 	parentForLLM.RegularPrice = strconv.FormatFloat(anchor, 'f', 2, 64)
 	parentForLLM.SalePrice = ""
@@ -205,37 +175,56 @@ func draftForVariableParent(
 	if out.ProposedPrice <= 0 {
 		return personas.Drafted{}, fmt.Errorf("proposed_price must be > 0")
 	}
-	if out.PreviousPrice == 0 {
-		out.PreviousPrice = anchor
-	}
 	if absFloat(out.PercentChange) > 25.0+0.01 {
 		return personas.Drafted{}, fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
 	}
 
-	target := buildPricingTargetVariable(parent, vs, out, currency)
-	// Count the variations that actually appear in the target (after
-	// pickVariationAnchor filtering) rather than the raw variations list.
-	variationsOut, _ := target["variations"].([]map[string]any)
-	vCount := len(variationsOut)
-	if vCount == 0 {
+	pct := out.PercentChange
+	children := make([]personas.Drafted, 0, len(vs))
+	for _, v := range vs {
+		varAnchor, field, ok := pickVariationAnchor(v)
+		if !ok {
+			continue
+		}
+		proposed := roundCents(varAnchor * (1 + pct/100.0))
+		target := buildVariationChildTarget(parent, v, out, currency, varAnchor, field, proposed)
+
+		saleSuffix := ""
+		if field == "sale_price" {
+			saleSuffix = " (sale)"
+		}
+		title := fmt.Sprintf("Price change · %s — %s · %s%.2f → %s%.2f (%+.1f%%)%s",
+			parent.Name, v.AttributesLabel,
+			currencySymbol(currency), varAnchor,
+			currencySymbol(currency), proposed,
+			pct, saleSuffix)
+
+		children = append(children, personas.Drafted{
+			Title:           title,
+			Description:     fmt.Sprintf("Drafted by Pricing agent for variation #%d (%s · %s). %d benchmarked sources.", v.ID, parent.SKU, v.AttributesLabel, len(out.Sources)),
+			Priority:        "medium",
+			ProposalType:    "product_price_change",
+			ProposalContent: out.Rationale,
+			DedupKey:        fmt.Sprintf("product:%d", v.ID),
+			Target:          target,
+		})
+	}
+
+	if len(children) == 0 {
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("variable parent %d (%q) had variations but none with usable anchors", parent.ID, parent.Name),
 		}, nil
 	}
 
-	title := fmt.Sprintf("Price change · %s · %+.1f%% across %d variation%s",
-		parent.Name, out.PercentChange, vCount, plural(vCount))
-
-	return personas.Drafted{
-		Title:           title,
-		Description:     fmt.Sprintf("Drafted by Pricing agent for variable product #%d (%s). %d benchmarked sources. Applies %+.1f%% to %d variations.", parent.ID, parent.SKU, len(out.Sources), out.PercentChange, vCount),
-		Priority:        "medium",
-		ProposalType:    "product_price_change_variable",
-		ProposalContent: out.Rationale,
-		DedupKey:        fmt.Sprintf("product:%d", parent.ID),
-		Target:          target,
-	}, nil
+	// Pack as a batch. We reuse packAsBatch's plumbing but override the
+	// title + intent — this isn't a "category seasonal parity run", it's a
+	// "variable parent" batch with N variations.
+	batch := packAsBatch(children, parent.Name)
+	batch.BatchTitle = fmt.Sprintf("Pricing · %s · %d variation%s",
+		parent.Name, len(children), plural(len(children)))
+	batch.BatchIntent = "pricing_variable"
+	return batch, nil
 }
 
 func plural(n int) string {
