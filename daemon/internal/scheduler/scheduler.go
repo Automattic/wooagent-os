@@ -123,6 +123,25 @@ func (s *Scheduler) EnqueueOperatorAsked(ctx context.Context, personaSlug string
 	return s.enqueueWithTrigger(ctx, personaSlug, TriggerOperatorAsked)
 }
 
+// CancelRun marks a queued or running row as failed_permanent. Operators
+// reach this via POST /v1/runs/:id/cancel to unstick rows the worker
+// abandoned mid-flight (most commonly after a daemon hang the orphan
+// sweep can't reach without a restart). Returns ErrRunNotFound or
+// ErrRunNotCancellable so the handler can pick the right HTTP status.
+func (s *Scheduler) CancelRun(ctx context.Context, id string) (Run, error) {
+	if s.queue == nil {
+		return Run{}, fmt.Errorf("scheduler: not started")
+	}
+	r, err := s.queue.Cancel(ctx, id)
+	if err != nil {
+		if r != nil {
+			return *r, err
+		}
+		return Run{}, err
+	}
+	return *r, nil
+}
+
 func (s *Scheduler) enqueueWithTrigger(ctx context.Context, personaSlug string, trigger Trigger) (Run, error) {
 	if s.queue == nil {
 		return Run{}, fmt.Errorf("scheduler: not started")

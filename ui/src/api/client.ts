@@ -774,6 +774,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ persona }),
       }),
+    cancel: (c: Connection, id: string) =>
+      request<{ run: Run }>(c, `/v1/runs/${id}/cancel`, {
+        method: 'POST',
+      }),
   },
   issues: (c: Connection) => request<{ issues: Issue[] }>(c, '/v1/issues'),
   issue: (c: Connection, id: string) => request<IssueDetail>(c, `/v1/issues/${id}`),
