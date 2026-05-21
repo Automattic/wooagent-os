@@ -297,6 +297,67 @@ function wooagent_companion_register_product_abilities(): void {
 			),
 		)
 	);
+
+	wp_register_ability(
+		'wooagent-products/update-variations-bulk',
+		array(
+			'label'               => __( 'Update multiple variations', 'wooagent-companion' ),
+			'description'         => __( 'Update regular_price and/or sale_price on multiple variations of a single variable product in one call. Iterates per variation; on first failure returns which variations succeeded and which failed.', 'wooagent-companion' ),
+			'input_schema'        => array(
+				'type'       => 'object',
+				'properties' => array(
+					'parent_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => 'Variable parent product ID. Used for verification: every update.variation_id must belong to this parent.',
+					),
+					'updates'   => array(
+						'type'        => 'array',
+						'minItems'    => 1,
+						'description' => 'List of per-variation field changes.',
+						'items'       => array(
+							'type'       => 'object',
+							'properties' => array(
+								'variation_id'  => array( 'type' => 'integer', 'minimum' => 1 ),
+								'regular_price' => array( 'type' => 'string', 'description' => 'Decimal string, e.g., "21.59".' ),
+								'sale_price'    => array( 'type' => 'string' ),
+							),
+							'required'             => array( 'variation_id' ),
+							'additionalProperties' => false,
+						),
+					),
+				),
+				'required'             => array( 'parent_id', 'updates' ),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'parent_id' => array( 'type' => 'integer' ),
+					'updated'   => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'variation_id'   => array( 'type' => 'integer' ),
+								'updated_fields' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+							),
+							'required'   => array( 'variation_id', 'updated_fields' ),
+						),
+					),
+				),
+				'required'   => array( 'parent_id', 'updated' ),
+			),
+			'category'            => 'wooagent-products',
+			'execute_callback'    => 'wooagent_products_update_variations_bulk_execute',
+			'permission_callback' => 'wooagent_products_write_permission',
+			'meta'                => array(
+				'show_in_rest' => true,
+				'mcp'          => array( 'public' => true ),
+				'annotations'  => array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ),
+			),
+		)
+	);
 }
 
 function wooagent_products_read_permission(): bool {
@@ -499,6 +560,113 @@ function wooagent_products_variations_list_execute( array $args ) {
 	return array(
 		'parent_id'  => (int) $parent->get_id(),
 		'variations' => $variations,
+	);
+}
+
+function wooagent_products_update_variations_bulk_execute( array $args ) {
+	$parent = wc_get_product( (int) $args['parent_id'] );
+	if ( ! $parent ) {
+		return new WP_Error( 'wooagent_product_not_found', __( 'Parent product not found.', 'wooagent-companion' ), array( 'status' => 404 ) );
+	}
+	if ( ! $parent->is_type( 'variable' ) ) {
+		return new WP_Error( 'wooagent_not_variable_product', __( 'Product is not a variable product.', 'wooagent-companion' ), array( 'status' => 422 ) );
+	}
+
+	$child_ids = array_map( 'intval', $parent->get_children() );
+
+	$updated = array();
+	foreach ( $args['updates'] as $idx => $update ) {
+		$variation_id = (int) $update['variation_id'];
+
+		// Belt: variation must belong to the named parent. Guards against a
+		// malformed proposal accidentally writing to an unrelated product.
+		if ( ! in_array( $variation_id, $child_ids, true ) ) {
+			return new WP_Error(
+				'wooagent_variation_parent_mismatch',
+				sprintf(
+					/* translators: 1: variation id, 2: parent id */
+					__( 'Variation %1$d does not belong to parent %2$d.', 'wooagent-companion' ),
+					$variation_id,
+					(int) $args['parent_id']
+				),
+				array(
+					'status'        => 422,
+					'failed_at'     => $idx,
+					'updated_so_far' => $updated,
+				)
+			);
+		}
+
+		$variation = wc_get_product( $variation_id );
+		if ( ! $variation || ! $variation->is_type( 'variation' ) ) {
+			return new WP_Error(
+				'wooagent_variation_not_found',
+				sprintf(
+					/* translators: %d: variation id */
+					__( 'Variation %d not found or is not a variation.', 'wooagent-companion' ),
+					$variation_id
+				),
+				array(
+					'status'        => 404,
+					'failed_at'     => $idx,
+					'updated_so_far' => $updated,
+				)
+			);
+		}
+
+		$fields = array();
+		if ( array_key_exists( 'regular_price', $update ) ) {
+			$variation->set_regular_price( $update['regular_price'] );
+			$fields[] = 'regular_price';
+		}
+		if ( array_key_exists( 'sale_price', $update ) ) {
+			$variation->set_sale_price( $update['sale_price'] );
+			$fields[] = 'sale_price';
+		}
+		if ( empty( $fields ) ) {
+			return new WP_Error(
+				'wooagent_no_field_to_update',
+				sprintf(
+					/* translators: %d: variation id */
+					__( 'Update for variation %d has no regular_price or sale_price field.', 'wooagent-companion' ),
+					$variation_id
+				),
+				array(
+					'status'        => 422,
+					'failed_at'     => $idx,
+					'updated_so_far' => $updated,
+				)
+			);
+		}
+
+		try {
+			$variation->save();
+		} catch ( Exception $e ) {
+			return new WP_Error(
+				'wooagent_variation_save_failed',
+				sprintf(
+					/* translators: 1: variation id, 2: error message */
+					__( 'Saving variation %1$d failed: %2$s', 'wooagent-companion' ),
+					$variation_id,
+					$e->getMessage()
+				),
+				array(
+					'status'        => 500,
+					'failed_at'     => $idx,
+					'updated_so_far' => $updated,
+				)
+			);
+		}
+
+		$updated[] = array(
+			'variation_id'   => $variation_id,
+			'updated_fields' => $fields,
+		);
+	}
+
+	return array(
+		'parent_id' => (int) $parent->get_id(),
+		'updated'   => $updated,
 	);
 }
 
