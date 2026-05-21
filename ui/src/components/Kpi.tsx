@@ -56,10 +56,18 @@ export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Pro
             >
               {value ?? '—'}
             </Text>
-            {typeof score === 'number' && value != null && (
+            {typeof score === 'number' && value != null ? (
               <div className="wa-score-bar" style={barStyle} aria-hidden="true">
                 <div style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
               </div>
+            ) : (
+              // Reserve the bar's vertical slot so cards without a score line
+              // up their hint text with cards that do — same baseline across
+              // the KPI row regardless of which tiles carry a bar.
+              <div
+                className="wa-score-bar wa-score-bar--placeholder"
+                aria-hidden="true"
+              />
             )}
           </Stack>
           {hint && (
