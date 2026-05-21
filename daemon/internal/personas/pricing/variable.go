@@ -72,7 +72,7 @@ func roundCents(v float64) float64 {
 // wooagent-products/variations-list.
 func listVariations(ctx context.Context, c *mcp.Client, parentID int) ([]variation, error) {
 	var out struct {
-		ParentID   int         `json:"parent_id"`
+		ParentID   int         `json:"parent_id"` // decoded for envelope symmetry; caller already has parentID
 		Variations []variation `json:"variations"`
 	}
 	if err := callAbility(ctx, c, "wooagent-products/variations-list",
@@ -215,7 +215,8 @@ func draftForVariableParent(
 	target := buildPricingTargetVariable(parent, vs, out, currency)
 	// Count the variations that actually appear in the target (after
 	// pickVariationAnchor filtering) rather than the raw variations list.
-	vCount := target["variation_count"].(int)
+	variationsOut, _ := target["variations"].([]map[string]any)
+	vCount := len(variationsOut)
 	if vCount == 0 {
 		return personas.Drafted{
 			Skipped:    true,
@@ -228,7 +229,7 @@ func draftForVariableParent(
 
 	return personas.Drafted{
 		Title:           title,
-		Description:     fmt.Sprintf("Drafted by Pricing agent for variable product #%d (%s). %d benchmarked sources. Applies +%.1f%% to %d variations.", parent.ID, parent.SKU, len(out.Sources), out.PercentChange, vCount),
+		Description:     fmt.Sprintf("Drafted by Pricing agent for variable product #%d (%s). %d benchmarked sources. Applies %+.1f%% to %d variations.", parent.ID, parent.SKU, len(out.Sources), out.PercentChange, vCount),
 		Priority:        "medium",
 		ProposalType:    "product_price_change_variable",
 		ProposalContent: out.Rationale,
