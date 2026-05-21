@@ -223,6 +223,12 @@ a {
   border-radius: var(--wpds-border-radius-sm);
   background: var(--bar-fill, var(--wpds-color-bg-interactive-brand-strong));
 }
+/* Invisible spacer that reserves the bar's slot on KPI tiles that have no
+   score — keeps every tile's hint text on the same baseline regardless of
+   which tiles carry a bar. */
+.wa-score-bar--placeholder {
+  background: transparent;
+}
 
 .wa-variant-card {
   position: relative;
@@ -705,20 +711,6 @@ a {
   color: #ffffff;
 }
 
-/* "Agent pick" inline pill — moved into the variant header row instead of
-   sitting above the card content. Uses the brand info treatment per Figma. */
-.wa-agent-pick-inline {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--wpds-typography-font-size-xs);
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-interactive-brand);
-  border-radius: var(--wpds-border-radius-sm);
-  font-weight: var(--wpds-typography-font-weight-medium);
-}
-
 /* ---------- Action bar — two states ---------- */
 .wa-action-bar__left {
   display: flex;
@@ -741,43 +733,59 @@ a {
 }
 
 /* ---------- Batch review ---------- */
-/* Counter strip: three numeric cells on the left + a labelled progress bar
-   on the right. Lives inside its own Card so it reads as a unit. */
+/* Counter strip: Approved / Rejected / Pending cells + a labelled progress
+   bar, all on one row separated by vertical dividers. Mirrors the i3.2
+   Figma layout (DataViz/Card/Text) — counters left-justified, progress
+   takes the remaining width. */
 .wa-batch-counter {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--wpds-dimension-gap-lg);
-}
-.wa-batch-counter__cells {
-  display: flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-xl);
 }
 .wa-batch-counter__cell {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: var(--wpds-dimension-gap-xs);
+  flex: none;
+  min-width: 48px;
+}
+.wa-batch-counter__divider {
+  width: var(--wpds-border-width-sm);
+  height: 36px;
+  background: var(--wpds-color-stroke-surface-neutral-weak);
+  flex: none;
 }
 .wa-batch-counter__progress {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  /* Tight gap between the label row and the bar — matches Figma rhythm. */
   gap: var(--wpds-dimension-gap-sm);
   flex: 1;
-  max-width: 320px;
-  justify-content: flex-end;
+  min-width: 0;
+}
+.wa-batch-counter__progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wpds-dimension-gap-sm);
 }
 .wa-batch-progress {
-  flex: 1;
-  height: 6px;
-  border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-bg-surface-neutral-strong);
+  width: 100%;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--wpds-color-bg-track-neutral);
   overflow: hidden;
 }
 .wa-batch-progress__bar {
   height: 100%;
-  background: var(--wpds-color-bg-interactive-brand-strong);
+  /* CUSTOM: #4AB866 is the exact green specified in the i3.2 Figma
+     (node 2:9921, DataViz/Card/Text progress fill). No WPDS success
+     token matches — bg-surface-success reads as pale mint and
+     fg-content-success skews cooler/darker than this Material-style
+     mid-green. Designer-pinned to this hex for the batch progress bar
+     specifically; not generalized into a token. */
+  background: #4AB866;
   transition: width 0.2s ease;
 }
 
@@ -858,17 +866,6 @@ a {
   flex-wrap: wrap;
   margin-bottom: var(--wpds-dimension-gap-sm);
 }
-.wa-batch-col__letter {
-  height: 22px;
-  width: 22px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--wpds-typography-font-weight-medium);
-  font-size: var(--wpds-typography-font-size-xs);
-  flex: none;
-}
 .wa-batch-col__scores {
   display: flex;
   flex-wrap: wrap;
@@ -888,34 +885,6 @@ a {
   display: flex;
   align-items: center;
   gap: var(--wpds-dimension-gap-xs);
-}
-
-/* Status pill on the row header — neutral / success / error / warning
-   variants follow WPDS surface tones. */
-.wa-status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px var(--wpds-dimension-padding-sm);
-  border-radius: var(--wpds-border-radius-sm);
-  font-size: var(--wpds-typography-font-size-xs);
-  font-weight: var(--wpds-typography-font-weight-medium);
-  flex: none;
-}
-.wa-status-pill--neutral {
-  background: var(--wpds-color-bg-surface-neutral-strong);
-  color: var(--wpds-color-fg-content-neutral);
-}
-.wa-status-pill--success {
-  background: var(--wpds-color-bg-surface-success-weak);
-  color: var(--wpds-color-fg-content-success);
-}
-.wa-status-pill--error {
-  background: var(--wpds-color-bg-surface-error-weak);
-  color: var(--wpds-color-fg-content-error);
-}
-.wa-status-pill--warning {
-  background: var(--wpds-color-bg-surface-warning-weak);
-  color: var(--wpds-color-fg-content-warning);
 }
 
 /* IssueDetail body — single column (right rail was removed in the Figma
