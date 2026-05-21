@@ -68,6 +68,11 @@ interface ReviewProps {
   productBound: boolean;
   busy: 'approve' | 'reject' | null;
   disabled: boolean;
+  /** When true, render the "Reversible · always" badge. Caller derives
+   *  this from the proposal type via isReversibleProposalType() so cold-
+   *  drafts and customer replies (no Undo support) don't claim to be
+   *  reversible. Defaults to false. */
+  reversible?: boolean;
   /** Used when entity='variant'. The letter shown in the round badge. */
   selectedVariantId?: string | null;
   /**
@@ -371,7 +376,7 @@ function ReviewBar(props: ReviewProps) {
           </Stack>
         </div>
         <div className="wa-action-bar-actions">
-          <Badge intent="none">Reversible · always</Badge>
+          {props.reversible && <Badge intent="none">Reversible · always</Badge>}
           <Button
             __next40pxDefaultSize
             variant="tertiary"
