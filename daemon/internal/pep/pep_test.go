@@ -63,10 +63,15 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 		Entries: []manifest.Entry{{
 			Ability:        "wooagent-products/update",
 			NamespaceOwner: "test",
-			SchemaHash:     "sha256:test",
-			Scope:          manifest.ScopePropose,
-			Reversibility:  0.6,
-			Personas:       []manifest.Persona{manifest.PersonaMarketing},
+			// Placeholder hash so the post-DSGWOO-1361 trust-state hash gate
+			// bypasses for tests focused on checks 2–6 (persona, schema,
+			// policy, budget, scope). The gate's enforcement paths — drift,
+			// not-yet-discovered, hash match — are exhaustively covered in
+			// checktruststate_test.go.
+			SchemaHash:    manifest.PlaceholderSchemaHash,
+			Scope:         manifest.ScopePropose,
+			Reversibility: 0.6,
+			Personas:      []manifest.Persona{manifest.PersonaMarketing},
 		}},
 	}
 	lookup, err := manifest.NewLookup(m)

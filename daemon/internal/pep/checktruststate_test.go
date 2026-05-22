@@ -10,22 +10,30 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 )
 
-// buildTestManifest constructs a minimal *manifest.Manifest with one entry
-// per name in the slice. Schema fields are filled with stub values; only the
-// ability name matters for the trust-state branch logic under test.
-func buildTestManifest(names []string) *manifest.Manifest {
-	entries := make([]manifest.Entry, 0, len(names))
-	for _, n := range names {
-		entries = append(entries, manifest.Entry{
-			Ability:        n,
+// manifestSignedHash is the default SchemaHash used by buildTestManifest for
+// real-hash entries. Tests that exercise drift override on a per-entry basis.
+const manifestSignedHash = "sha256:test"
+
+// buildTestManifest constructs a minimal *manifest.Manifest. For each (name,
+// hash) pair, an entry is added with that SchemaHash; if hash is empty the
+// default manifestSignedHash is used. Only the ability name + hash matter
+// for the trust-state branch logic under test.
+func buildTestManifest(entries map[string]string) *manifest.Manifest {
+	es := make([]manifest.Entry, 0, len(entries))
+	for name, hash := range entries {
+		if hash == "" {
+			hash = manifestSignedHash
+		}
+		es = append(es, manifest.Entry{
+			Ability:        name,
 			NamespaceOwner: "test",
-			SchemaHash:     "sha256:test",
+			SchemaHash:     hash,
 			Scope:          manifest.ScopePropose,
 			Reversibility:  0.5,
 			Personas:       []manifest.Persona{manifest.PersonaMarketing},
 		})
 	}
-	return &manifest.Manifest{Version: 1, Entries: entries}
+	return &manifest.Manifest{Version: 1, Entries: es}
 }
 
 func TestCheckTrustState_Branches(t *testing.T) {
@@ -42,7 +50,8 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			`CREATE TABLE abilities (
 				name TEXT,
 				trust_state TEXT,
-				revoked_at TEXT
+				revoked_at TEXT,
+				schema_hash TEXT
 			)`); err != nil {
 			t.Fatalf("create: %v", err)
 		}
@@ -53,28 +62,62 @@ func TestCheckTrustState_Branches(t *testing.T) {
 		name       string
 		trustState string
 		revokedAt  string // empty = NULL
+		schemaHash string // empty = NULL
 	}
 
 	cases := []struct {
-		desc        string
-		rows        []row
-		manifestSet []string
-		ability     string
-		wantReason  ReasonCode // "" means allowed
+		desc       string
+		rows       []row
+		manifest   map[string]string // name → SchemaHash; empty hash = manifestSignedHash
+		ability    string
+		wantReason ReasonCode // "" means allowed
 	}{
 		{
-			desc:        "revoked wins over manifest pre-signed",
-			rows:        []row{{name: "x", trustState: "new", revokedAt: "2026-05-13T00:00:00Z"}},
-			manifestSet: []string{"x"},
-			ability:     "x",
-			wantReason:  ReasonAbilityRevoked,
+			desc:       "revoked wins over manifest pre-signed",
+			rows:       []row{{name: "x", trustState: "new", revokedAt: "2026-05-13T00:00:00Z", schemaHash: manifestSignedHash}},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: ReasonAbilityRevoked,
 		},
 		{
-			desc:        "manifest pre-signed, never revoked",
-			rows:        []row{{name: "x", trustState: "new"}},
-			manifestSet: []string{"x"},
-			ability:     "x",
-			wantReason:  "",
+			desc:       "manifest pre-signed, discovered hash matches",
+			rows:       []row{{name: "x", trustState: "new", schemaHash: manifestSignedHash}},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: "",
+		},
+		{
+			desc:       "manifest pre-signed, discovered hash diverges: schema drift",
+			rows:       []row{{name: "x", trustState: "new", schemaHash: "sha256:drifted"}},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: ReasonSchemaDrift,
+		},
+		{
+			desc:       "manifest pre-signed but no DB row yet: not yet discovered",
+			manifest:   map[string]string{"manifest-only": ""},
+			ability:    "manifest-only",
+			wantReason: ReasonAbilityNotYetDiscovered,
+		},
+		{
+			desc:       "manifest pre-signed, DB row but no hash captured: not yet discovered",
+			rows:       []row{{name: "x", trustState: "new"}},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: ReasonAbilityNotYetDiscovered,
+		},
+		{
+			desc:       "manifest placeholder hash bypasses drift check (WC 10.9 canonicals, no DB row)",
+			manifest:   map[string]string{"woocommerce/product-update": manifest.PlaceholderSchemaHash},
+			ability:    "woocommerce/product-update",
+			wantReason: "",
+		},
+		{
+			desc:       "manifest placeholder hash bypasses drift check (WC 10.9 canonicals, any DB hash)",
+			rows:       []row{{name: "woocommerce/product-update", trustState: "new", schemaHash: "sha256:anything"}},
+			manifest:   map[string]string{"woocommerce/product-update": manifest.PlaceholderSchemaHash},
+			ability:    "woocommerce/product-update",
+			wantReason: "",
 		},
 		{
 			desc:       "operator-trusted, not in manifest",
@@ -87,12 +130,6 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			rows:       []row{{name: "z", trustState: "new"}},
 			ability:    "z",
 			wantReason: ReasonAbilityUnapproved,
-		},
-		{
-			desc:        "ability not discovered yet but manifest-signed: allow via manifest fallback",
-			manifestSet: []string{"manifest-only"},
-			ability:     "manifest-only",
-			wantReason:  "",
 		},
 		{
 			desc:       "ability not discovered, not in manifest: deny",
@@ -113,17 +150,20 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			t.Parallel()
 			db := openTestDB(t)
 			for _, r := range tc.rows {
-				var revoked any
+				var revoked, hash any
 				if r.revokedAt != "" {
 					revoked = r.revokedAt
 				}
+				if r.schemaHash != "" {
+					hash = r.schemaHash
+				}
 				if _, err := db.ExecContext(context.Background(),
-					`INSERT INTO abilities(name, trust_state, revoked_at) VALUES(?, ?, ?)`,
-					r.name, r.trustState, revoked); err != nil {
+					`INSERT INTO abilities(name, trust_state, revoked_at, schema_hash) VALUES(?, ?, ?, ?)`,
+					r.name, r.trustState, revoked, hash); err != nil {
 					t.Fatalf("insert: %v", err)
 				}
 			}
-			lookup, err := manifest.NewLookup(buildTestManifest(tc.manifestSet))
+			lookup, err := manifest.NewLookup(buildTestManifest(tc.manifest))
 			if err != nil {
 				t.Fatalf("manifest lookup: %v", err)
 			}

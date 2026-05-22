@@ -274,10 +274,12 @@ func newPricingTestRig(t *testing.T) *pricingRig {
 		Entries: []manifest.Entry{{
 			Ability:        "wooagent-products/update",
 			NamespaceOwner: "test",
-			SchemaHash:     "sha256:test",
-			Scope:          manifest.ScopePropose,
-			Reversibility:  0.6,
-			Personas:       []manifest.Persona{manifest.PersonaPricing},
+			// Placeholder hash bypasses the PEP hash gate (DSGWOO-1361);
+			// this fixture tests pricing handlers, not drift.
+			SchemaHash:    manifest.PlaceholderSchemaHash,
+			Scope:         manifest.ScopePropose,
+			Reversibility: 0.6,
+			Personas:      []manifest.Persona{manifest.PersonaPricing},
 		}},
 	}
 	lookup, err := manifest.NewLookup(m)
