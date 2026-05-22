@@ -156,7 +156,17 @@ func newRunCmd() *cobra.Command {
 				pepInstance = pep.New(lookup, nil, st.DB, budgetGate)
 			}
 
-			srv := httpapi.New(st, am, pepInstance, secretStore, uiSessionToken)
+			srv := httpapi.New(st, am, pepInstance, secretStore, defaultManifest, uiSessionToken)
+
+			// Seed the abilities table from the manifest synchronously before
+			// the HTTP server starts. The PEP's schema-hash gate (DSGWOO-1361)
+			// would otherwise deny manifest-pre-signed invocations with
+			// ReasonAbilityNotYetDiscovered until the first async discovery
+			// sweep completes — a window that stretches to seconds on a slow
+			// store. Seeding inserts rows with the manifest's SchemaHash so
+			// the gate passes immediately; the async sweep below still runs
+			// and flips rows to schema_drift if the live store disagrees.
+			srv.Abilities().SeedAll(ctx)
 
 			// Sweep paired stores once at startup, then keep them fresh on a
 			// periodic ticker. Both fire-and-forget — the HTTP server starts

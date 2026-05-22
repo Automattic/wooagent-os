@@ -62,7 +62,7 @@ func newRunner(t *testing.T, fake *fakeMCP) (*Runner, *store.Store) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	r := New(st.DB, memSecrets{})
+	r := New(st.DB, memSecrets{}, nil)
 	r.PollInterval = 0 // tests drive RunForStore explicitly
 	r.NewClient = func(_ context.Context, _, _ string) (Client, error) {
 		return fake, nil

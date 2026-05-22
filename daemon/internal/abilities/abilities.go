@@ -37,6 +37,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 )
@@ -67,19 +68,29 @@ func NewMCPClient(ctx context.Context, endpoint, bearerToken string) (Client, er
 // Runner discovers abilities for paired stores and reconciles the
 // abilities table. Safe for concurrent RunForStore calls — each call gets
 // its own MCP client + DB transaction.
+//
+// Manifest is the pre-signed allowlist. It's consulted by SeedManifest /
+// SeedAll to pre-populate the abilities table at startup (DSGWOO-1361
+// cold-start UX fix), so the PEP's schema-hash gate can pass on the very
+// first invocation without waiting for the async discovery sweep to
+// complete. May be nil in tests that don't exercise seeding.
 type Runner struct {
 	DB           *sql.DB
 	Secrets      secrets.Store
+	Manifest     *manifest.Manifest
 	NewClient    MCPClientFactory
 	Logger       *slog.Logger
 	PollInterval time.Duration // 0 means "no periodic poll"
 }
 
-// New returns a Runner with sensible defaults.
-func New(db *sql.DB, sec secrets.Store) *Runner {
+// New returns a Runner with sensible defaults. Pass nil for m if the
+// caller doesn't need cold-start seeding (e.g., unit tests that only
+// exercise discovery).
+func New(db *sql.DB, sec secrets.Store, m *manifest.Manifest) *Runner {
 	return &Runner{
 		DB:           db,
 		Secrets:      sec,
+		Manifest:     m,
 		NewClient:    NewMCPClient,
 		Logger:       slog.Default(),
 		PollInterval: 6 * time.Hour,
@@ -313,6 +324,130 @@ func canonicalize(info mcp.AbilityInfo) (string, string, error) {
 	}
 	sum := sha256.Sum256(out)
 	return string(out), hex.EncodeToString(sum[:]), nil
+}
+
+// SeedManifest pre-populates the abilities table with rows for every
+// manifest entry that doesn't already have one for storeID. Without this,
+// the PEP's schema-hash trust gate (DSGWOO-1361) would deny manifest-
+// pre-signed invocations with ReasonAbilityNotYetDiscovered between
+// daemon-start and first-sweep-completion — a window that can stretch to
+// seconds on a slow store.
+//
+// The seeded schema_hash is the manifest's SchemaHash, so the gate's
+// "discovered hash matches manifest hash" branch passes immediately.
+// When the async discovery sweep later runs against the live store,
+// reconcile UPDATEs the row's schema_hash to the live value: if the
+// live store matches the manifest, the row is unchanged and the gate
+// keeps passing; if it differs, the row's schema_hash diverges from
+// entry.SchemaHash and the next gate call returns ReasonSchemaDrift.
+// Drift detection still works — we just trust the manifest's claim
+// while discovery is in flight.
+//
+// Idempotent: existing rows are never overwritten (relies on the
+// (store_id, name) UNIQUE constraint; the SELECT skips them). Safe to
+// call on every daemon start.
+//
+// Returns the number of rows inserted.
+func (r *Runner) SeedManifest(ctx context.Context, storeID string) (int, error) {
+	if r.Manifest == nil || len(r.Manifest.Entries) == 0 {
+		return 0, nil
+	}
+
+	tx, err := r.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT name FROM abilities WHERE store_id = ?`, storeID)
+	if err != nil {
+		return 0, fmt.Errorf("list existing abilities %s: %w", storeID, err)
+	}
+	existing := map[string]struct{}{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	_ = rows.Close()
+
+	// last_seen_at carries "now" at seed time even though no live
+	// discovery has touched the row yet — the column is NOT NULL and
+	// reconcile will overwrite it on the first sweep moments later.
+	now := time.Now().UTC().Format(time.RFC3339)
+	inserted := 0
+	for i := range r.Manifest.Entries {
+		e := &r.Manifest.Entries[i]
+		if _, ok := existing[e.Ability]; ok {
+			continue
+		}
+		id := "ab_" + uuid.NewString()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO abilities(id, store_id, name, description, version,
+			                       schema_hash, trust_state,
+			                       last_seen_at, created_at, updated_at)
+			 VALUES(?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)`,
+			id, storeID, e.Ability, e.Description, e.PluginVersion,
+			e.SchemaHash, now, now, now,
+		); err != nil {
+			return inserted, fmt.Errorf("seed ability %s: %w", e.Ability, err)
+		}
+		inserted++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return inserted, fmt.Errorf("commit seed %s: %w", storeID, err)
+	}
+	if inserted > 0 {
+		r.Logger.Info("abilities: manifest seed complete",
+			"store_id", storeID, "inserted", inserted)
+	}
+	return inserted, nil
+}
+
+// SeedAll seeds manifest rows for every paired store. Intended for
+// synchronous use at daemon startup, before the HTTP server starts
+// accepting requests, so personas can invoke manifest-pre-signed
+// abilities immediately. Errors are logged per-store and don't abort
+// the loop — one broken pairing shouldn't bench the rest.
+func (r *Runner) SeedAll(ctx context.Context) {
+	if r.Manifest == nil || len(r.Manifest.Entries) == 0 {
+		return
+	}
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT id FROM stores WHERE status = 'paired'`)
+	if err != nil {
+		r.Logger.Error("abilities: list paired stores for seed", "err", err)
+		return
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			r.Logger.Error("abilities: scan store id for seed", "err", err)
+			return
+		}
+		ids = append(ids, id)
+	}
+	_ = rows.Close()
+
+	for _, id := range ids {
+		if ctx.Err() != nil {
+			return
+		}
+		if _, err := r.SeedManifest(ctx, id); err != nil {
+			r.Logger.Warn("abilities: seed failed", "store_id", id, "err", err)
+		}
+	}
 }
 
 // RunAll sweeps every paired store. Errors are logged per-store and don't
