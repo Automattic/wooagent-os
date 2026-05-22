@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-05-22T00:12:42Z",
+  "generated_at": "2026-05-22T01:04:29Z",
   "entries": [
     {
       "ability": "core/get-site-info",
@@ -57,7 +57,7 @@
       "ability": "wooagent-products/get",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
-      "schema_hash": "sha256:81c34d98412e67cc8da963dcaf930601f7492217c48e6445776d3e9727f77d86",
+      "schema_hash": "sha256:2df02f1d9be406c3888c11df9376d235c05e47a6fbd2dd116baa328e7c6df568",
       "scope": "read",
       "reversibility": 1,
       "personas": [
