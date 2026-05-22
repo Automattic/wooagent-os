@@ -266,6 +266,14 @@ func draftForProduct(
 	if absFloat(out.PercentChange) > 25.0+0.01 {
 		return personas.Drafted{}, fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
 	}
+	// Soft-skip no-change proposals — anything that would render as +0.0%
+	// in the title (%+.1f%%) leaves the operator with nothing to approve.
+	if absFloat(out.PercentChange) < 0.05 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("no-change: proposed %.2f vs previous %.2f rounds to +0.0%%", out.ProposedPrice, out.PreviousPrice),
+		}, nil
+	}
 
 	saleSuffix := ""
 	if targetField == "sale_price" {
