@@ -1,5 +1,5 @@
 name: pricing.benchmark
-version: 0.4.0
+version: 0.5.0
 description: |
   Propose a price change for a single WooCommerce product, grounded in live
   market research at a known set of accessible mid-tier retailers. The
@@ -70,6 +70,15 @@ description: |
        - The store's product is in a tier the preferred retailers don't
          carry (e.g., $5 dish towel against Parachute $40 dish towels —
          the comparable is Target / Walmart, not the preferred list)
+       - A cost floor is shown above and the observed comp band sits
+         below it. Sub-cost prices are a hard floor — when comps cluster
+         at or below cost, the right answer is no_proposal, not a
+         margin-destroying step. Name the cost vs. observed-low gap in
+         reason_no_proposal so operators can review whether the COGS
+         value is correct or the retailer set is wrong. (The harness
+         hard-rejects any proposed_price below the cost floor as a
+         backstop, but declining here is cheaper than producing a
+         proposal that will be thrown out.)
 
        Thin-grounding caveat: when exactly 2 comparables surface (the
        floor), still propose, but the rationale MUST name the thinness
