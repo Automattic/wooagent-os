@@ -46,7 +46,6 @@ function wooagent_companion_register_order_abilities(): void {
 								'total'        => array( 'type' => 'string' ),
 								'currency'     => array( 'type' => 'string' ),
 								'customer_id'  => array( 'type' => 'integer' ),
-								'line_item_count' => array( 'type' => 'integer' ),
 								'date_created' => array( 'type' => 'string' ),
 							),
 						),
@@ -185,17 +184,20 @@ function wooagent_orders_list_execute( array $args ) {
 
 	$result = wc_get_orders( $query_args );
 
+	// Line-item counts intentionally moved to wooagent-orders/get. Calling
+	// $order->get_items() here would fire a per-row line-item query (N+1
+	// against per_page up to 100); callers that need the count fetch the
+	// detail endpoint, which already returns the full line_items array.
 	$orders = array();
 	foreach ( $result->orders as $order ) {
 		$orders[] = array(
-			'id'              => $order->get_id(),
-			'number'          => (string) $order->get_order_number(),
-			'status'          => $order->get_status(),
-			'total'           => (string) $order->get_total(),
-			'currency'        => $order->get_currency(),
-			'customer_id'     => (int) $order->get_customer_id(),
-			'line_item_count' => count( $order->get_items() ),
-			'date_created'    => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : '',
+			'id'           => $order->get_id(),
+			'number'       => (string) $order->get_order_number(),
+			'status'       => $order->get_status(),
+			'total'        => (string) $order->get_total(),
+			'currency'     => $order->get_currency(),
+			'customer_id'  => (int) $order->get_customer_id(),
+			'date_created' => $order->get_date_created() ? $order->get_date_created()->date( 'c' ) : '',
 		);
 	}
 
