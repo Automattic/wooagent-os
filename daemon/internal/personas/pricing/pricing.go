@@ -233,7 +233,8 @@ func draftForProduct(
 		}, nil
 	}
 
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice, targetField)
+	cost := productCost(p)
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, p, currency, currentPrice, targetField, cost)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
@@ -255,6 +256,9 @@ func draftForProduct(
 	}
 	if out.ProposedPrice <= 0 {
 		return personas.Drafted{}, fmt.Errorf("proposed_price must be > 0")
+	}
+	if cost > 0 && out.ProposedPrice < cost {
+		return personas.Drafted{}, fmt.Errorf("proposed_price %.2f below cost-of-goods %.2f (sub-cost floor)", out.ProposedPrice, cost)
 	}
 	if out.PreviousPrice == 0 {
 		out.PreviousPrice = currentPrice
@@ -473,6 +477,26 @@ type product struct {
 	// types. draftForGroupedParent walks this to fan out one
 	// product_price_change proposal per child.
 	GroupedProducts []int `json:"grouped_products"`
+	// CostOfGoodsSold is Woo 10.3+'s Cost of Goods Sold field surfaced on
+	// /wp-json/wc/v3/products/<id>. total_value is the read-only effective
+	// per-unit cost — the value Pricing uses as a sub-cost floor. Stores
+	// running pre-10.3 Woo OR with the COGS feature toggle off (Settings →
+	// Features → Cost of Goods Sold) emit total_value: 0 (or omit the
+	// field entirely), in which case productCost returns 0 and the floor
+	// stays unenforced. No cost data, no floor.
+	CostOfGoodsSold struct {
+		TotalValue float64 `json:"total_value"`
+	} `json:"cost_of_goods_sold"`
+}
+
+// productCost returns the effective per-unit cost of goods for p as
+// reported by the Woo REST API. Returns 0 when no positive cost is
+// available — callers treat 0 as "no floor data" and skip enforcement.
+func productCost(p product) float64 {
+	if p.CostOfGoodsSold.TotalValue > 0 {
+		return p.CostOfGoodsSold.TotalValue
+	}
+	return 0
 }
 
 func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {
@@ -740,9 +764,11 @@ const userPromptTemplate = `Product to analyze:
 - current regular_price: %.2f %s
 - current sale_price:    %s
 - anchor (the price customers pay today): %s = %.2f %s
-- description: %s
+%s- description: %s
 
 Anchor your benchmark and the previous_price field of your output to the **anchor** value above — that is the price customers see right now. When the anchor is sale_price, your proposal updates the active sale; when the anchor is regular_price, the product is not on sale.
+
+When a cost floor is shown above, proposed_price MUST be ≥ that value. Sub-cost prices destroy margin and are auto-rejected by the harness — if the band you observe sits below cost, decline (no_proposal=true) with a reason naming the cost vs. observed-low gap rather than proposing a sub-cost price.
 
 Search the preferred retailers from the skill — start with site:-scoped queries against J.Crew, Madewell, Aritzia, Everlane, Quince, COS, Uniqlo, Gap for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods. Pick the 4–6 retailers most likely to carry this product and run site:<retailer>.com <noun phrase> queries. Match on category, material, and tier — not just keywords.
 
@@ -776,16 +802,11 @@ Example of a decline:
 
 Output ONE JSON object. No prose outside the JSON. No markdown fences. All prices in %s, 2 decimals.`
 
-func draftProposal(
-	ctx context.Context,
-	apiKey, model, skillSystem string,
-	p product,
-	currency string,
-	currentPrice float64,
-	anchorField string,
-) (proposalOut, string, error) {
-	system := skillSystem + "\n\nWhen you respond, output ONLY a JSON object that matches the schema in skills/pricing-benchmark/v1.yaml output. No prose outside the JSON. No markdown code fences."
-
+// buildUserPrompt renders the user-side prompt for one product. Factored
+// out of draftProposal so tests can assert what the model sees — in
+// particular, that the sub-cost floor line appears when cost > 0 and is
+// omitted entirely when cost == 0 (the "no COGS data" case).
+func buildUserPrompt(p product, currency string, currentPrice float64, anchorField string, cost float64) string {
 	salePriceDisplay := "—"
 	if s := strings.TrimSpace(p.SalePrice); s != "" {
 		if sv, err := strconv.ParseFloat(s, 64); err == nil && sv > 0 {
@@ -794,15 +815,35 @@ func draftProposal(
 	}
 	regularPrice, _ := strconv.ParseFloat(strings.TrimSpace(p.RegularPrice), 64)
 
-	user := fmt.Sprintf(
+	costLine := ""
+	if cost > 0 {
+		costLine = fmt.Sprintf("- cost floor (proposed_price MUST be ≥ this): %.2f %s\n", cost, currency)
+	}
+
+	return fmt.Sprintf(
 		userPromptTemplate,
 		p.ID, p.Name, p.SKU, categoryString(p),
 		regularPrice, currency,
 		salePriceDisplay,
 		anchorField, currentPrice, currency,
+		costLine,
 		strings.TrimSpace(p.Description),
 		currency,
 	)
+}
+
+func draftProposal(
+	ctx context.Context,
+	apiKey, model, skillSystem string,
+	p product,
+	currency string,
+	currentPrice float64,
+	anchorField string,
+	cost float64,
+) (proposalOut, string, error) {
+	system := skillSystem + "\n\nWhen you respond, output ONLY a JSON object that matches the schema in skills/pricing-benchmark/v1.yaml output. No prose outside the JSON. No markdown code fences."
+
+	user := buildUserPrompt(p, currency, currentPrice, anchorField, cost)
 
 	body, _ := json.Marshal(anthropicReq{
 		Model: model,
