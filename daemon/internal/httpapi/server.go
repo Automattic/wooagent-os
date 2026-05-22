@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -190,11 +192,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // Run serves on the given address until ctx is cancelled. It returns the first
 // error from ListenAndServe (other than http.ErrServerClosed, which is folded
 // into nil) or the context error if shutdown times out.
+//
+// Timeouts: ReadHeaderTimeout caps the slow-loris read budget; ReadTimeout
+// caps the whole request including body (large enough to accommodate Ask
+// payloads with embedded conversation history); WriteTimeout caps response
+// emission (Ask is a streaming SSE endpoint, so this is generous);
+// IdleTimeout closes keep-alive connections that are otherwise free for
+// attackers to hold open.
 func Run(ctx context.Context, addr string, h http.Handler) error {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           h,
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
 	}
 	errs := make(chan error, 1)
 	go func() {
@@ -233,4 +245,37 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 			"message": msg,
 		},
 	})
+}
+
+// maxRequestBodyBytes caps daemon-side JSON bodies. 2 MiB sits above the
+// realistic ceiling for the Ask endpoint (which embeds conversation history
+// — the largest body shape the daemon accepts) and well above every other
+// handler. Set well below Anthropic's request ceiling so a body large enough
+// to break the limit could only come from a misbehaving or hostile client.
+const maxRequestBodyBytes = 2 << 20 // 2 MiB
+
+// decodeJSONBody is the canonical request-body decoder. It caps the body at
+// maxRequestBodyBytes via http.MaxBytesReader and rejects unknown JSON fields
+// so typo'd keys surface as 400s instead of silently no-op'ing. On error it
+// writes the canonical {"error":{"code","message"}} envelope and returns
+// false — the caller's responsibility is just `if !decodeJSONBody(...) { return }`.
+//
+// Over-limit bodies map to 413 with code "request_too_large"; malformed JSON
+// (including unknown-field rejections) maps to 400 with the supplied bad-body
+// code so callers can preserve their existing error code strings.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any, badBodyCode string) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request_too_large",
+				fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
+			return false
+		}
+		writeError(w, http.StatusBadRequest, badBodyCode, err.Error())
+		return false
+	}
+	return true
 }

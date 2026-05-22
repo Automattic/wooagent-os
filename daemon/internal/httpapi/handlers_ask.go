@@ -85,8 +85,7 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ask.Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_json", "decode body: "+err.Error())
+	if !decodeJSONBody(w, r, &req, "bad_json") {
 		return
 	}
 

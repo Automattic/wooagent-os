@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -48,6 +50,16 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 			_ = db.Close()
 			return nil, fmt.Errorf("%s: %w", pragma, err)
 		}
+	}
+
+	// Tighten the DB file to 0600 — it carries customer/order/proposal/audit
+	// data that no other local user should be able to read. ErrNotExist is the
+	// `:memory:` test path; ignore it. The parent directory is locked to 0700
+	// by config.EnsureDirs, so WAL/SHM sidecar files (created lazily by the
+	// driver) are protected by directory-level access control.
+	if err := os.Chmod(dsn, 0o600); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		_ = db.Close()
+		return nil, fmt.Errorf("chmod sqlite file %s: %w", dsn, err)
 	}
 
 	s := &Store{DB: db}
