@@ -143,7 +143,7 @@ export default function LeftNav({
   ];
   const fleet_items: NavItem[] = [
     { to: '/agents', label: 'Agents', icon: people },
-    { to: '/abilities', label: 'Skills', icon: category },
+    { to: '/skills', label: 'Skills', icon: category },
     { to: '/runtimes', label: 'Routines', icon: box },
     { to: '/models', label: 'Models', icon: cog },
   ];

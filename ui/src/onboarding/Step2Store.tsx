@@ -404,7 +404,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
                 </Text>
                 <Button
                   variant="link"
-                  href="https://wordpress.org/plugins/wooagent-companion/"
+                  href="https://github.com/Automattic/wooagent-os/releases/latest/download/wooagent-companion.zip"
                   target="_blank"
                   rel="noreferrer noopener"
                 >
