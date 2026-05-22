@@ -695,41 +695,47 @@ a {
   color: var(--wpds-color-fg-content-neutral-weak);
 }
 
-/* Scrollable thread column. Sits between the picker and the input. */
-.wa-chat-thread {
+/* Inner chat (Messages + ChatInput) is composed from
+   @automattic/agenttic-ui — the package scopes its styles under
+   .agenttic and exposes CSS custom properties. We re-point those at
+   WPDS tokens so the chat reads as WooAgent rather than Big Sky. The
+   .wa-chat-stack shim makes the embedded container claim the remaining
+   drawer height so Messages scrolls and Input pins to the bottom. */
+.wa-drawer .agenttic {
+  --color-background: var(--wpds-color-bg-surface-neutral);
+  --color-foreground: var(--wpds-color-fg-content-neutral);
+  --color-popover: var(--wpds-color-bg-surface-neutral);
+  --color-popover-muted: var(--wpds-color-bg-surface-neutral-weak);
+  --color-primary: var(--wpds-color-bg-interactive-brand-strong);
+  --color-primary-foreground: var(--wpds-color-fg-content-on-interactive-brand-strong, #ffffff);
+  --color-muted: var(--wpds-color-bg-surface-info-weak);
+  --color-muted-foreground: var(--wpds-color-fg-content-neutral-weak);
+  --color-ring: var(--wpds-color-bg-interactive-brand-strong);
+  --color-success-background: var(--wpds-color-bg-surface-success-weak);
+  --color-warning-background: var(--wpds-color-bg-surface-warning-weak);
+  --color-error-background: var(--wpds-color-bg-surface-error-weak);
+  --color-error: var(--wpds-color-fg-content-error);
+  --color-link: var(--wpds-color-fg-interactive-brand, var(--wpds-color-bg-interactive-brand-strong));
+  --font-sans: var(--wpds-typography-font-family-body);
+}
+.wa-chat-stack {
   flex: 1 1 auto;
-  overflow-y: auto;
-  padding: var(--wpds-dimension-padding-md);
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
-
-.wa-chat-msg { display: flex; flex-direction: column; gap: var(--wpds-dimension-gap-xs); }
-.wa-chat-msg--user { align-items: flex-end; }
-.wa-chat-msg--assistant { align-items: stretch; }
-
-.wa-chat-bubble {
+.wa-chat-stack [data-slot="messages"] {
+  padding-left: var(--wpds-dimension-padding-md);
+  padding-right: var(--wpds-dimension-padding-md);
+}
+.wa-chat-stack [data-slot="chat-input"] {
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
-  border-radius: var(--wpds-border-radius-md);
-  font-size: var(--wpds-typography-font-size-sm);
-  line-height: var(--wpds-typography-line-height-md);
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  max-width: 90%;
-}
-.wa-chat-bubble--user {
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-content-neutral);
-  max-width: 80%;
-}
-.wa-chat-bubble--assistant {
-  background: transparent;
-  color: var(--wpds-color-fg-content-neutral);
-  padding-left: 0;
-  padding-right: 0;
+  border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
 }
 
-/* Row of reference chips below an assistant turn. */
+/* Row of reference + dispatch chips that hangs off an assistant turn.
+   Lives inside the Agenttic message bubble as a `type: 'component'`
+   content block. */
 .wa-chat-chips {
   display: flex;
   flex-wrap: wrap;
@@ -787,27 +793,13 @@ a {
   margin: 0 !important;
 }
 
-/* Inline thinking indicator while the LLM call is in flight. */
-.wa-chat-thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wpds-dimension-gap-sm);
-  padding: var(--wpds-dimension-padding-sm) 0;
-  color: var(--wpds-color-fg-content-neutral-weak);
-  font-size: var(--wpds-typography-font-size-sm);
+/* SSE-driven mid-flight ThinkingBlock — replaces Agenttic's bare
+   "Thinking…" indicator once at least one slow-tool event arrives.
+   Multi-line because a Pricing benchmark fires several web_search
+   calls in sequence. */
+.wa-chat-thinking-wrap {
+  padding: 0 var(--wpds-dimension-padding-md);
 }
-.wa-chat-thinking__spinner {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
-}
-.wa-chat-thinking__spinner > * { width: 14px !important; height: 14px !important; margin: 0 !important; }
-
-/* SSE-driven mid-flight ThinkingBlock — replaces the generic spinner
-   above once at least one slow-tool event arrives. Multi-line because a
-   Pricing benchmark fires several web_search calls in sequence. */
 .wa-chat-thinking-block {
   display: flex;
   gap: var(--wpds-dimension-gap-sm);
@@ -850,19 +842,6 @@ a {
   padding: 0 var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-sm);
 }
 .wa-chat-suggestions .wa-eyebrow { padding-left: var(--wpds-dimension-padding-xs); }
-
-/* Input row pinned to the bottom of the drawer. */
-.wa-chat-input {
-  padding: var(--wpds-dimension-padding-md);
-  border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-  background: var(--wpds-color-bg-surface-neutral);
-}
-.wa-chat-input__hint {
-  margin-top: var(--wpds-dimension-gap-xs);
-  font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
-  text-align: right;
-}
 
 /* ---------- Variant card (refreshed) ---------- */
 /* Header row: letter badge + label chips on the left; score labels + radio

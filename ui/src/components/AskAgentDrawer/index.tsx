@@ -2,9 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon, close } from '@wordpress/icons';
 import { Notice } from '@wordpress/components';
 import { Text } from '@wordpress/ui';
-import ChatThread from './ChatThread';
-import MessageInput from './MessageInput';
+import {
+  AgentUIContainer,
+  AgentUIMessages,
+  AgentUIInput,
+} from '@automattic/agenttic-ui';
 import Picker from './Picker';
+import ThinkingBlock from './ThinkingBlock';
+import { adaptMessages } from './adaptMessages';
 import {
   api,
   type AskAgent,
@@ -32,9 +37,10 @@ interface Props {
 // gets a new message. Threads clear on reload — persistence is a
 // follow-up.
 //
-// Live agents: Chief of Staff (default), Marketing, Pricing,
-// Sales Support. Inventory / Accounting / Reporting appear disabled in
-// the picker — their runtimes aren't registered (1355).
+// The inner chat (messages list + input) is composed from
+// @automattic/agenttic-ui — see DESIGN.md for the rationale. The drawer
+// shell, persona Picker, suggestions row, ThinkingBlock and chip pills
+// stay WooAgent-specific.
 
 /** Empty per-agent thread map. One key per live agent; new agents added
  *  here must also be exported from the daemon's AgentSlug enum so the
@@ -46,10 +52,17 @@ const EMPTY_THREADS: Record<AskAgent, AskMessage[]> = {
   'sales-support': [],
 };
 
+const AGENT_LABELS: Record<AskAgent, string> = {
+  chief_of_staff: 'Chief of Staff',
+  marketing: 'Marketing',
+  pricing: 'Pricing',
+  'sales-support': 'Sales Support',
+};
+
 export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
   const [activeAgent, setActiveAgent] = useState<AskAgent>('chief_of_staff');
   // Per-agent message threads. Switching the picker swaps which thread
-  // ChatThread renders without losing the others — within one session,
+  // Agenttic UI renders without losing the others — within one session,
   // a half-finished Pricing chat survives a quick detour to CoS.
   const [threads, setThreads] = useState<Record<AskAgent, AskMessage[]>>(EMPTY_THREADS);
   const [unread, setUnread] = useState<Partial<Record<AskAgent, boolean>>>({});
@@ -62,7 +75,7 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const threadId = useMemo(() => crypto.randomUUID(), []);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const getPageContext = useAskAgentContextGetter();
 
   const messages = threads[activeAgent];
@@ -71,16 +84,22 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
   // SSE-driven mid-flight progress for slow tools (Pricing's
   // web_search benchmark in particular). The hook opens an EventSource
   // when isLoading transitions true and closes when it goes false.
-  // Events are surfaced as a transient ThinkingBlock between the last
-  // user turn and the assistant reply.
+  // Events render as a transient ThinkingBlock between Messages and the
+  // input; the bare Agenttic "Thinking…" indicator covers the no-event
+  // fast-path.
   const thinking = useAskAgentThinking(connection, threadId, isLoading);
 
-  // Focus the input when the drawer opens.
+  // Focus the textarea when the drawer opens. AgentUIContainer owns the
+  // textarea ref internally — we query for it via the `chat-input` slot.
   useEffect(() => {
     if (!isOpen) return;
-    const id = setTimeout(() => inputRef.current?.focus(), 0);
+    const id = setTimeout(() => {
+      drawerRef.current
+        ?.querySelector<HTMLTextAreaElement>('[data-slot="chat-input"] textarea')
+        ?.focus();
+    }, 0);
     return () => clearTimeout(id);
-  }, [isOpen]);
+  }, [isOpen, activeAgent]);
 
   // Esc closes the drawer.
   useEffect(() => {
@@ -102,15 +121,15 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
     });
   }, [activeAgent]);
 
-  const submit = async (textOverride?: string) => {
-    const text = (textOverride ?? input).trim();
-    if (!text || isLoading) return;
+  const submit = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isLoading) return;
 
     const agent = activeAgent;
     const ctx = getPageContext();
     const userMsg: AskMessage = {
       role: 'user',
-      content: text,
+      content: trimmed,
       page_context: ctx,
     };
     const nextThread = [...threads[agent], userMsg];
@@ -137,14 +156,13 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
       }
     } catch (err) {
       // Roll back the user message — keeping it without a reply leaves
-      // the thread confusingly mid-air, and the operator can re-submit
-      // from the input box (the input itself is empty by now).
+      // the thread confusingly mid-air. Restore the text in the input so
+      // the operator can edit and re-submit.
       setThreads((prev) => ({ ...prev, [agent]: prev[agent].slice(0, -1) }));
-      setInput(text);
+      setInput(trimmed);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoadingAgent((prev) => (prev === agent ? null : prev));
-      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
@@ -155,6 +173,17 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
   const pageLabel = isOpen ? getPageContext().page : '';
   const suggestions = useAskAgentSuggestions(connection, activeAgent, pageLabel);
 
+  const adapted = useMemo(
+    () => adaptMessages(messages, connection, onClose),
+    [messages, connection, onClose],
+  );
+
+  // SSE-driven ThinkingBlock replaces Agenttic's bare "Thinking…" once
+  // at least one thinking event arrives. When events are empty but
+  // isLoading is true, we let AgentUIContainer render its own indicator.
+  const showThinkingBlock = isLoading && thinking.length > 0;
+  const isProcessingForAgenttic = isLoading && thinking.length === 0;
+
   return (
     <>
       <div
@@ -163,6 +192,7 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
         aria-hidden="true"
       />
       <aside
+        ref={drawerRef}
         className={`wa-drawer${isOpen ? ' is-open' : ''}`}
         role="dialog"
         aria-label="Ask agent"
@@ -183,49 +213,55 @@ export default function AskAgentDrawer({ isOpen, onClose, connection }: Props) {
 
         <Picker active={activeAgent} onSelect={setActiveAgent} unread={unread} />
 
-        <ChatThread
-          messages={messages}
-          isLoading={isLoading}
-          thinking={thinking}
-          connection={connection}
-          onChipNavigated={onClose}
-        />
-
-        {error && (
-          <div className="wa-chat-error">
-            <Notice
-              status="error"
-              isDismissible
-              onRemove={() => setError(null)}
-            >
-              {error}
-            </Notice>
-          </div>
-        )}
-
-        {messages.length === 0 && suggestions.length > 0 && (
-          <div className="wa-chat-suggestions">
-            <span className="wa-eyebrow">Suggested</span>
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="wa-suggestion-row"
-                onClick={() => submit(s)}
-              >
-                <span className="wa-suggestion-row__label">{s}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <MessageInput
-          value={input}
-          onChange={setInput}
+        <AgentUIContainer
+          variant="embedded"
+          className="agenttic wa-chat-stack"
+          messages={adapted}
+          isProcessing={isProcessingForAgenttic}
           onSubmit={submit}
-          disabled={isLoading}
-          textareaRef={inputRef}
-        />
+          inputValue={input}
+          onInputChange={setInput}
+          placeholder={`Ask ${AGENT_LABELS[activeAgent]}`}
+          maxInputLength={2000}
+        >
+          <AgentUIMessages />
+
+          {showThinkingBlock && (
+            <div className="wa-chat-thinking-wrap">
+              <ThinkingBlock events={thinking} />
+            </div>
+          )}
+
+          {error && (
+            <div className="wa-chat-error">
+              <Notice
+                status="error"
+                isDismissible
+                onRemove={() => setError(null)}
+              >
+                {error}
+              </Notice>
+            </div>
+          )}
+
+          {messages.length === 0 && suggestions.length > 0 && (
+            <div className="wa-chat-suggestions">
+              <span className="wa-eyebrow">Suggested</span>
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="wa-suggestion-row"
+                  onClick={() => submit(s)}
+                >
+                  <span className="wa-suggestion-row__label">{s}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <AgentUIInput />
+        </AgentUIContainer>
       </aside>
     </>
   );
