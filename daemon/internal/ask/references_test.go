@@ -28,12 +28,97 @@ func TestExtract_ProposalReferenceFromListProposals(t *testing.T) {
 	refs, dispatched := ExtractReferencesAndDispatched(
 		"You should look at [proposal #1247] first.",
 		trace,
+		nil,
+		AgentChiefOfStaff,
 	)
 	if len(refs) != 1 || refs[0].ID != "1247" || refs[0].Title != "Linen Napkin" || refs[0].State != "pending" {
 		t.Fatalf("unexpected refs: %+v", refs)
 	}
 	if len(dispatched) != 0 {
 		t.Fatalf("expected no dispatched, got %+v", dispatched)
+	}
+}
+
+// TestExtract_HallucinatedProposalIDDropped guards against DSGWOO-1362:
+// a proposal ID the model mentions in prose but never saw in any tool
+// result must NOT make it into the references chip array. Surfacing a
+// chip that navigates to "no issue with that id" reads as a broken
+// product.
+func TestExtract_HallucinatedProposalIDDropped(t *testing.T) {
+	trace := anthropic.Trace{Messages: []anthropic.Message{
+		anthropic.UserMessage("what needs my attention?"),
+		toolResult(`{"proposals":[{"id":"real-a","title":"Real A","state":"pending"}]}`),
+	}}
+	refs, _ := ExtractReferencesAndDispatched(
+		"Look at [proposal #real-a] and also [proposal #fake-b].",
+		trace,
+		nil,
+		AgentChiefOfStaff,
+	)
+	if len(refs) != 1 || refs[0].ID != "real-a" {
+		t.Fatalf("expected only real-a to survive validation, got %+v", refs)
+	}
+}
+
+// TestExtract_HallucinatedRunIDDropped is the run-side mirror of the
+// proposal hallucination guard.
+func TestExtract_HallucinatedRunIDDropped(t *testing.T) {
+	trace := anthropic.Trace{Messages: []anthropic.Message{
+		toolResult(`{"runs":[{"id":"rn_real","persona":"pricing","status":"succeeded"}]}`),
+	}}
+	refs, _ := ExtractReferencesAndDispatched(
+		"See [run rn_real] and the older [run rn_fake].",
+		trace,
+		nil,
+		AgentChiefOfStaff,
+	)
+	if len(refs) != 1 || refs[0].ID != "rn_real" {
+		t.Fatalf("expected only rn_real to survive validation, got %+v", refs)
+	}
+}
+
+// TestExtract_ProposalRefDerivedFromListRuns: when list_runs carries
+// issue_id (+ title/state), the model can pivot from a run record to
+// a proposal reference. Validation must accept that proposal id — the
+// "prefer-proposals" prompt rule depends on this.
+func TestExtract_ProposalRefDerivedFromListRuns(t *testing.T) {
+	trace := anthropic.Trace{Messages: []anthropic.Message{
+		anthropic.UserMessage("what did pricing do?"),
+		toolResult(`{"runs":[{"id":"rn-1","persona":"pricing","status":"succeeded","issue_id":"iss-99","issue_title":"T-Shirt","issue_state":"pending"}]}`),
+	}}
+	refs, _ := ExtractReferencesAndDispatched(
+		"Pricing landed [proposal #iss-99] (T-Shirt).",
+		trace,
+		nil,
+		AgentChiefOfStaff,
+	)
+	if len(refs) != 1 || refs[0].Kind != "proposal" || refs[0].ID != "iss-99" {
+		t.Fatalf("expected proposal ref derived from list_runs, got %+v", refs)
+	}
+	if refs[0].Title != "T-Shirt" || refs[0].State != "pending" {
+		t.Errorf("expected proposal chip to carry title+state from list_runs join, got %+v", refs[0])
+	}
+}
+
+// TestExtract_VisibleItemIDAccepted covers the case where the operator
+// has the board open: the model sees proposal IDs in PageContext and
+// can cite them without calling list_proposals. Those IDs are legit and
+// must survive validation.
+func TestExtract_VisibleItemIDAccepted(t *testing.T) {
+	pageCtx := &PageContext{
+		Page: "board",
+		VisibleItems: []VisibleItem{
+			{ID: "vi-1", Title: "Visible One", Kind: "proposal", State: "pending"},
+		},
+	}
+	refs, _ := ExtractReferencesAndDispatched(
+		"Take a look at [proposal #vi-1].",
+		anthropic.Trace{},
+		pageCtx,
+		AgentChiefOfStaff,
+	)
+	if len(refs) != 1 || refs[0].ID != "vi-1" || refs[0].Title != "Visible One" || refs[0].State != "pending" {
+		t.Fatalf("expected visible-item ref to survive with full metadata, got %+v", refs)
 	}
 }
 
@@ -45,6 +130,8 @@ func TestExtract_RunReferenceFromGetRun(t *testing.T) {
 	refs, _ := ExtractReferencesAndDispatched(
 		"See [run rn_abc] — it's still going.",
 		trace,
+		nil,
+		AgentChiefOfStaff,
 	)
 	if len(refs) != 1 || refs[0].Kind != "run" || refs[0].ID != "rn_abc" || refs[0].State != "running" {
 		t.Fatalf("unexpected refs: %+v", refs)
@@ -59,6 +146,8 @@ func TestExtract_DispatchedFromDispatchTool(t *testing.T) {
 	refs, dispatched := ExtractReferencesAndDispatched(
 		"Asked Pricing to look at SKU-1234 — [run rn_xyz] will land in about a minute.",
 		trace,
+		nil,
+		AgentChiefOfStaff,
 	)
 	if len(dispatched) != 1 {
 		t.Fatalf("expected 1 dispatched, got %+v", dispatched)
@@ -77,21 +166,23 @@ func TestExtract_FailedDispatchProducesNoDispatched(t *testing.T) {
 	trace := anthropic.Trace{Messages: []anthropic.Message{
 		toolResult(`{"ok":false,"persona":"reporting","reason":"not a dispatchable specialist"}`),
 	}}
-	_, dispatched := ExtractReferencesAndDispatched("Reporting isn't available yet.", trace)
+	_, dispatched := ExtractReferencesAndDispatched("Reporting isn't available yet.", trace, nil, AgentChiefOfStaff)
 	if len(dispatched) != 0 {
 		t.Errorf("expected no dispatched for ok=false, got %+v", dispatched)
 	}
 }
 
-func TestExtract_ErroredToolResultsIgnored(t *testing.T) {
+// TestExtract_ErroredToolResultsDropReference: when the tool errored,
+// the ID was never confirmed seen. Emitting an unresolved chip used to
+// be the documented behavior, but DSGWOO-1362 flipped that — a chip
+// without title/state navigates the operator to a 404. Now: drop it.
+func TestExtract_ErroredToolResultsDropReference(t *testing.T) {
 	trace := anthropic.Trace{Messages: []anthropic.Message{
 		errResult(`{"proposals":[{"id":"1247","title":"Linen Napkin","state":"pending"}]}`),
 	}}
-	refs, _ := ExtractReferencesAndDispatched("[proposal #1247]", trace)
-	// The reference should still emit (model mentioned it) but with no
-	// title/state because the errored tool_result was ignored.
-	if len(refs) != 1 || refs[0].ID != "1247" || refs[0].Title != "" || refs[0].State != "" {
-		t.Fatalf("expected unresolved ref, got %+v", refs)
+	refs, _ := ExtractReferencesAndDispatched("[proposal #1247]", trace, nil, AgentChiefOfStaff)
+	if len(refs) != 0 {
+		t.Fatalf("expected dropped ref (errored tool means unconfirmed id), got %+v", refs)
 	}
 }
 
@@ -102,6 +193,8 @@ func TestExtract_DedupesByID(t *testing.T) {
 	refs, _ := ExtractReferencesAndDispatched(
 		"[proposal #1247] is older than [proposal #1247] would suggest.",
 		trace,
+		nil,
+		AgentChiefOfStaff,
 	)
 	if len(refs) != 1 {
 		t.Errorf("expected dedup, got %+v", refs)
@@ -118,6 +211,8 @@ func TestExtract_MentionOrderPreserved(t *testing.T) {
 	refs, _ := ExtractReferencesAndDispatched(
 		"Look at [proposal #B] then [proposal #A].",
 		trace,
+		nil,
+		AgentChiefOfStaff,
 	)
 	if len(refs) != 2 || refs[0].ID != "B" || refs[1].ID != "A" {
 		t.Fatalf("expected B then A, got %+v", refs)
@@ -133,7 +228,7 @@ func TestExtract_RegexAcceptsBracketVariants(t *testing.T) {
 		"[proposal 1247]",
 		"[Proposal #1247]",
 	} {
-		refs, _ := ExtractReferencesAndDispatched(citation, trace)
+		refs, _ := ExtractReferencesAndDispatched(citation, trace, nil, AgentChiefOfStaff)
 		if len(refs) != 1 || refs[0].ID != "1247" {
 			t.Errorf("citation %q did not produce a reference: %+v", citation, refs)
 		}

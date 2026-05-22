@@ -267,8 +267,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
         <div className="wa-subpage-content">
           <Notice.Root intent="error">
             <Notice.Description>
-              Failed to load run: {error}{' '}
-              <Link to="/runs">Back to Runs</Link>
+              Failed to load run: {error}
             </Notice.Description>
           </Notice.Root>
         </div>
