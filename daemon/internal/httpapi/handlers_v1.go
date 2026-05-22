@@ -207,10 +207,8 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req patchAgentRequest
-	if r.Body != nil && r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_request",
-				fmt.Sprintf("invalid JSON body: %v", err))
+	if r.ContentLength != 0 {
+		if !decodeJSONBody(w, r, &req, "bad_request") {
 			return
 		}
 	}
@@ -406,8 +404,7 @@ type createIssueReq struct {
 
 func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	var req createIssueReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeJSONBody(w, r, &req, "bad_json") {
 		return
 	}
 	if req.Title == "" {
@@ -890,8 +887,7 @@ func (s *Server) handleApproveIssue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req approveIssueReq
 	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+		if !decodeJSONBody(w, r, &req, "bad_json") {
 			return
 		}
 	}
@@ -1021,8 +1017,7 @@ func (s *Server) handleDismissIssue(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var req dismissIssueReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_body", err.Error())
+	if !decodeJSONBody(w, r, &req, "bad_body") {
 		return
 	}
 	if req.Reason == "" {
