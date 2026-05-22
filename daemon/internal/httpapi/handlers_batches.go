@@ -55,8 +55,7 @@ type createBatchReq struct {
 
 func (s *Server) handleCreateBatch(w http.ResponseWriter, r *http.Request) {
 	var req createBatchReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+	if !decodeJSONBody(w, r, &req, "bad_json") {
 		return
 	}
 	if req.Title == "" {
@@ -332,8 +331,7 @@ func (s *Server) handleApproveBatch(w http.ResponseWriter, r *http.Request) {
 
 	var req approveBatchReq
 	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_json", err.Error())
+		if !decodeJSONBody(w, r, &req, "bad_json") {
 			return
 		}
 	}
@@ -424,8 +422,7 @@ func (s *Server) handleRejectBatch(w http.ResponseWriter, r *http.Request) {
 		Comment string `json:"comment,omitempty"`
 	}
 	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "bad_body", err.Error())
+		if !decodeJSONBody(w, r, &req, "bad_body") {
 			return
 		}
 	}
