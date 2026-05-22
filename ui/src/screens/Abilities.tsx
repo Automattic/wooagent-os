@@ -298,7 +298,7 @@ function InspectorModal({
             >
               {effectiveTrustOf(ability) === 'schema_changed'
                 ? 'Re-trust at current schema'
-                : 'Trust this ability'}
+                : 'Trust this skill'}
             </Button>
           )}
         </Stack>
@@ -510,7 +510,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     () => [
       {
         id: 'name',
-        label: 'Ability',
+        label: 'Skill',
         enableHiding: false,
         enableGlobalSearch: true,
         getValue: ({ item }) => item.title || item.name,
@@ -557,7 +557,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     () => [
       {
         id: 'trust',
-        label: 'Trust this ability',
+        label: 'Trust this skill',
         isEligible: (ability) => isTrustable(ability),
         callback: (items) => {
           const a = items[0];
@@ -679,7 +679,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
           {restoreError && (
             <Notice.Root intent="error">
               <Notice.Description>
-                Couldn't restore that ability. ({restoreError})
+                Couldn't restore that skill. ({restoreError})
               </Notice.Description>
             </Notice.Root>
           )}
@@ -710,7 +710,7 @@ export default function Abilities({ connection, onAskAgent }: Props) {
           )}
           {confirmRevoke && (
             <Modal
-              title="Revoke this ability?"
+              title="Revoke this skill?"
               onRequestClose={() => {
                 if (!revokeBusy) setConfirmRevoke(null);
               }}
