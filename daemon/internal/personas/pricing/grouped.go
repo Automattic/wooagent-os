@@ -141,10 +141,10 @@ func draftForGroupedParent(
 			SkipReason: "no_proposal: " + reason,
 		}, nil
 	}
-	if len(out.Sources) < 3 {
+	if len(out.Sources) < 2 {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 3", len(out.Sources)),
+			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 2", len(out.Sources)),
 		}, nil
 	}
 	if out.ProposedPrice <= 0 {

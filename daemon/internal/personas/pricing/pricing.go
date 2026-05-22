@@ -247,10 +247,10 @@ func draftForProduct(
 			SkipReason: "no_proposal: " + reason,
 		}, nil
 	}
-	if len(out.Sources) < 3 {
+	if len(out.Sources) < 2 {
 		return personas.Drafted{
 			Skipped:    true,
-			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 3", len(out.Sources)),
+			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 2", len(out.Sources)),
 		}, nil
 	}
 	if out.ProposedPrice <= 0 {
@@ -744,9 +744,9 @@ const userPromptTemplate = `Product to analyze:
 
 Anchor your benchmark and the previous_price field of your output to the **anchor** value above — that is the price customers see right now. When the anchor is sale_price, your proposal updates the active sale; when the anchor is regular_price, the product is not on sale.
 
-Search the preferred retailers from the skill — start with site:-scoped queries against J.Crew, Madewell, Aritzia, Everlane, Quince, COS for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods. Pick the 4–6 retailers most likely to carry this product and run site:<retailer>.com <noun phrase> queries. Match on category, material, and tier — not just keywords.
+Search the preferred retailers from the skill — start with site:-scoped queries against J.Crew, Madewell, Aritzia, Everlane, Quince, COS, Uniqlo, Gap for apparel; Parachute, Anthropologie, West Elm, Crate & Barrel, Coyuchi for home goods. Pick the 4–6 retailers most likely to carry this product and run site:<retailer>.com <noun phrase> queries. Match on category, material, and tier — not just keywords.
 
-Required: at least 3 qualifying comparables before proposing. When you decline, reason_no_proposal must name what you searched, what came back, and why it doesn't qualify. When you propose, name the retailer in each sources[] entry.
+Required: at least 2 qualifying comparables before proposing. When you decline, reason_no_proposal must name what you searched, what came back, and why it doesn't qualify. When you propose, name the retailer in each sources[] entry. When exactly 2 qualifying comparables surface (the floor), still propose — but the rationale MUST name the thin grounding explicitly (e.g., "Only 2 retailers had visible pricing for this category; comp band is thin"). Three or more comps is the default and needs no thinness note.
 
 OUTPUT FORMAT — EXACT field names. Do not rename, do not nest differently, do not add fields not listed below. rationale is a single STRING (use \n for paragraph breaks if needed), NOT an array. Example of a propose-yes response:
 
