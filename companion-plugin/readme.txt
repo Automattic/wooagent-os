@@ -4,7 +4,7 @@ Tags: woocommerce, ai, agents, mcp, abilities
 Requires at least: 6.7
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.4.0
 License: Apache-2.0
 
 Registers the WooAgent OS ability surface on a WooCommerce store. Paired with the WooAgent OS daemon running on the operator's machine.
@@ -39,6 +39,13 @@ Device pairing (stub — shipping in v0.2):
 Until pairing ships, authenticate with a WordPress Application Password (Users → Profile → Application Passwords).
 
 == Changelog ==
+
+= 0.4.0 =
+* Adds self-update via plugin-update-checker pointed at github.com/Automattic/wooagent-os releases. Installed copies will now check for new releases automatically and surface them in WP Admin → Plugins.
+* Fixes the Plugin URI to point at github.com/Automattic/wooagent-os (the canonical public repo).
+
+= 0.3.0 =
+* (No public changelog entry — version was bumped during internal development; superseded by 0.4.0.)
 
 = 0.2.0 =
 * wooagent-products/list: new orderby (menu_order | date | date_modified | total_sales | title) + order (asc | desc) input args.
