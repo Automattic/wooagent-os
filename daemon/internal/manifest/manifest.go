@@ -62,6 +62,13 @@ const (
 // of being safely reverted in operator-visible time.
 const LowReversibilityThreshold = 0.3
 
+// PlaceholderSchemaHash is the sentinel SchemaHash used for pre-signed
+// canonical entries that don't yet have a captured live-store schema
+// (WC 10.9 abilities pre-add per DSGWOO-1279). The PEP's hash gate treats
+// entries with this hash as "trust by name" until manifest-compute captures
+// the real hash; refuses to enforce drift detection against a sentinel.
+const PlaceholderSchemaHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
 // Entry is one pre-signed ability record. Every field is part of the trust
 // decision except Description, which is informational only.
 type Entry struct {
