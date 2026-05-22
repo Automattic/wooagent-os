@@ -344,11 +344,11 @@ export interface Proposal {
 }
 
 // Mirrors daemon/internal/httpapi/handlers_undo.go's undoableProposalTypes
-// map. Used by the "Reversible · always" badge to decide whether to show
-// up at all — proposal types whose approve path returns an empty
-// applied_value (cold-draft, customer-reply) can't be reversed and the
-// badge would mislead. Keep in lockstep with the daemon allowlist when
-// new proposal types ship with undo support.
+// map. Used by the "Reversible" badge to decide whether to show up at
+// all — proposal types whose approve path returns an empty applied_value
+// (cold-draft, customer-reply) can't be reversed and the badge would
+// mislead. Keep in lockstep with the daemon allowlist when new proposal
+// types ship with undo support.
 export function isReversibleProposalType(
   type: string | undefined | null,
 ): boolean {

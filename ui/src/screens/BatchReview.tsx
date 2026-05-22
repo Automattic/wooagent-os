@@ -865,7 +865,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
             </Stack>
           </div>
           <div className="wa-action-bar-actions">
-            {!isColdDraftBatch && <Badge intent="none">Reversible · always</Badge>}
+            {!isColdDraftBatch && <Badge intent="none">Reversible</Badge>}
             <Button
               __next40pxDefaultSize
               variant="tertiary"

@@ -29,8 +29,6 @@ interface ProviderOption {
   knownModels?: string[];
   needsApiKey: boolean;
   needsEndpoint: boolean;
-  // Tag rendered under the title — e.g. "Free · Local" for Ollama.
-  tag?: { label: string; tone: 'success' | 'info' };
   // Provider console URL surfaced as an inline link below the API key
   // field. Lets operators without an account get one without leaving the
   // flow to search for it.
@@ -77,7 +75,6 @@ const PROVIDERS: ProviderOption[] = [
     defaultModel: '',
     needsApiKey: false,
     needsEndpoint: true,
-    tag: { label: 'Free · Local', tone: 'success' },
   },
 ];
 
@@ -215,25 +212,17 @@ export default function Step4Model({ connection, onSaved, onBack }: Props) {
                 aria-pressed={picked?.kind === p.kind}
               >
                 <Stack direction="column" gap="xs" align="flex-start">
-                  <Stack direction="row" gap="xs" align="center" wrap="wrap">
-                    <Text
-                      variant="body-md"
-                      style={{
-                        fontWeight:
-                          'var(--wpds-typography-font-weight-medium)',
-                      }}
-                    >
-                      {p.title}
-                    </Text>
-                    {p.tag && (
-                      <span
-                        className={`wa-onboarding-provider__tag wa-onboarding-provider__tag--${p.tag.tone}`}
-                      >
-                        {p.tag.label}
-                      </span>
-                    )}
-                  </Stack>
-                  <Text variant="body-sm" style={MUTED}>
+                  <Text
+                    variant="body-md"
+                    style={{
+                      fontWeight:
+                        'var(--wpds-typography-font-weight-medium)',
+                      textWrap: 'pretty',
+                    }}
+                  >
+                    {p.title}
+                  </Text>
+                  <Text variant="body-sm" style={{ ...MUTED, textWrap: 'pretty' }}>
                     {p.blurb}
                   </Text>
                 </Stack>
