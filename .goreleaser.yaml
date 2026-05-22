@@ -89,7 +89,12 @@ release:
 
 changelog:
   sort: asc
-  use: github
+  # `use: git` reads commit messages from `git log` locally instead of
+  # querying GitHub's compare API. GitHub-API mode pretty-renders PR
+  # titles but pages through the commit range and triggers secondary
+  # rate limits on wide ranges (e.g., v0.1.0…v0.4.0 — see release run
+  # 26292881128). git-log mode is rate-limit-free.
+  use: git
   filters:
     exclude:
       - "^docs:"
