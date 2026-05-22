@@ -567,3 +567,62 @@ func (s *Server) handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleRefreshStoreAbilities re-runs ability discovery against a paired
+// store on demand. Without this, the periodic ticker (default 6h, see
+// abilities.go) is the only thing that picks up abilities added by a
+// plugin install on the store side. The handler is operator-driven so
+// nothing happens automatically — the UI exposes it as a "Refresh"
+// button on the Abilities screen.
+//
+// Responses:
+//   200 — { "ability_count": N, "last_discovered_at": "..." } on success
+//   404 — store_not_found
+//   409 — store_not_paired (still pairing / expired / failed)
+//   502 — discovery_failed (MCP roundtrip or reconcile error)
+func (s *Server) handleRefreshStoreAbilities(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ctx := r.Context()
+
+	var status string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT status FROM stores WHERE id = ?`, id,
+	).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "store_not_found", "no store with that id")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	if status != "paired" {
+		writeError(w, http.StatusConflict, "store_not_paired",
+			"store status is "+status+"; pair the store before refreshing abilities")
+		return
+	}
+
+	// 30s ceiling so a slow store doesn't pin the request indefinitely.
+	// RunForStore typically completes in 1–3s against a healthy MCP host;
+	// timeouts here surface to the operator as a "couldn't refresh" notice
+	// rather than a UI spinner that never resolves.
+	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	count, err := s.abilities.RunForStore(runCtx, id)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "discovery_failed", err.Error())
+		return
+	}
+
+	var lastDiscoveredAt sql.NullString
+	if err := s.store.DB.QueryRowContext(ctx,
+		`SELECT last_discovered_at FROM stores WHERE id = ?`, id,
+	).Scan(&lastDiscoveredAt); err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ability_count":      count,
+		"last_discovered_at": lastDiscoveredAt.String,
+	})
+}

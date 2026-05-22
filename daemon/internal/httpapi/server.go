@@ -15,6 +15,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/scheduler"
@@ -69,7 +70,11 @@ type Server struct {
 // paths.UISessionFile. Pass "" to disable auto-auth (the UI falls back
 // to its manual URL+token form). Only ever delivered to loopback Host
 // headers — see uiassets.Handler.
-func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, uiSessionToken string) *Server {
+//
+// `m` is the pre-signed ability manifest. Threaded through to the
+// abilities Runner so SeedAll / SeedManifest can pre-populate the
+// abilities table at startup (DSGWOO-1361 cold-start UX fix).
+func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, m *manifest.Manifest, uiSessionToken string) *Server {
 	if sec == nil {
 		panic("httpapi.New: secrets.Store is required")
 	}
@@ -80,7 +85,7 @@ func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, uiSes
 		secrets:        sec,
 		modelTester:    newRealModelTester(),
 		pairing:        pairing.NewClient(),
-		abilities:      abilities.New(st.DB, sec),
+		abilities:      abilities.New(st.DB, sec, m),
 		uiSessionToken: uiSessionToken,
 	}
 	s.router = s.buildRouter()
@@ -151,6 +156,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/stores", s.handleCreateStore)
 		r.Get("/v1/stores/{id}", s.handleGetStore)
 		r.Delete("/v1/stores/{id}", s.handleDeleteStore)
+		r.Post("/v1/stores/{id}/refresh-abilities", s.handleRefreshStoreAbilities)
 		r.Get("/v1/model-providers", s.handleListModelProviders)
 		r.Post("/v1/model-providers", s.handleCreateModelProvider)
 		r.Post("/v1/model-providers/test", s.handleTestModelProvider)
