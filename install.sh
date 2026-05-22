@@ -2,7 +2,7 @@
 # WooAgent OS — one-line installer.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/elizaan36/wooagent-os/trunk/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Automattic/wooagent-os/trunk/install.sh | bash
 #
 # Pin a version:
 #   curl -fsSL .../install.sh | WOOAGENT_VERSION=v0.1.0 bash
@@ -11,7 +11,7 @@
 #   curl -fsSL .../install.sh | WOOAGENT_INSTALL_DIR=/usr/local/bin bash
 #
 # Use a different repo (private fork, internal mirror, etc.):
-#   curl -fsSL .../install.sh | WOOAGENT_REPO=Automattic/wooagent-os bash
+#   curl -fsSL .../install.sh | WOOAGENT_REPO=your-org/wooagent-fork bash
 #
 # What it does:
 #   1. Detect OS + arch
@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO="${WOOAGENT_REPO:-elizaan36/wooagent-os}"
+REPO="${WOOAGENT_REPO:-Automattic/wooagent-os}"
 VERSION="${WOOAGENT_VERSION:-latest}"
 INSTALL_DIR="${WOOAGENT_INSTALL_DIR:-$HOME/.wooagent/bin}"
 

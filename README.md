@@ -28,7 +28,7 @@ Inventory, Reporting, Accounting, and Chief of Staff are in progress and will ge
 If you just want to run WooAgent OS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/elizaan36/wooagent-os/trunk/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Automattic/wooagent-os/trunk/install.sh | bash
 ```
 
 The installer detects your platform (macOS / Linux on amd64 or arm64), downloads the matching binary from the latest GitHub Release, verifies its SHA-256, and drops it in `~/.wooagent/bin/wooagent`.
@@ -40,7 +40,7 @@ wooagent run       # serves http://localhost:7777
 
 The React UI is baked into the binary — open <http://localhost:7777> in a browser.
 
-Pin a version with `WOOAGENT_VERSION=v0.1.0`. Windows: download the `.zip` from the [Releases page](https://github.com/elizaan36/wooagent-os/releases) directly or use WSL.
+Pin a version with `WOOAGENT_VERSION=v0.1.0`. Windows: download the `.zip` from the [Releases page](https://github.com/Automattic/wooagent-os/releases) directly or use WSL.
 
 ## Connecting a WooCommerce store
 
