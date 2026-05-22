@@ -184,6 +184,14 @@ func draftForVariableParent(
 	if absFloat(out.PercentChange) > 25.0+0.01 {
 		return personas.Drafted{}, fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
 	}
+	// Soft-skip no-change proposals — a 0% parent percent leaves every
+	// child variation unchanged and gives the operator nothing to approve.
+	if absFloat(out.PercentChange) < 0.05 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("no-change: parent percent %.2f%% rounds to +0.0%%", out.PercentChange),
+		}, nil
+	}
 
 	pct := out.PercentChange
 	children := make([]personas.Drafted, 0, len(vs))
