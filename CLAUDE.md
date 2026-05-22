@@ -98,6 +98,7 @@ After the refresh, review the diff and commit if it looks right.
 ## Git
 
 - Default branch is `trunk`.
+- The canonical remote is `origin` (`github.com/Automattic/wooagent-os`). `a8c-legacy` is read-only history from the pre-2026-05-22 GitHub Enterprise origin — never push to it.
 - Push freely on feature branches; confirm before pushing to `trunk`.
 - Never `--force-push`, never `--no-verify`.
 
