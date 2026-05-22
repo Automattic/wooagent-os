@@ -135,6 +135,11 @@ function wooagent_companion_register_product_abilities(): void {
 							),
 						),
 					),
+					'grouped_products'  => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'integer' ),
+						'description' => 'Child product IDs when type=grouped; empty array otherwise.',
+					),
 					'tags'              => array(
 						'type'  => 'array',
 						'items' => array( 'type' => 'string' ),
@@ -406,6 +411,18 @@ function wooagent_products_get_execute( array $args ) {
 		}
 	}
 
+	// Grouped products carry their children as $product->get_children();
+	// for every other product type get_children() returns variations
+	// (variable) or an empty array. Only surface for grouped — variations
+	// are exposed via the dedicated wooagent-products/variations-list
+	// ability with full per-variation prices.
+	$grouped_products = array();
+	if ( $product->is_type( 'grouped' ) ) {
+		foreach ( $product->get_children() as $child_id ) {
+			$grouped_products[] = (int) $child_id;
+		}
+	}
+
 	return array(
 		'id'                => $product->get_id(),
 		'name'              => $product->get_name(),
@@ -418,6 +435,7 @@ function wooagent_products_get_execute( array $args ) {
 		'description'       => $product->get_description(),
 		'short_description' => $product->get_short_description(),
 		'categories'        => $categories,
+		'grouped_products'  => $grouped_products,
 		'tags'              => $tags,
 		'meta_title'        => (string) get_post_meta( $product->get_id(), '_yoast_wpseo_title', true ),
 		'meta_description'  => (string) get_post_meta( $product->get_id(), '_yoast_wpseo_metadesc', true ),

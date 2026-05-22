@@ -222,6 +222,9 @@ func draftForProduct(
 	if p.Type == "variable" {
 		return draftForVariableParent(ctx, deps, p, skillDescription, model, currency)
 	}
+	if p.Type == "grouped" {
+		return draftForGroupedParent(ctx, deps, p, skillDescription, model, currency)
+	}
 	currentPrice, targetField, ok := pickAnchorPrice(p)
 	if !ok {
 		return personas.Drafted{
@@ -385,16 +388,17 @@ func pickFirstProduct(ctx context.Context, c *mcp.Client, skip map[int]struct{})
 }
 
 // firstEligible scans summaries for the first published product whose ID
-// is not in skip. Variable parents pass even though their RegularPrice is
-// empty — variations carry the prices. Simple/other types must have a
-// non-empty RegularPrice to be considered priced.
+// is not in skip. Variable and grouped parents pass even though their
+// RegularPrice is empty — variations / grouped children carry the prices.
+// Simple/other types must have a non-empty RegularPrice to be considered
+// priced.
 func firstEligible(summaries []productSummary, skip map[int]struct{}) (int, error) {
 	skippedNoPrice, skippedCooldown := 0, 0
 	for _, p := range summaries {
 		if p.Status != "publish" && p.Status != "" {
 			continue
 		}
-		if p.Type != "variable" && strings.TrimSpace(p.RegularPrice) == "" {
+		if p.Type != "variable" && p.Type != "grouped" && strings.TrimSpace(p.RegularPrice) == "" {
 			skippedNoPrice++
 			continue
 		}
@@ -426,16 +430,18 @@ func listEligibleProducts(ctx context.Context, c *mcp.Client, skip map[int]struc
 }
 
 // filterEligible returns products that are published, not in the cooldown
-// skip set, and either (a) simple-type with a non-empty regular_price, or
+// skip set, and either (a) simple-type with a non-empty regular_price,
 // (b) variable-type (variable parents have no own price; the bulk-update
-// path will write to their variations).
+// path will write to their variations), or (c) grouped-type (grouped
+// parents are wrappers; draftForGroupedParent fans out to the children
+// listed in grouped_products).
 func filterEligible(products []product, skip map[int]struct{}) []product {
 	out := make([]product, 0, len(products))
 	for _, p := range products {
 		if p.Status != "publish" && p.Status != "" {
 			continue
 		}
-		if p.Type != "variable" && strings.TrimSpace(p.RegularPrice) == "" {
+		if p.Type != "variable" && p.Type != "grouped" && strings.TrimSpace(p.RegularPrice) == "" {
 			continue
 		}
 		if _, blocked := skip[p.ID]; blocked {
@@ -462,6 +468,11 @@ type product struct {
 	Categories   []struct {
 		Name string `json:"name"`
 	} `json:"categories"`
+	// GroupedProducts is the list of child product IDs the WC REST API
+	// returns on a `type=grouped` parent. Empty for all other product
+	// types. draftForGroupedParent walks this to fan out one
+	// product_price_change proposal per child.
+	GroupedProducts []int `json:"grouped_products"`
 }
 
 func getProduct(ctx context.Context, c *mcp.Client, id int) (product, error) {

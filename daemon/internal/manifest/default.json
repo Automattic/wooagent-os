@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-05-18T13:46:10Z",
+  "generated_at": "2026-05-22T00:12:42Z",
   "entries": [
     {
       "ability": "core/get-site-info",
@@ -57,7 +57,7 @@
       "ability": "wooagent-products/get",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
-      "schema_hash": "sha256:84f71f25a1d5c58576faf311d070efb73cb7405e593a64e99959e66cb391ee96",
+      "schema_hash": "sha256:81c34d98412e67cc8da963dcaf930601f7492217c48e6445776d3e9727f77d86",
       "scope": "read",
       "reversibility": 1,
       "personas": [
@@ -102,16 +102,16 @@
       "ability": "wooagent-products/variations-list",
       "namespace_owner": "wooagent-os/companion-plugin",
       "source_url": "",
-      "schema_hash": "pending",
-      "scope": "read",
-      "reversibility": 1,
+      "schema_hash": "sha256:315862efea6d53d5ed529b95c1bac241afaaa72d524246dd1858bb99e683fb31",
+      "scope": "propose",
+      "reversibility": 0.5,
       "personas": [
         "marketing",
         "pricing",
         "inventory",
         "sales-support"
       ],
-      "description": "List all enabled, priced variations of a variable product."
+      "description": "List all enabled, priced variations of a variable product. Returns id, attribute label, regular_price, sale_price, and stock_status per variation."
     },
     {
       "ability": "wooagent-orders/list",

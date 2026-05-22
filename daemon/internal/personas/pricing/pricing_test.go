@@ -451,3 +451,62 @@ func TestListEligibleProducts_IncludesVariable(t *testing.T) {
 		}
 	}
 }
+
+func TestPickFirstProduct_AllowsGrouped(t *testing.T) {
+	// Grouped parents have meaningless regular_price (the parent is a
+	// wrapper; children carry the real prices), so they must pass the
+	// picker like variable parents do. draftForProduct fans out to
+	// children via grouped_products IDs.
+	summaries := []productSummary{
+		{ID: 300, Status: "publish", Type: "simple", RegularPrice: ""},
+		{ID: 301, Status: "publish", Type: "grouped", RegularPrice: ""},
+		{ID: 302, Status: "publish", Type: "simple", RegularPrice: "19.99"},
+	}
+	id, err := firstEligible(summaries, map[int]struct{}{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id != 301 {
+		t.Fatalf("expected id 301 (grouped parent passes despite empty regular_price); got %d", id)
+	}
+}
+
+func TestListEligibleProducts_IncludesGrouped(t *testing.T) {
+	products := []product{
+		{ID: 400, Status: "publish", Type: "simple", RegularPrice: "29.99"},
+		{ID: 401, Status: "publish", Type: "grouped", RegularPrice: ""},
+		{ID: 402, Status: "publish", Type: "simple", RegularPrice: ""},
+	}
+	got := filterEligible(products, map[int]struct{}{})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 eligible (grouped + simple-with-price); got %d (%v)", len(got), got)
+	}
+	wantIDs := map[int]bool{400: true, 401: true}
+	for _, p := range got {
+		if !wantIDs[p.ID] {
+			t.Fatalf("unexpected id %d in eligible set", p.ID)
+		}
+	}
+}
+
+func TestProduct_DecodesGroupedProductsField(t *testing.T) {
+	// WC REST API returns grouped_products as an array of integer child
+	// IDs on the parent product. draftForGroupedParent needs this field
+	// populated to know which children to fan out to.
+	payload := []byte(`{
+		"id": 4000,
+		"name": "Logo Collection",
+		"type": "grouped",
+		"grouped_products": [3902, 3903, 3904]
+	}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(p.GroupedProducts) != 3 {
+		t.Fatalf("len(GroupedProducts) = %d, want 3", len(p.GroupedProducts))
+	}
+	if p.GroupedProducts[0] != 3902 || p.GroupedProducts[1] != 3903 || p.GroupedProducts[2] != 3904 {
+		t.Fatalf("GroupedProducts = %v, want [3902 3903 3904]", p.GroupedProducts)
+	}
+}
