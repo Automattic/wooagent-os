@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -245,10 +247,15 @@ func TestCallTool_SessionLost_ReturnsSentinel(t *testing.T) {
 	c := NewClient(Config{Endpoint: srv.URL})
 	// Bypass Initialize: set a stale session id directly so the next CallTool
 	// hits the "session invalid" server response.
-	c.sessionID = "stale-session"
+	c.setSessionID("stale-session")
 	_, err := c.CallTool(context.Background(), "any", nil)
 	if !errors.Is(err, ErrSessionLost) {
 		t.Fatalf("want ErrSessionLost, got %v", err)
+	}
+	// The client must auto-invalidate the stale session id so the next
+	// Initialize call triggers a fresh handshake.
+	if got := c.SessionID(); got != "" {
+		t.Errorf("session id not cleared after ErrSessionLost: %q", got)
 	}
 }
 
@@ -258,5 +265,65 @@ func TestCallTool_ConnectionRefused_ReturnsTransportSentinel(t *testing.T) {
 	_, err := c.Initialize(context.Background())
 	if !errors.Is(err, ErrTransport) {
 		t.Fatalf("want ErrTransport, got %v", err)
+	}
+}
+
+// Concurrent Initialize callers must serialize: only the first does the
+// handshake, the rest see the cached session. Verifies the fix for the race
+// surfaced in the DSGWOO-1361 codex review (pep.go calls Initialize on every
+// dispatch, so without serialization the WP MCP Adapter would see N
+// concurrent handshakes and the shared sessionID could be torn between
+// writers).
+func TestInitialize_ConcurrentCallersSerialize(t *testing.T) {
+	var initCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var rpc struct {
+			ID     int64  `json:"id"`
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(body, &rpc)
+		if rpc.Method == "initialize" {
+			initCalls.Add(1)
+			w.Header().Set("Mcp-Session-Id", "the-one-session")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0", "id": rpc.ID,
+				"result": map[string]any{
+					"protocolVersion": protocolVersion,
+					"serverInfo":      map[string]any{"name": "fake", "version": "0"},
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := NewClient(Config{Endpoint: srv.URL, BearerToken: "tok"})
+
+	const N = 20
+	var wg sync.WaitGroup
+	wg.Add(N)
+	errs := make([]error, N)
+	for i := 0; i < N; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			_, err := c.Initialize(context.Background())
+			errs[i] = err
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("Initialize[%d] err: %v", i, err)
+		}
+	}
+	if got := initCalls.Load(); got != 1 {
+		t.Errorf("server saw %d initialize calls, want exactly 1", got)
+	}
+	if got := c.SessionID(); got != "the-one-session" {
+		t.Errorf("session id = %q, want the-one-session", got)
 	}
 }
