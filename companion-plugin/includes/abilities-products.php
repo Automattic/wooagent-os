@@ -150,6 +150,13 @@ function wooagent_companion_register_product_abilities(): void {
 					'date_modified'     => array( 'type' => 'string' ),
 					'image_url'         => array( 'type' => 'string' ),
 					'image_alt'         => array( 'type' => 'string' ),
+					'cost_of_goods_sold' => array(
+						'type'        => 'object',
+						'description' => 'Effective per-unit cost surfaced by Woo 10.3+ Cost of Goods Sold. Pricing reads total_value as the sub-cost floor. Stores running pre-10.3 Woo or with the COGS feature toggle off return total_value: 0, which the floor treats as "no data, no enforcement."',
+						'properties'  => array(
+							'total_value' => array( 'type' => 'number' ),
+						),
+					),
 				),
 				'required'   => array( 'id', 'name', 'status' ),
 			),
@@ -423,6 +430,21 @@ function wooagent_products_get_execute( array $args ) {
 		}
 	}
 
+	// Woo 10.3+ surfaces Cost of Goods Sold on the product. We expose
+	// total_value only — that's the sub-cost floor Pricing enforces. On
+	// stores running pre-10.3 Woo OR with the COGS feature toggle off
+	// (Settings → Features → Cost of Goods Sold), the getter is missing
+	// or returns empty; total_value falls back to 0 and Pricing treats
+	// "0" as "no floor data, don't enforce."
+	$cogs_total = 0.0;
+	if ( method_exists( $product, 'get_cogs_total_value' ) ) {
+		$cogs_total = (float) $product->get_cogs_total_value();
+	} elseif ( method_exists( $product, 'get_cogs_effective_value' ) ) {
+		$cogs_total = (float) $product->get_cogs_effective_value();
+	} elseif ( method_exists( $product, 'get_cogs_value' ) ) {
+		$cogs_total = (float) $product->get_cogs_value();
+	}
+
 	return array(
 		'id'                => $product->get_id(),
 		'name'              => $product->get_name(),
@@ -443,6 +465,9 @@ function wooagent_products_get_execute( array $args ) {
 		'date_modified'     => $product->get_date_modified() ? $product->get_date_modified()->date( 'c' ) : '',
 		'image_url'         => $image_url,
 		'image_alt'         => $image_alt,
+		'cost_of_goods_sold' => array(
+			'total_value' => $cogs_total,
+		),
 	);
 }
 

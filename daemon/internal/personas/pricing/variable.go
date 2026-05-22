@@ -152,7 +152,13 @@ func draftForVariableParent(
 	parentForLLM.RegularPrice = strconv.FormatFloat(anchor, 'f', 2, 64)
 	parentForLLM.SalePrice = ""
 
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, parentForLLM, currency, anchor, "regular_price")
+	// TODO(DSGWOO-1352 follow-up): variations-list doesn't yet surface
+	// COGS per variation (the field is variation-only on Woo 10.3+ via
+	// "values: [...]"). When the companion plugin's variations-list adds
+	// it, anchor the floor on the median variation cost and reject the
+	// run when any fanned-out child lands sub-cost. For now: no floor on
+	// variable products.
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, parentForLLM, currency, anchor, "regular_price", 0)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft variable proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
