@@ -327,11 +327,18 @@ type listRunsInput struct {
 }
 
 type runSummary struct {
-	ID            string `json:"id"`
-	Persona       string `json:"persona"`
-	Trigger       string `json:"trigger"`
-	Status        string `json:"status"`
-	IssueID       string `json:"issue_id,omitempty"`
+	ID      string `json:"id"`
+	Persona string `json:"persona"`
+	Trigger string `json:"trigger"`
+	Status  string `json:"status"`
+	IssueID string `json:"issue_id,omitempty"`
+	// IssueTitle / IssueState carry the linked proposal's metadata so
+	// the model can cite the proposal (the operator-facing artifact)
+	// instead of the run when reporting on completed work. Empty when
+	// the run hasn't produced a proposal (queued, running, failed) or
+	// when the join missed (proposal deleted).
+	IssueTitle    string `json:"issue_title,omitempty"`
+	IssueState    string `json:"issue_state,omitempty"`
 	CreatedAt     string `json:"created_at"`
 	CompletedAt   string `json:"completed_at,omitempty"`
 	LatencyMS     int64  `json:"latency_ms,omitempty"`
@@ -372,24 +379,30 @@ func (h *ListRunsTool) Execute(ctx context.Context, raw json.RawMessage) (string
 		in.Limit = 100
 	}
 
-	q := `SELECT id, persona, trigger, status, COALESCE(issue_id, ''),
-	             created_at, COALESCE(completed_at, ''),
-	             COALESCE(latency_ms, 0), COALESCE(failure_reason, '')
-	      FROM runs WHERE 1=1`
+	// LEFT JOIN issues so each row carries the linked proposal's title
+	// + status (chat-vocab "state" is mapped post-scan). Lets the
+	// reference layer index runs as proposals; see DSGWOO-1362.
+	q := `SELECT r.id, r.persona, r.trigger, r.status, COALESCE(r.issue_id, ''),
+	             r.created_at, COALESCE(r.completed_at, ''),
+	             COALESCE(r.latency_ms, 0), COALESCE(r.failure_reason, ''),
+	             COALESCE(i.title, ''), COALESCE(i.status, '')
+	      FROM runs r
+	      LEFT JOIN issues i ON r.issue_id = i.id
+	      WHERE 1=1`
 	args := make([]any, 0, 4)
 	if in.Persona != "" {
-		q += ` AND persona = ?`
+		q += ` AND r.persona = ?`
 		args = append(args, in.Persona)
 	}
 	if in.Status != "" {
-		q += ` AND status = ?`
+		q += ` AND r.status = ?`
 		args = append(args, in.Status)
 	}
 	if !since.IsZero() {
-		q += ` AND created_at >= ?`
+		q += ` AND r.created_at >= ?`
 		args = append(args, since.UTC().Format(time.RFC3339))
 	}
-	q += ` ORDER BY created_at DESC LIMIT ?`
+	q += ` ORDER BY r.created_at DESC LIMIT ?`
 	args = append(args, in.Limit)
 
 	rows, err := h.DB.QueryContext(ctx, q, args...)
@@ -404,9 +417,14 @@ func (h *ListRunsTool) Execute(ctx context.Context, raw json.RawMessage) (string
 	}{}
 	for rows.Next() {
 		var r runSummary
+		var issueRawStatus string
 		if err := rows.Scan(&r.ID, &r.Persona, &r.Trigger, &r.Status, &r.IssueID,
-			&r.CreatedAt, &r.CompletedAt, &r.LatencyMS, &r.FailureReason); err != nil {
+			&r.CreatedAt, &r.CompletedAt, &r.LatencyMS, &r.FailureReason,
+			&r.IssueTitle, &issueRawStatus); err != nil {
 			return "", fmt.Errorf("scan: %w", err)
+		}
+		if issueRawStatus != "" {
+			r.IssueState = statusToState(issueRawStatus)
 		}
 		out.Runs = append(out.Runs, r)
 	}

@@ -77,6 +77,29 @@ func TestExtract_HallucinatedRunIDDropped(t *testing.T) {
 	}
 }
 
+// TestExtract_ProposalRefDerivedFromListRuns: when list_runs carries
+// issue_id (+ title/state), the model can pivot from a run record to
+// a proposal reference. Validation must accept that proposal id — the
+// "prefer-proposals" prompt rule depends on this.
+func TestExtract_ProposalRefDerivedFromListRuns(t *testing.T) {
+	trace := anthropic.Trace{Messages: []anthropic.Message{
+		anthropic.UserMessage("what did pricing do?"),
+		toolResult(`{"runs":[{"id":"rn-1","persona":"pricing","status":"succeeded","issue_id":"iss-99","issue_title":"T-Shirt","issue_state":"pending"}]}`),
+	}}
+	refs, _ := ExtractReferencesAndDispatched(
+		"Pricing landed [proposal #iss-99] (T-Shirt).",
+		trace,
+		nil,
+		AgentChiefOfStaff,
+	)
+	if len(refs) != 1 || refs[0].Kind != "proposal" || refs[0].ID != "iss-99" {
+		t.Fatalf("expected proposal ref derived from list_runs, got %+v", refs)
+	}
+	if refs[0].Title != "T-Shirt" || refs[0].State != "pending" {
+		t.Errorf("expected proposal chip to carry title+state from list_runs join, got %+v", refs[0])
+	}
+}
+
 // TestExtract_VisibleItemIDAccepted covers the case where the operator
 // has the board open: the model sees proposal IDs in PageContext and
 // can cite them without calling list_proposals. Those IDs are legit and

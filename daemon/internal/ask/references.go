@@ -183,17 +183,28 @@ func absorbToolResult(
 		}
 	}
 
-	// list_runs
+	// list_runs. Each row may also carry an issue_id (+ title/state of
+	// the linked proposal); when present, also stash the proposal so
+	// the model can validly pivot from a run record to its proposal
+	// reference (DSGWOO-1362).
 	var lr struct {
 		Runs []struct {
-			ID      string `json:"id"`
-			Persona string `json:"persona"`
-			Status  string `json:"status"`
+			ID         string `json:"id"`
+			Persona    string `json:"persona"`
+			Status     string `json:"status"`
+			IssueID    string `json:"issue_id,omitempty"`
+			IssueTitle string `json:"issue_title,omitempty"`
+			IssueState string `json:"issue_state,omitempty"`
 		} `json:"runs"`
 	}
 	if err := json.Unmarshal([]byte(raw), &lr); err == nil && len(lr.Runs) > 0 {
 		for _, r := range lr.Runs {
 			runs[r.ID] = seenRecord{title: r.Persona + " run", state: r.Status}
+			if r.IssueID != "" {
+				if _, already := proposals[r.IssueID]; !already {
+					proposals[r.IssueID] = seenRecord{title: r.IssueTitle, state: r.IssueState}
+				}
+			}
 		}
 	}
 
