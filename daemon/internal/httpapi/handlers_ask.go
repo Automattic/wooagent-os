@@ -175,7 +175,9 @@ func (s *Server) handleAsk(w http.ResponseWriter, r *http.Request) {
 	}
 
 	finalText := assistantText(final.Content)
-	refs, dispatched := ask.ExtractReferencesAndDispatched(finalText, trace)
+	// PageContext from the latest user turn lets the extractor accept
+	// IDs the operator was looking at on screen — see DSGWOO-1362.
+	refs, dispatched := ask.ExtractReferencesAndDispatched(finalText, trace, latest.PageContext, req.Agent)
 
 	assistant := ask.Message{
 		Role:       ask.RoleAssistant,

@@ -2,6 +2,7 @@ package ask
 
 import (
 	"encoding/json"
+	"log/slog"
 	"regexp"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
@@ -17,15 +18,29 @@ var runRefRE = regexp.MustCompile(`\[[Rr]un\s+#?([A-Za-z0-9_-]+)\]`)
 
 // ExtractReferencesAndDispatched walks an Anthropic tool-use trace,
 // indexes every proposal/run record the model saw in tool_result
-// blocks, then matches them against the references the model actually
-// cited in the final assistant text.
+// blocks (plus anything carried in the operator's PageContext), then
+// matches them against the references the model actually cited in the
+// final assistant text.
+//
+// IDs the model invents — present in the prose but never in any tool
+// result or page-context item — are dropped (DSGWOO-1362). The chip
+// row is a navigation affordance; a chip that 404s reads as broken,
+// so the validation gate trades "trust the prose" for "trust only
+// what the tools / page context confirm." Each drop is logged at
+// Warn so we keep visibility on hallucination rate per agent.
 //
 // Returned references appear in citation order (first mention wins);
 // duplicates within the text are deduped on id. Dispatched receipts
 // come from every successful dispatch_persona call across the trace,
 // regardless of whether the model mentioned them.
-func ExtractReferencesAndDispatched(finalText string, trace anthropic.Trace) ([]Reference, []Dispatched) {
+func ExtractReferencesAndDispatched(
+	finalText string,
+	trace anthropic.Trace,
+	pageCtx *PageContext,
+	agent AgentSlug,
+) ([]Reference, []Dispatched) {
 	proposalsByID, runsByID, dispatchedList := scanTrace(trace)
+	absorbPageContext(pageCtx, proposalsByID, runsByID)
 
 	var refs []Reference
 	seen := map[string]bool{}
@@ -39,7 +54,12 @@ func ExtractReferencesAndDispatched(finalText string, trace anthropic.Trace) ([]
 			continue
 		}
 		seen[key] = true
-		rec := proposalsByID[id]
+		rec, ok := proposalsByID[id]
+		if !ok {
+			slog.Warn("ask: dropping hallucinated proposal reference",
+				"agent", agent, "id", id)
+			continue
+		}
 		refs = append(refs, Reference{
 			Kind:  "proposal",
 			ID:    id,
@@ -54,7 +74,12 @@ func ExtractReferencesAndDispatched(finalText string, trace anthropic.Trace) ([]
 			continue
 		}
 		seen[key] = true
-		rec := runsByID[id]
+		rec, ok := runsByID[id]
+		if !ok {
+			slog.Warn("ask: dropping hallucinated run reference",
+				"agent", agent, "id", id)
+			continue
+		}
 		refs = append(refs, Reference{
 			Kind:  "run",
 			ID:    id,
@@ -104,6 +129,38 @@ func scanTrace(trace anthropic.Trace) (
 		}
 	}
 	return
+}
+
+// absorbPageContext indexes any proposal/run IDs the operator's
+// current view exposes. The model receives the same page_context as a
+// fenced JSON block on the user turn (see handlers_ask.go's
+// buildAnthropicMessages), so it can legitimately cite those IDs
+// without tool-calling — most commonly when the drawer opens on a
+// board page and the operator asks about something on screen.
+func absorbPageContext(
+	pageCtx *PageContext,
+	proposals map[string]seenRecord,
+	runs map[string]seenRecord,
+) {
+	if pageCtx == nil {
+		return
+	}
+	for _, item := range pageCtx.VisibleItems {
+		if item.ID == "" {
+			continue
+		}
+		rec := seenRecord{title: item.Title, state: item.State}
+		switch item.Kind {
+		case "proposal":
+			if _, already := proposals[item.ID]; !already {
+				proposals[item.ID] = rec
+			}
+		case "run":
+			if _, already := runs[item.ID]; !already {
+				runs[item.ID] = rec
+			}
+		}
+	}
 }
 
 func absorbToolResult(
