@@ -158,3 +158,65 @@ func TestChecker_NilChecker_False(t *testing.T) {
 		t.Errorf("nil checker should return false, not panic")
 	}
 }
+
+// manifestWithHash builds a Lookup with a single entry whose SchemaHash is
+// set to the supplied value (real hashes, not the placeholder, exercise the
+// DSGWOO-1361 hash gate).
+func manifestWithHash(t *testing.T, name, schemaHash string) *manifest.Lookup {
+	t.Helper()
+	m := &manifest.Manifest{
+		Version: 1,
+		Entries: []manifest.Entry{{
+			Ability:        name,
+			NamespaceOwner: "test/test",
+			SchemaHash:     schemaHash,
+			Scope:          manifest.ScopeRead,
+			Reversibility:  1.0,
+		}},
+	}
+	lookup, err := manifest.NewLookup(m)
+	if err != nil {
+		t.Fatalf("NewLookup: %v", err)
+	}
+	return lookup
+}
+
+// Real-hash manifest entries must wait for discovery before Has returns
+// true — otherwise the persona would attempt an ability the PEP will deny
+// with ability_not_yet_discovered. Mirrors checktruststate's pre-discovery
+// branch.
+func TestChecker_RealHashManifest_NoRow_False(t *testing.T) {
+	st, _ := openCheckerStore(t)
+	m := manifestWithHash(t, "woocommerce/find-products",
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111")
+	c := NewChecker(st.DB, m)
+	if c.Has("woocommerce/find-products") {
+		t.Errorf("real-hash manifest entry without a DB row should be Has=false (not yet discovered)")
+	}
+}
+
+// Real-hash manifest entry whose discovered hash matches → Has=true.
+func TestChecker_RealHashManifest_MatchingRow_True(t *testing.T) {
+	st, id := openCheckerStore(t)
+	seedAbility(t, st, id, "woocommerce/find-products", "new", "")
+	// seedAbility stores schema_hash="sha256:1111..." — match that in the
+	// manifest entry.
+	m := manifestWithHash(t, "woocommerce/find-products",
+		"sha256:1111111111111111111111111111111111111111111111111111111111111111")
+	c := NewChecker(st.DB, m)
+	if !c.Has("woocommerce/find-products") {
+		t.Errorf("matching hash should be Has=true even with trust_state=new")
+	}
+}
+
+// Real-hash manifest entry whose discovered hash differs → Has=false
+// (schema drift; PEP would also deny with ReasonSchemaDrift).
+func TestChecker_RealHashManifest_DriftedRow_False(t *testing.T) {
+	st, id := openCheckerStore(t)
+	seedAbility(t, st, id, "woocommerce/find-products", "new", "")
+	m := manifestWithHash(t, "woocommerce/find-products", "sha256:different")
+	c := NewChecker(st.DB, m)
+	if c.Has("woocommerce/find-products") {
+		t.Errorf("drifted hash should be Has=false (matches PEP schema_drift deny)")
+	}
+}
