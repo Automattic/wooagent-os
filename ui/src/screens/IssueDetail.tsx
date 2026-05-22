@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, VisuallyHidden } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
@@ -253,7 +253,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         <div className="wa-subpage-content">
           <Notice.Root intent="error">
             <Notice.Description>
-              Failed to load issue: {error} <Link to="/">Back to board</Link>
+              Failed to load issue: {error}
             </Notice.Description>
           </Notice.Root>
         </div>

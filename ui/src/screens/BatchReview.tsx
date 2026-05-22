@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Spinner, Button } from '@wordpress/components';
 import { Icon, chevronDown, chevronUp, check } from '@wordpress/icons';
@@ -258,7 +258,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         <div className="wa-subpage-content">
           <Notice.Root intent="error">
             <Notice.Description>
-              Failed to load batch: {error} <Link to="/">Back to board</Link>
+              Failed to load batch: {error}
             </Notice.Description>
           </Notice.Root>
         </div>
