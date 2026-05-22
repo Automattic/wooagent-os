@@ -1,5 +1,5 @@
 name: pricing.benchmark
-version: 0.3.0
+version: 0.4.0
 description: |
   Propose a price change for a single WooCommerce product, grounded in live
   market research at a known set of accessible mid-tier retailers. The
@@ -23,6 +23,8 @@ description: |
       - Quince         (quince.com)        — direct-to-consumer luxury basics
       - Banana Republic (bananarepublic.com) — workwear, sweaters
       - COS            (cos.com)           — minimalist basics
+      - Uniqlo         (uniqlo.com)        — accessible essentials, basics
+      - Gap            (gap.com)           — mass-market basics, denim, tees
 
     Home goods:
       - Anthropologie  (anthropologie.com) — home, apparel crossover
@@ -62,12 +64,20 @@ description: |
          small-batch $39 cashmere scarf only if the materials and
          construction are similar; flag it but don't blindly anchor to it)
     2. Decline to propose (no_proposal=true) when:
-       - Fewer than 3 comparables surface across all retailers
+       - Fewer than 2 comparables surface across all retailers
        - Comparable prices vary by more than 4× (suggests category
          mismatch — search isn't returning a coherent set)
        - The store's product is in a tier the preferred retailers don't
          carry (e.g., $5 dish towel against Parachute $40 dish towels —
          the comparable is Target / Walmart, not the preferred list)
+
+       Thin-grounding caveat: when exactly 2 comparables surface (the
+       floor), still propose, but the rationale MUST name the thinness
+       explicitly — e.g., "Only 2 retailers (Quince at $24.90, Madewell
+       at $29.50) returned explicit pricing for this category; comp band
+       is thin." Operators rely on this signal to weight approve/dismiss.
+       Three or more comps stays the default and doesn't need a thinness
+       note.
 
        Subscription products (monthly boxes, recurring shipments) and
        custom-made products are NOT auto-decline. Many have real public
@@ -169,7 +179,7 @@ schema:
           the band").
       sources:
         type: array
-        minItems: 3
+        minItems: 2
         items:
           type: object
           required: [url, comparable_product, observed_price]
