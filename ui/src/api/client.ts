@@ -846,6 +846,18 @@ export const api = {
       }),
     delete: (c: Connection, id: string) =>
       request<void>(c, `/v1/stores/${id}`, { method: 'DELETE' }),
+    /** POST /v1/stores/:id/refresh-abilities — operator-driven discovery
+     *  re-run for a single paired store. Used by the "Refresh" button on
+     *  the Abilities screen so newly-installed extensions surface
+     *  immediately instead of waiting for the daemon's 6-hour ticker
+     *  (DSGWOO-1361 follow-up). 200 returns the updated count + the
+     *  freshly-stamped last_discovered_at. */
+    refreshAbilities: (c: Connection, id: string) =>
+      request<{ ability_count: number; last_discovered_at: string }>(
+        c,
+        `/v1/stores/${id}/refresh-abilities`,
+        { method: 'POST' },
+      ),
   },
   abilities: {
     list: (

@@ -9,6 +9,7 @@ import { Button, Modal, Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
+import { update } from '@wordpress/icons';
 import {
   api,
   type Ability,
@@ -356,6 +357,8 @@ export default function Abilities({ connection, onAskAgent }: Props) {
   const [revokeBusy, setRevokeBusy] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [refreshBusy, setRefreshBusy] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   useAskAgentContext(
     () => ({
@@ -370,6 +373,12 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     const id = setTimeout(() => setRestoreError(null), 5000);
     return () => clearTimeout(id);
   }, [restoreError]);
+
+  useEffect(() => {
+    if (!refreshError) return;
+    const id = setTimeout(() => setRefreshError(null), 5000);
+    return () => clearTimeout(id);
+  }, [refreshError]);
 
   const fetchAbilities = useCallback(
     async (signal: { cancelled: boolean }) => {
@@ -438,6 +447,50 @@ export default function Abilities({ connection, onAskAgent }: Props) {
       setRevokeBusy(false);
     }
   }, [confirmRevoke, connection, fetchAbilities]);
+
+  // Operator-driven discovery sweep. Without this, the daemon only
+  // re-discovers abilities on a 6-hour ticker (abilities.go:85), so a
+  // freshly-installed extension wouldn't surface in the table until then.
+  // Fans out across every paired store, then refetches /v1/abilities so
+  // newly-discovered rows show up immediately. Per-store errors are
+  // collected and shown in a single notice — a single broken pairing
+  // shouldn't make the others look broken too.
+  const handleRefresh = useCallback(async () => {
+    if (!connection || refreshBusy) return;
+    setRefreshBusy(true);
+    setRefreshError(null);
+    try {
+      const { stores } = await api.stores.list(connection);
+      const paired = stores.filter((s) => s.status === 'paired');
+      if (paired.length === 0) {
+        setRefreshError('No paired stores to refresh.');
+        return;
+      }
+      const results = await Promise.allSettled(
+        paired.map((s) => api.stores.refreshAbilities(connection, s.id)),
+      );
+      const failures = results.filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      );
+      const signal = { cancelled: false };
+      await fetchAbilities(signal);
+      if (failures.length > 0) {
+        const detail =
+          failures[0].reason instanceof Error
+            ? failures[0].reason.message
+            : String(failures[0].reason);
+        setRefreshError(
+          failures.length === paired.length
+            ? `Couldn't refresh. (${detail})`
+            : `Refreshed ${paired.length - failures.length} of ${paired.length} stores. (${detail})`,
+        );
+      }
+    } catch (e) {
+      setRefreshError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRefreshBusy(false);
+    }
+  }, [connection, fetchAbilities, refreshBusy]);
 
   const handleRestore = useCallback(
     async (ability: Ability) => {
@@ -590,7 +643,21 @@ export default function Abilities({ connection, onAskAgent }: Props) {
     <Page
       title="Skills"
       subTitle={subTitle}
-      actions={<PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />}
+      actions={
+        <Stack direction="row" align="center" gap="sm">
+          <Button
+            __next40pxDefaultSize
+            variant="secondary"
+            icon={update}
+            onClick={handleRefresh}
+            isBusy={refreshBusy}
+            disabled={refreshBusy || !connection}
+          >
+            {refreshBusy ? 'Refreshing…' : 'Refresh'}
+          </Button>
+          <PageGlobalActions onAskAgent={onAskAgent} showSearch={false} />
+        </Stack>
+      }
     >
       {error ? (
         <Notice.Root intent="error">
@@ -614,6 +681,11 @@ export default function Abilities({ connection, onAskAgent }: Props) {
               <Notice.Description>
                 Couldn't restore that ability. ({restoreError})
               </Notice.Description>
+            </Notice.Root>
+          )}
+          {refreshError && (
+            <Notice.Root intent="error">
+              <Notice.Description>{refreshError}</Notice.Description>
             </Notice.Root>
           )}
           <DataViews<Ability>
