@@ -156,6 +156,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/v1/stores", s.handleCreateStore)
 		r.Get("/v1/stores/{id}", s.handleGetStore)
 		r.Delete("/v1/stores/{id}", s.handleDeleteStore)
+		r.Post("/v1/stores/{id}/refresh-abilities", s.handleRefreshStoreAbilities)
 		r.Get("/v1/model-providers", s.handleListModelProviders)
 		r.Post("/v1/model-providers", s.handleCreateModelProvider)
 		r.Post("/v1/model-providers/test", s.handleTestModelProvider)
