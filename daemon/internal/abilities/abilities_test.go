@@ -9,6 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 	"github.com/zalando/go-keyring"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
@@ -205,7 +206,9 @@ func TestRunForStore_ReDiscoverNoChange_PreservesTrust(t *testing.T) {
 func TestRunForStore_SchemaDrift_FlipsToSchemaChanged(t *testing.T) {
 	fake := &fakeMCP{
 		abilities: []mcp.AbilitySummary{{Name: "ab/one"}},
-		infos:     map[string]mcp.AbilityInfo{"ab/one": {Name: "ab/one", Description: "v1"}},
+		infos: map[string]mcp.AbilityInfo{
+			"ab/one": {Name: "ab/one", InputSchema: []byte(`{"type":"object","properties":{"a":{"type":"string"}}}`)},
+		},
 	}
 	r, st := newRunner(t, fake)
 	id := seedPairedStore(t, st)
@@ -219,8 +222,13 @@ func TestRunForStore_SchemaDrift_FlipsToSchemaChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Schema drift: same ability, different description → different hash.
-	fake.infos["ab/one"] = mcp.AbilityInfo{Name: "ab/one", Description: "v2 — added a required arg"}
+	// Schema drift: same ability, different input_schema → different hash.
+	// (Description changes alone don't drift — the gate hashes schemas only
+	// to match manifest.SchemaHash semantics.)
+	fake.infos["ab/one"] = mcp.AbilityInfo{
+		Name:        "ab/one",
+		InputSchema: []byte(`{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"integer"}},"required":["b"]}`),
+	}
 	if _, err := r.RunForStore(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -242,9 +250,11 @@ func TestRunForStore_SchemaDrift_FlipsToSchemaChanged(t *testing.T) {
 // the row from 'schema_changed' back to 'trusted' automatically — no
 // operator action required.
 func TestRunForStore_SchemaRollback_ReturnsToTrusted(t *testing.T) {
+	v1 := []byte(`{"type":"object","properties":{"a":{"type":"string"}}}`)
+	v2 := []byte(`{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"integer"}}}`)
 	fake := &fakeMCP{
 		abilities: []mcp.AbilitySummary{{Name: "ab/one"}},
-		infos:     map[string]mcp.AbilityInfo{"ab/one": {Name: "ab/one", Description: "v1"}},
+		infos:     map[string]mcp.AbilityInfo{"ab/one": {Name: "ab/one", InputSchema: v1}},
 	}
 	r, st := newRunner(t, fake)
 	id := seedPairedStore(t, st)
@@ -257,12 +267,12 @@ func TestRunForStore_SchemaRollback_ReturnsToTrusted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 2: drift to v2.
-	fake.infos["ab/one"] = mcp.AbilityInfo{Name: "ab/one", Description: "v2"}
+	fake.infos["ab/one"] = mcp.AbilityInfo{Name: "ab/one", InputSchema: v2}
 	if _, err := r.RunForStore(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
 	// 3: rollback to v1.
-	fake.infos["ab/one"] = mcp.AbilityInfo{Name: "ab/one", Description: "v1"}
+	fake.infos["ab/one"] = mcp.AbilityInfo{Name: "ab/one", InputSchema: v1}
 	if _, err := r.RunForStore(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -354,5 +364,49 @@ func TestCanonicalize_StableHash(t *testing.T) {
 	}
 	if ha != hb {
 		t.Errorf("hash should be order-independent: %s vs %s", ha, hb)
+	}
+}
+
+// The schema_hash that canonicalize writes into the abilities table MUST
+// match manifest.SchemaHash for the same ability, otherwise the trust
+// gate's string-equality comparison (pep.checkTrustState) returns
+// ReasonSchemaDrift for every non-placeholder manifest entry. This test
+// is the cross-package guardrail — if either hash function changes its
+// algorithm or output format, this fails before the gate silently
+// starts denying everything in production (DSGWOO-1361 regression).
+func TestCanonicalize_HashMatchesManifestSchemaHash(t *testing.T) {
+	cases := []mcp.AbilityInfo{
+		{
+			Name: "wooagent-products/list", Title: "List products",
+			Description: "List products", Version: "1.0.0",
+			InputSchema:  []byte(`{"type":"object","properties":{"per_page":{"type":"integer"}}}`),
+			OutputSchema: []byte(`{"type":"object","properties":{"products":{"type":"array"}}}`),
+		},
+		{
+			Name: "core/get-site-info",
+			InputSchema:  []byte(`{"type":"object"}`),
+			OutputSchema: []byte(`{"type":"object"}`),
+		},
+		{
+			Name:           "ab/with-perms",
+			Permissions:    []string{"manage_options"},
+			RequiredScopes: []string{"products:read"},
+			InputSchema:    []byte(`{"type":"object"}`),
+			OutputSchema:   []byte(`null`),
+		},
+	}
+	for _, info := range cases {
+		_, abilitiesHash, err := canonicalize(info)
+		if err != nil {
+			t.Fatalf("%s: canonicalize: %v", info.Name, err)
+		}
+		manifestHash, err := manifest.SchemaHash(info.InputSchema, info.OutputSchema)
+		if err != nil {
+			t.Fatalf("%s: manifest.SchemaHash: %v", info.Name, err)
+		}
+		if abilitiesHash != manifestHash {
+			t.Errorf("%s: hash mismatch — gate would deny\n  abilities: %s\n  manifest:  %s",
+				info.Name, abilitiesHash, manifestHash)
+		}
 	}
 }
