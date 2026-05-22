@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -182,8 +181,7 @@ func (s *Server) handleCreateStore(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		URL string `json:"url"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+	if !decodeJSONBody(w, r, &req, "invalid_json") {
 		return
 	}
 	canonURL, err := normalizeStoreURL(req.URL)

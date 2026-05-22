@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -96,8 +95,7 @@ func (s *Server) handleTestModelProvider(w http.ResponseWriter, r *http.Request)
 		Endpoint     string `json:"endpoint"`
 		DefaultModel string `json:"default_model"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+	if !decodeJSONBody(w, r, &req, "invalid_json") {
 		return
 	}
 	if !validKinds[req.Kind] {
@@ -140,8 +138,7 @@ func (s *Server) handleCreateModelProvider(w http.ResponseWriter, r *http.Reques
 		Endpoint     string `json:"endpoint"`
 		DefaultModel string `json:"default_model"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", err.Error())
+	if !decodeJSONBody(w, r, &req, "invalid_json") {
 		return
 	}
 	if !validKinds[req.Kind] {

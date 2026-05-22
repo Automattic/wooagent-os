@@ -50,10 +50,21 @@ func PathsAt(root string) Paths {
 	}
 }
 
+// EnsureDirs creates the state-tree directories with mode 0700 (rwx user-only).
+// The SQLite DB carries customer/order/proposal/audit data and the logs
+// directory may host operator-readable debug output; locking the parent dirs
+// to 0700 is the cheapest defense against another local user reading them.
+//
+// MkdirAll honors the mode only on creation, so we also chmod on every call:
+// upgrades from 0.x — where these were 0755 — need an explicit chmod to take
+// effect.
 func (p Paths) EnsureDirs() error {
 	for _, d := range []string{p.Root, p.LogsDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o700); err != nil {
 			return fmt.Errorf("mkdir %s: %w", d, err)
+		}
+		if err := os.Chmod(d, 0o700); err != nil {
+			return fmt.Errorf("chmod %s: %w", d, err)
 		}
 	}
 	return nil
