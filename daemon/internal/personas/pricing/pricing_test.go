@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -486,6 +487,155 @@ func TestListEligibleProducts_IncludesGrouped(t *testing.T) {
 		if !wantIDs[p.ID] {
 			t.Fatalf("unexpected id %d in eligible set", p.ID)
 		}
+	}
+}
+
+// ---------------------------------------------------------------- COGS / sub-cost floor
+
+func TestProduct_DecodesCostOfGoodsSold(t *testing.T) {
+	// Woo 10.3+ /wp-json/wc/v3/products/<id> shape, mirrored by the
+	// companion plugin's wooagent-products/get.
+	payload := []byte(`{
+		"id": 821,
+		"name": "Wool Throw",
+		"type": "simple",
+		"regular_price": "49.00",
+		"cost_of_goods_sold": {"values": [{"defined_value": 22.50, "effective_value": 22.50}], "total_value": 22.50}
+	}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.CostOfGoodsSold.TotalValue != 22.50 {
+		t.Fatalf("TotalValue = %v, want 22.50", p.CostOfGoodsSold.TotalValue)
+	}
+}
+
+func TestProduct_TolerantOfMissingCostField(t *testing.T) {
+	// Stores running pre-10.3 Woo OR with the COGS feature toggle off
+	// emit no cost_of_goods_sold field at all. Must decode without error
+	// and yield productCost(p) == 0 — i.e., "no floor data, no floor."
+	payload := []byte(`{"id": 7, "name": "Mug", "type": "simple", "regular_price": "12.00"}`)
+	var p product
+	if err := json.Unmarshal(payload, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if productCost(p) != 0 {
+		t.Fatalf("productCost on COGS-less product = %v, want 0", productCost(p))
+	}
+}
+
+func TestProductCost_ReturnsZeroForNonPositive(t *testing.T) {
+	cases := []struct {
+		name  string
+		total float64
+		want  float64
+	}{
+		{"zero (COGS feature off)", 0, 0},
+		{"negative (malformed)", -1.50, 0},
+		{"positive", 22.50, 22.50},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := product{}
+			p.CostOfGoodsSold.TotalValue = tc.total
+			if got := productCost(p); got != tc.want {
+				t.Errorf("productCost(total=%v) = %v, want %v", tc.total, got, tc.want)
+			}
+		})
+	}
+}
+
+// costLineMarker is the unique phrase that only appears on the optional
+// per-product cost-floor data line (not in the static template prose).
+const costLineMarker = "cost floor (proposed_price MUST be ≥ this)"
+
+func TestBuildUserPrompt_IncludesCostLineWhenSet(t *testing.T) {
+	p := product{ID: 821, Name: "Wool Throw", SKU: "WT-1", RegularPrice: "39.00"}
+	got := buildUserPrompt(p, "USD", 39.00, "regular_price", 22.50)
+	if !strings.Contains(got, costLineMarker) {
+		t.Fatalf("prompt missing cost-line marker %q; got:\n%s", costLineMarker, got)
+	}
+	if !strings.Contains(got, "22.50 USD") {
+		t.Fatalf("prompt missing cost value '22.50 USD'; got:\n%s", got)
+	}
+}
+
+func TestBuildUserPrompt_OmitsCostLineWhenAbsent(t *testing.T) {
+	// COGS feature off / pre-10.3 store → cost==0 → the data line MUST
+	// be absent. (The static template still contains the "When a cost
+	// floor is shown above..." conditional instruction; that's fine —
+	// the model knows to ignore it when no floor line is present.)
+	p := product{ID: 7, Name: "Mug", SKU: "MUG-1", RegularPrice: "12.00"}
+	got := buildUserPrompt(p, "USD", 12.00, "regular_price", 0)
+	if strings.Contains(got, costLineMarker) {
+		t.Fatalf("prompt should NOT include cost-line marker when cost==0; got:\n%s", got)
+	}
+}
+
+// validateProposalGuardrails mirrors the post-LLM hard-reject sequence in
+// draftForProduct so we can unit-test the sub-cost gate without booting an
+// MCP client or Anthropic. Kept in the test file deliberately — when the
+// production path changes, this helper must be updated to match.
+func validateProposalGuardrails(out proposalOut, sourcesMin int, cost float64) error {
+	if out.NoProposal {
+		return nil
+	}
+	if len(out.Sources) < sourcesMin {
+		return nil
+	}
+	if out.ProposedPrice <= 0 {
+		return fmt.Errorf("proposed_price must be > 0")
+	}
+	if cost > 0 && out.ProposedPrice < cost {
+		return fmt.Errorf("proposed_price %.2f below cost-of-goods %.2f (sub-cost floor)", out.ProposedPrice, cost)
+	}
+	if absFloat(out.PercentChange) > 25.0+0.01 {
+		return fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", out.PercentChange)
+	}
+	return nil
+}
+
+func TestSubCostFloor_HardRejectsBelowCost(t *testing.T) {
+	out := proposalOut{
+		ProposedPrice: 18.00,
+		PercentChange: -10.0,
+		Sources:       []proposalSource{{URL: "x"}, {URL: "y"}},
+	}
+	err := validateProposalGuardrails(out, 2, 22.50)
+	if err == nil {
+		t.Fatalf("expected sub-cost error; got nil")
+	}
+	if !strings.Contains(err.Error(), "sub-cost floor") {
+		t.Errorf("err message lost 'sub-cost floor' marker; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "18.00") || !strings.Contains(err.Error(), "22.50") {
+		t.Errorf("err message should include both proposed and cost; got: %v", err)
+	}
+}
+
+func TestSubCostFloor_AcceptsAtOrAboveCost(t *testing.T) {
+	cases := []struct {
+		name     string
+		proposed float64
+		cost     float64
+	}{
+		{"exactly at cost", 22.50, 22.50},
+		{"above cost", 28.00, 22.50},
+		{"cost==0 means no floor", 1.00, 0},
+		{"cost negative degrades to no floor", 1.00, -5.0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := proposalOut{
+				ProposedPrice: tc.proposed,
+				PercentChange: 5.0,
+				Sources:       []proposalSource{{URL: "x"}, {URL: "y"}},
+			}
+			if err := validateProposalGuardrails(out, 2, tc.cost); err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 

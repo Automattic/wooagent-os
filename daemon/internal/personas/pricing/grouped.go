@@ -127,7 +127,14 @@ func draftForGroupedParent(
 	parentForLLM.RegularPrice = strconv.FormatFloat(anchor, 'f', 2, 64)
 	parentForLLM.SalePrice = ""
 
-	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, parentForLLM, currency, anchor, "regular_price")
+	// No cost floor in the LLM prompt for grouped: children have their
+	// own individual COGS, and a single synthetic floor (max or median)
+	// would either force unnecessary no_proposals (if too high) or fail
+	// to prevent sub-cost fan-outs (if too low). We enforce per-child
+	// sub-cost rejection below — skipping offenders rather than killing
+	// the whole batch when a child's COGS is unusually close to its
+	// anchor.
+	out, raw, err := draftProposal(ctx, deps.Env.AnthropicAPIKey, model, skillDescription, parentForLLM, currency, anchor, "regular_price", 0)
 	if err != nil {
 		return personas.Drafted{}, fmt.Errorf("draft grouped proposal: %w (raw=%s)", err, truncate(raw, 400))
 	}
@@ -162,6 +169,13 @@ func draftForGroupedParent(
 			continue
 		}
 		proposed := roundCents(childAnchor * (1 + pct/100.0))
+		// Sub-cost floor: when this child carries Woo 10.3+ COGS, drop
+		// it from the batch rather than emit a price below cost. Other
+		// children with healthy margins still ship. Logged via the
+		// remaining-children check below when the whole batch empties.
+		if childCost := productCost(c); childCost > 0 && proposed < childCost {
+			continue
+		}
 		target := buildGroupedChildTarget(parent, c, out, currency, childAnchor, field, proposed)
 
 		saleSuffix := ""
