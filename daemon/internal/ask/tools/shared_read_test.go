@@ -296,6 +296,40 @@ func TestListRuns_FiltersByPersonaAndStatus(t *testing.T) {
 	}
 }
 
+// TestListRuns_IncludesLinkedIssue covers the DSGWOO-1362 enrichment:
+// runs that landed a proposal carry the proposal's title + (chat-vocab)
+// state, so the model can cite the proposal directly instead of the
+// run.
+func TestListRuns_IncludesLinkedIssue(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Now()
+	insertIssue(t, db, issueFixture{ID: "iss-1", Title: "T-Shirt price change", Persona: "pricing", Status: "in_review", CreatedAt: now})
+	insertRun(t, db, runFixture{ID: "rn-success", Persona: "pricing", Trigger: "manual", Status: "succeeded", IssueID: "iss-1", CreatedAt: now})
+	// A run with no issue (failed) should not carry issue_title/state.
+	insertRun(t, db, runFixture{ID: "rn-fail", Persona: "pricing", Trigger: "manual", Status: "failed", CreatedAt: now, FailureReason: "boom"})
+
+	out := callListRuns(t, &ListRunsTool{DB: db}, `{"persona":"pricing"}`)
+	if out.Count != 2 {
+		t.Fatalf("expected 2 runs, got %d", out.Count)
+	}
+
+	var success, fail runSummary
+	for _, r := range out.Runs {
+		switch r.ID {
+		case "rn-success":
+			success = r
+		case "rn-fail":
+			fail = r
+		}
+	}
+	if success.IssueID != "iss-1" || success.IssueTitle != "T-Shirt price change" || success.IssueState != "pending" {
+		t.Errorf("expected succeeded run to carry linked issue metadata, got %+v", success)
+	}
+	if fail.IssueTitle != "" || fail.IssueState != "" {
+		t.Errorf("expected failed run to omit issue metadata, got %+v", fail)
+	}
+}
+
 // ---------------------------------------------------------------- get_run
 
 func TestGetRun_ReturnsRecord(t *testing.T) {
