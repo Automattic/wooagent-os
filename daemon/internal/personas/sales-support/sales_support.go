@@ -288,14 +288,13 @@ func callAbilityInner(ctx context.Context, c *mcp.Client, ability string, params
 }
 
 type orderSummary struct {
-	ID            int    `json:"id"`
-	Number        string `json:"number"`
-	Status        string `json:"status"`
-	Total         string `json:"total"`
-	Currency      string `json:"currency"`
-	CustomerID    int    `json:"customer_id"`
-	LineItemCount int    `json:"line_item_count"`
-	DateCreated   string `json:"date_created"`
+	ID          int    `json:"id"`
+	Number      string `json:"number"`
+	Status      string `json:"status"`
+	Total       string `json:"total"`
+	Currency    string `json:"currency"`
+	CustomerID  int    `json:"customer_id"`
+	DateCreated string `json:"date_created"`
 }
 
 // pickOrder returns the most recent order in a state where a customer
