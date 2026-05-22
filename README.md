@@ -11,18 +11,6 @@ A fleet of AI agents — Marketing, Pricing, Sales Support today; Inventory, Rep
 - **Model-agnostic.** Point the daemon at any frontier provider (Anthropic, Google, OpenAI, xAI) or local runtime (Ollama, LM Studio, llama.cpp). The fleet runs identically.
 - **Propose-approve trust gate.** A pre-signed manifest of trusted abilities plus a deterministic non-LLM middleware verifies every store-mutating call. Prompt-injected or hallucinated tool calls are denied, not executed. Every write requires explicit operator approval.
 
-## Data handling
-
-What each shipping persona sends to the LLM:
-
-- **Marketing** — current product copy (title, description, attributes). No customer data.
-- **Pricing** — product attributes plus the agent's `web_search` queries to retailer sites. No customer data.
-- **Sales Support** — order context for one recent order: order number, status, total, line items, and the customer's **first name only**. Surname, email, and shipping/billing address are dropped at the prompt boundary and never reach the LLM provider. For zero-egress, point Sales Support at a local model.
-
-Inventory, Reporting, Accounting, and Chief of Staff are in progress and will get their own data-handling lines when they ship.
-
-**Your responsibilities.** You agree to your LLM provider's terms and acceptable-use policies. You own GDPR/CCPA and any other privacy obligations to your customers, including any disclosures about automated processing of order data. You're responsible for reviewing each proposal before approval and for maintaining store backups. WooAgent OS is provided "AS IS" — see [`LICENSE`](./LICENSE) §7–§8.
-
 ## Install
 
 If you just want to run WooAgent OS:
@@ -40,7 +28,7 @@ wooagent run       # serves http://localhost:7777
 
 The React UI is baked into the binary — open <http://localhost:7777> in a browser.
 
-Pin a version with `WOOAGENT_VERSION=v0.1.0`. Windows: download the `.zip` from the [Releases page](https://github.com/Automattic/wooagent-os/releases) directly or use WSL.
+Pin a version with `WOOAGENT_VERSION=v0.4.0`. Windows: download the `.zip` from the [Releases page](https://github.com/Automattic/wooagent-os/releases) directly or use WSL.
 
 ## Connecting a WooCommerce store
 
@@ -49,7 +37,7 @@ The daemon talks to any WooCommerce store with the WordPress MCP Adapter install
 Grab `wooagent-companion.zip` from the same GitHub Release as the daemon, or build from source:
 
 ```bash
-bash scripts/build-companion-plugin-zip.sh   # writes dist/wooagent-companion.zip
+bash scripts/build-companion-plugin-zip.sh   # writes build/wooagent-companion.zip
 ```
 
 Upload via **wp-admin → Plugins → Add New → Upload Plugin**. Walk the daemon's first-run UI to pair: type your store URL, click **Open wp-admin → Pair device**, click Approve. The pair handshake mints a device token the daemon stores in your OS keychain.
@@ -81,6 +69,18 @@ cd daemon && go run ./cmd/wooagent run
 ## Releases
 
 Binaries are built by [GoReleaser](https://goreleaser.com/) via `.github/workflows/release.yml` from tagged commits. Every GitHub Release publishes a `SHA256SUMS` file alongside the platform archives. See [`CONTRIBUTING.md`](./CONTRIBUTING.md#cutting-a-release) for the maintainer procedure.
+
+## Data handling
+
+What each shipping persona sends to the LLM:
+
+- **Marketing** — current product copy (title, description, attributes). No customer data.
+- **Pricing** — product attributes plus the agent's `web_search` queries to retailer sites. No customer data.
+- **Sales Support** — order context for one recent order: order number, status, total, line items, and the customer's **first name only**. Surname, email, and shipping/billing address are dropped at the prompt boundary and never reach the LLM provider. For zero-egress, point Sales Support at a local model.
+
+Inventory, Reporting, Accounting, and Chief of Staff are in progress and will get their own data-handling lines when they ship.
+
+**Your responsibilities.** You agree to your LLM provider's terms and acceptable-use policies. You own GDPR/CCPA and any other privacy obligations to your customers, including any disclosures about automated processing of order data. You're responsible for reviewing each proposal before approval and for maintaining store backups. WooAgent OS is provided "AS IS" — see [`LICENSE`](./LICENSE) §7–§8.
 
 ## Status
 
