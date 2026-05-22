@@ -25,9 +25,7 @@ package abilities
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -282,11 +280,23 @@ func (r *Runner) reconcile(ctx context.Context, storeID string, infos []mcp.Abil
 	return len(infos), nil
 }
 
-// canonicalize returns (canonical-json, sha256-hex) for an AbilityInfo.
-// Uses Go's deterministic map-key ordering so the same logical schema
-// produces the same hash across runs and platforms. Embedded RawMessage
-// fields (input_schema, output_schema) are re-decoded into map[string]any
-// so their key ordering is canonicalized too.
+// canonicalize returns (envelope-json, schema-hash) for an AbilityInfo.
+//
+// envelope-json carries the full info blob (name + metadata + schemas +
+// permissions + required_scopes) and is stored in abilities.schema_json
+// so checkSchema can later extract input_schema for arg validation.
+//
+// schema-hash is the canonical hash of the input + output schemas only —
+// computed via manifest.SchemaHash so it matches the hash format the
+// manifest carries on the other side of the trust gate (DSGWOO-1361).
+// Trust drift is about schema-contract drift, not metadata drift: a
+// description tweak or version bump should not invalidate operator
+// approval, and the manifest's SchemaHash deliberately excludes those.
+//
+// Permissions and required_scopes participate in the envelope (so
+// checkSchema sees them when needed) but not in the hash — the manifest
+// doesn't carry them either, so the gate would have nothing to compare
+// against.
 func canonicalize(info mcp.AbilityInfo) (string, string, error) {
 	body := map[string]any{
 		"name":        info.Name,
@@ -322,8 +332,11 @@ func canonicalize(info mcp.AbilityInfo) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	sum := sha256.Sum256(out)
-	return string(out), hex.EncodeToString(sum[:]), nil
+	hash, err := manifest.SchemaHash(info.InputSchema, info.OutputSchema)
+	if err != nil {
+		return "", "", fmt.Errorf("schema hash: %w", err)
+	}
+	return string(out), hash, nil
 }
 
 // SeedManifest pre-populates the abilities table with rows for every
