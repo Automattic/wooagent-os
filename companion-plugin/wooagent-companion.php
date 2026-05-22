@@ -165,7 +165,9 @@ function wooagent_companion_register_debug_route(): void {
 		'/selftest',
 		array(
 			'methods'             => 'GET',
-			'permission_callback' => '__return_true',
+			'permission_callback' => static function () {
+				return current_user_can( 'manage_options' );
+			},
 			'callback'            => static function () {
 				$all_abilities = array();
 				if ( function_exists( 'wp_get_abilities' ) ) {
