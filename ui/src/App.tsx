@@ -397,13 +397,17 @@ export default function App() {
             element={<Navigate to="/runs" replace />}
           />
           <Route
-            path="/abilities"
+            path="/skills"
             element={
               <Abilities
                 connection={connection}
                 onAskAgent={() => setAskAgentOpen(true)}
               />
             }
+          />
+          <Route
+            path="/abilities"
+            element={<Navigate to="/skills" replace />}
           />
           <Route
             path="/archived"

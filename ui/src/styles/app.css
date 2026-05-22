@@ -1551,27 +1551,6 @@ a {
     solid var(--wpds-color-stroke-interactive-brand);
 }
 
-/* Provider card tag pill — currently used for the "Free · Local" cue on the
-   Ollama card, so cost-conscious operators see it as a first-class option.
-   Tones map to WPDS surface intents. */
-.wa-onboarding-provider__tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px var(--wpds-dimension-padding-xs);
-  border-radius: var(--wpds-border-radius-sm);
-  font-size: var(--wpds-typography-font-size-xs);
-  letter-spacing: 0.04em;
-  font-weight: var(--wpds-typography-font-weight-medium);
-}
-.wa-onboarding-provider__tag--success {
-  background: var(--wpds-color-bg-surface-success-weak);
-  color: var(--wpds-color-fg-content-success);
-}
-.wa-onboarding-provider__tag--info {
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-interactive-brand);
-}
-
 /* On mobile, hide the labels and show only the markers + connectors —
    matches the Figma "Mobile version" variant. The 768px breakpoint lines
    up with the rest of the app's mobile cutover (sidebar → drawer, etc). */
