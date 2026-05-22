@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -47,16 +48,29 @@ type Config struct {
 	Timeout     time.Duration
 }
 
-// Client is a single-session MCP client. Not safe for concurrent Initialize,
-// but tools/call is safe after Initialize returns.
+// Client is a single-session MCP client safe for concurrent use. Concurrent
+// Initialize callers are serialized; only the first does the JSON-RPC
+// handshake and the rest see the cached session. The session is automatically
+// invalidated when the server returns ErrSessionLost, so a follow-up
+// Initialize re-handshakes cleanly.
 type Client struct {
-	endpoint  string
-	username  string
-	password  string
-	bearer    string
-	http      *http.Client
+	endpoint string
+	username string
+	password string
+	bearer   string
+	http     *http.Client
+
+	// initMu serializes Initialize callers. Held for the whole call, including
+	// the HTTP round-trip; that's fine because Initialize fast-paths once a
+	// session is established.
+	initMu   sync.Mutex
+	initInfo ServerInfo // last successful handshake; only Initialize reads/writes
+
+	// sessionMu protects sessionID. Held briefly — never across a network call.
+	sessionMu sync.Mutex
 	sessionID string
-	nextID    atomic.Int64
+
+	nextID atomic.Int64
 }
 
 func NewClient(cfg Config) *Client {
@@ -200,9 +214,19 @@ type ContentPart struct {
 	Text string `json:"text,omitempty"`
 }
 
-// Initialize performs the MCP handshake. Must be called once before
-// CallTool. Populates the session id captured from the response header.
+// Initialize performs the MCP handshake. Safe for concurrent callers and
+// idempotent — only the first caller does the network round-trip; subsequent
+// callers see the cached ServerInfo until the session is invalidated. PEP
+// and the personas may call this on every dispatch without paying handshake
+// cost beyond the first.
 func (c *Client) Initialize(ctx context.Context) (ServerInfo, error) {
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+
+	if c.getSessionID() != "" {
+		return c.initInfo, nil
+	}
+
 	var info ServerInfo
 	err := c.doRequest(ctx, "initialize", map[string]any{
 		"protocolVersion": protocolVersion,
@@ -218,6 +242,7 @@ func (c *Client) Initialize(ctx context.Context) (ServerInfo, error) {
 	if err := c.doNotification(ctx, "notifications/initialized", nil); err != nil {
 		return ServerInfo{}, fmt.Errorf("notifications/initialized: %w", err)
 	}
+	c.initInfo = info
 	return info, nil
 }
 
@@ -243,8 +268,20 @@ func (c *Client) CallTool(ctx context.Context, name string, args any) (ToolCallR
 }
 
 // SessionID returns the session id captured during Initialize. Empty
-// before Initialize completes.
-func (c *Client) SessionID() string { return c.sessionID }
+// before Initialize completes, or after the server returns ErrSessionLost.
+func (c *Client) SessionID() string { return c.getSessionID() }
+
+func (c *Client) getSessionID() string {
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+	return c.sessionID
+}
+
+func (c *Client) setSessionID(sid string) {
+	c.sessionMu.Lock()
+	defer c.sessionMu.Unlock()
+	c.sessionID = sid
+}
 
 type rpcResponse struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -280,8 +317,8 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 	} else {
 		req.SetBasicAuth(c.username, c.password)
 	}
-	if c.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	if sid := c.getSessionID(); sid != "" {
+		req.Header.Set("Mcp-Session-Id", sid)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -291,7 +328,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 
 	if captureSession {
 		if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
-			c.sessionID = sid
+			c.setSessionID(sid)
 		}
 	}
 
@@ -305,7 +342,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 		// JSON-RPC error envelope for session-related rejections.
 		var rpcResp rpcResponse
 		if jsonErr := json.Unmarshal(raw, &rpcResp); jsonErr == nil && rpcResp.Error != nil {
-			return wrapEnvelopeError(method, rpcResp.Error.Message)
+			return c.handleEnvelopeError(method, rpcResp.Error.Message)
 		}
 		return fmt.Errorf("http %d: %s", resp.StatusCode, string(raw))
 	}
@@ -314,7 +351,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 		return wrapTransportError(method, fmt.Errorf("decode response: %w  body=%s", err, string(raw)))
 	}
 	if rpcResp.Error != nil {
-		return wrapEnvelopeError(method, rpcResp.Error.Message)
+		return c.handleEnvelopeError(method, rpcResp.Error.Message)
 	}
 	if out != nil && len(rpcResp.Result) > 0 {
 		if err := json.Unmarshal(rpcResp.Result, out); err != nil {
@@ -339,6 +376,19 @@ func wrapEnvelopeError(op, jsonRPCError string) error {
 	return fmt.Errorf("%s: %s", op, jsonRPCError)
 }
 
+// handleEnvelopeError wraps a JSON-RPC error message and, if it classifies as
+// ErrSessionLost, clears the cached session id so the next Initialize call
+// triggers a fresh handshake. Scheduler-side retries rely on this: the
+// classifier returns FailureTransient on ErrSessionLost, and a subsequent
+// dispatch re-Initializes via the now-empty session.
+func (c *Client) handleEnvelopeError(op, jsonRPCError string) error {
+	err := wrapEnvelopeError(op, jsonRPCError)
+	if errors.Is(err, ErrSessionLost) {
+		c.setSessionID("")
+	}
+	return err
+}
+
 func (c *Client) doNotification(ctx context.Context, method string, params any) error {
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -359,8 +409,8 @@ func (c *Client) doNotification(ctx context.Context, method string, params any) 
 	} else {
 		req.SetBasicAuth(c.username, c.password)
 	}
-	if c.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	if sid := c.getSessionID(); sid != "" {
+		req.Header.Set("Mcp-Session-Id", sid)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
