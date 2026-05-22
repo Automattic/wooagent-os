@@ -162,41 +162,74 @@ func (p *PEP) deny(ctx context.Context, auditID int64, persona manifest.Persona,
 // ---------- the six checks ----------
 
 // checkTrustState — Check 1. Decides whether the ability is admissible
-// from the daemon's trust perspective: revoked rows are always denied,
-// manifest-pre-signed rows are always allowed, operator-trusted rows
-// at the current schema are allowed, everything else is denied.
+// from the daemon's trust perspective:
+//
+//   - revoked rows are always denied (operator wins over manifest);
+//   - manifest-pre-signed rows are allowed only when the discovered
+//     schema_hash matches the manifest's SchemaHash (DSGWOO-1361 P2 #3:
+//     trust by name alone is not enough — a compromised plugin update
+//     could otherwise reshape the surface and we'd dispatch against it);
+//   - manifest entries carrying the placeholder SchemaHash skip the hash
+//     check (WC 10.9 canonicals — no real hash exists yet);
+//   - operator-trusted rows whose discovered schema matches the approved
+//     snapshot are allowed (drift flips trust_state to schema_changed
+//     elsewhere in the abilities reconciler);
+//   - everything else is denied.
 //
 // Per-call DB read by design — the truth lives in the abilities table
 // and the operator's UI mutations must take effect immediately. SQLite
 // local reads are sub-millisecond; no in-memory cache.
 func (p *PEP) checkTrustState(ctx context.Context, req Request) ReasonCode {
+	entry := p.manifest.Get(req.Ability)
+
 	var trustState string
-	var revokedAt sql.NullString
+	var revokedAt, schemaHash sql.NullString
 	err := p.db.QueryRowContext(ctx,
-		`SELECT trust_state, revoked_at FROM abilities WHERE name = ?`,
+		`SELECT trust_state, revoked_at, schema_hash FROM abilities WHERE name = ?`,
 		req.Ability,
-	).Scan(&trustState, &revokedAt)
+	).Scan(&trustState, &revokedAt, &schemaHash)
 	if errors.Is(err, sql.ErrNoRows) {
-		// No row at all means we've never discovered this ability.
-		// Manifest-only entries that aren't yet in the DB (e.g. before
-		// the first discovery sweep) still flow through the manifest
-		// branch below.
-		if p.manifest.Get(req.Ability) != nil {
+		// No row at all means discovery hasn't seen this ability yet.
+		if entry == nil {
+			return ReasonAbilityUnapproved
+		}
+		// Manifest pre-signed but pre-discovery. For placeholder entries
+		// (WC 10.9 canonicals with no real hash on record) we have to allow
+		// — there's nothing to compare against, and refusing would brick
+		// paired stores until their first sweep. For real-hash entries we
+		// refuse: a hash check that compares against the empty string is
+		// not a hash check.
+		if entry.SchemaHash == manifest.PlaceholderSchemaHash {
 			return ""
 		}
-		return ReasonAbilityUnapproved
+		return ReasonAbilityNotYetDiscovered
 	}
 	if err != nil {
-		// Fall back to the conservative "deny on lookup failure" stance.
-		// The error will surface via the audit row's denial_reason. The
-		// alternative (allow on error) is unacceptable for a launch
-		// product.
+		// Conservative "deny on lookup failure" stance. The error surfaces
+		// via the audit row's denial_reason; allow-on-error is unacceptable
+		// for a launch product.
 		return ReasonAbilityUnapproved
 	}
 	if revokedAt.Valid && revokedAt.String != "" {
 		return ReasonAbilityRevoked
 	}
-	if p.manifest.Get(req.Ability) != nil {
+	if entry != nil {
+		// Manifest-pre-signed: require the discovered schema to match what
+		// was signed (placeholder bypasses, as in the no-row branch).
+		if entry.SchemaHash == manifest.PlaceholderSchemaHash {
+			return ""
+		}
+		if !schemaHash.Valid || schemaHash.String == "" {
+			// Row exists (so discovery has touched this ability) but no
+			// hash captured. Treat as not-yet-discovered rather than
+			// schema_drift: drift is a specific claim ("the surface
+			// changed under us") and we can't make it without a value to
+			// compare.
+			return ReasonAbilityNotYetDiscovered
+		}
+		if schemaHash.String != entry.SchemaHash {
+			return ReasonSchemaDrift
+		}
 		return ""
 	}
 	if trustState == "trusted" {

@@ -139,6 +139,22 @@ const (
 	// lookup failed. Distinct from ReasonInvalidArguments so operators can
 	// tell cache rot / infra failure from caller mistakes. Check 3.
 	ReasonSchemaCompileError ReasonCode = "schema_compile_error"
+
+	// ReasonSchemaDrift means the live store's discovered schema_hash for a
+	// manifest-pre-signed ability no longer matches the SchemaHash the
+	// daemon was shipped with. Either an upstream plugin update changed the
+	// surface (legit, operator must re-approve) or something tampered with
+	// the surface (not legit, do not dispatch). Check 1 — closes the
+	// "trust by manifest name alone" gap from DSGWOO-1361.
+	ReasonSchemaDrift ReasonCode = "schema_drift"
+
+	// ReasonAbilityNotYetDiscovered means the manifest pre-signs this
+	// ability but the discovery sweep hasn't populated its DB row yet — so
+	// we have nothing to compare the manifest SchemaHash against. Returned
+	// during the cold-start race window between daemon-up and the first
+	// discovery sweep. Transient; the caller can retry once discovery has
+	// run. Check 1.
+	ReasonAbilityNotYetDiscovered ReasonCode = "ability_not_yet_discovered"
 )
 
 // Outcome is recorded on every audit row. Final state when Invoke returns.

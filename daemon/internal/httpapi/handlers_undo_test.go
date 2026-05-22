@@ -72,7 +72,7 @@ func newUndoRig(t *testing.T) (*httptest.Server, *store.Store, *undoMCP) {
 			{
 				Ability:        "wooagent-products/update",
 				NamespaceOwner: "test",
-				SchemaHash:     "sha256:test",
+				SchemaHash:     manifest.PlaceholderSchemaHash,
 				Scope:          manifest.ScopePropose,
 				Reversibility:  0.6,
 				Personas:       []manifest.Persona{manifest.PersonaPricing, manifest.PersonaMarketing},
@@ -80,7 +80,7 @@ func newUndoRig(t *testing.T) (*httptest.Server, *store.Store, *undoMCP) {
 			{
 				Ability:        "wooagent-products/get",
 				NamespaceOwner: "test",
-				SchemaHash:     "sha256:test",
+				SchemaHash:     manifest.PlaceholderSchemaHash,
 				Scope:          manifest.ScopePropose,
 				Reversibility:  1.0,
 				Personas:       []manifest.Persona{manifest.PersonaPricing, manifest.PersonaMarketing},

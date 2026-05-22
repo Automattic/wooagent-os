@@ -108,14 +108,13 @@ func TestPreSignedWC109CanonicalEntriesPresent(t *testing.T) {
 		"woocommerce/order-update-status",
 	}
 	lookup, _ := NewLookup(m)
-	const placeholder = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	for _, name := range pending {
 		e := lookup.Get(name)
 		if e == nil {
 			t.Errorf("missing pre-signed WC 10.9 canonical entry: %s (DSGWOO-1279)", name)
 			continue
 		}
-		if e.SchemaHash != placeholder {
+		if e.SchemaHash != PlaceholderSchemaHash {
 			// Real schema captured — this entry is no longer a placeholder
 			// and can be removed from the pending list above. Failing the
 			// test is the prompt to do that cleanup.

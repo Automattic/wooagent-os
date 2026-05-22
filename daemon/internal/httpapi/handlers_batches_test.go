@@ -82,7 +82,9 @@ func newTestRig(t *testing.T, mcpc pep.MCPClient) (*Server, *httptest.Server, *s
 		Entries: []manifest.Entry{{
 			Ability:        "wooagent-products/update",
 			NamespaceOwner: "test",
-			SchemaHash:     "sha256:test",
+			// Placeholder hash so the PEP's hash gate (DSGWOO-1361) bypasses;
+			// this fixture tests batch approve/reject, not drift behavior.
+			SchemaHash: manifest.PlaceholderSchemaHash,
 			Scope:          manifest.ScopePropose,
 			Reversibility:  0.6,
 			Personas:       []manifest.Persona{manifest.PersonaMarketing},
