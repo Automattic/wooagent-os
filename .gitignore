@@ -65,6 +65,9 @@ yarn-error.log*
 /docs/superpowers/
 /.superpowers/
 
+# Personal Claude Code skills / settings (operator-local)
+/.claude/
+
 # Root-level plan/design/proposal/brief docs are scratch by default.
 # Tracked specs go in docs/specs/; tracked plans (if any) go in docs/plans/.
 /*-plan.md
