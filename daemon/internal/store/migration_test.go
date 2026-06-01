@@ -6,6 +6,29 @@ import (
 	"testing"
 )
 
+func TestMigration_PersonaLessonsTable(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	st, err := Open(ctx, filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer st.Close()
+
+	if _, err := st.DB.ExecContext(ctx,
+		`INSERT INTO persona_lessons (persona, lessons_text, generated_at, source_count, source_oldest_dismissed_at, source_newest_dismissed_at)
+		 VALUES ('marketing','- be warm','2026-06-01T00:00:00Z',5,'2026-05-20T00:00:00Z','2026-06-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert persona_lessons: %v", err)
+	}
+	var txt string
+	if err := st.DB.QueryRowContext(ctx, `SELECT lessons_text FROM persona_lessons WHERE persona='marketing'`).Scan(&txt); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if txt != "- be warm" {
+		t.Errorf("lessons_text = %q, want %q", txt, "- be warm")
+	}
+}
+
 func TestMigration011AppliesFresh(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
