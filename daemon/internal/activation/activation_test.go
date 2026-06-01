@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -159,3 +162,43 @@ var errSend = errSendType("send failed")
 type errSendType string
 
 func (e errSendType) Error() string { return string(e) }
+
+func TestHTTPPinger_SendPostsJSON(t *testing.T) {
+	var gotMethod, gotCT, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.WriteHeader(http.StatusNoContent) // 204 — a 2xx
+	}))
+	defer srv.Close()
+
+	status, err := httpPinger{}.send(context.Background(), srv.URL, []byte(`{"event":"first_approve"}`))
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if status != http.StatusNoContent {
+		t.Errorf("status = %d, want 204 (passthrough)", status)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotCT != "application/json" {
+		t.Errorf("content-type = %q, want application/json", gotCT)
+	}
+	if gotBody != `{"event":"first_approve"}` {
+		t.Errorf("body = %q", gotBody)
+	}
+}
+
+func TestHTTPPinger_SendTransportError(t *testing.T) {
+	// Unreachable URL → non-nil error, zero status.
+	status, err := httpPinger{}.send(context.Background(), "http://127.0.0.1:0", []byte(`{}`))
+	if err == nil {
+		t.Errorf("expected transport error for unreachable URL")
+	}
+	if status != 0 {
+		t.Errorf("status = %d, want 0 on error", status)
+	}
+}

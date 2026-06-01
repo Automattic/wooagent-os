@@ -118,6 +118,11 @@ type pingPayload struct {
 // (e.g. `go activation.MaybePingFirstApprove(context.Background(), ...)`); it
 // applies its own timeout. Errors are logged, never returned.
 func MaybePingFirstApprove(ctx context.Context, db *sql.DB, cfg Config, version string) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Default().Warn("activation: ping panicked (recovered)", "panic", r)
+		}
+	}()
 	maybePing(ctx, db, cfg, version, httpPinger{})
 }
 
