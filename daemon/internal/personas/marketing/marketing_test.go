@@ -594,3 +594,50 @@ func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
 		t.Errorf("SkipReason should explain threshold: %q", got.SkipReason)
 	}
 }
+
+func TestExtractConcreteNouns_DropsStopwordsAndShortTokens(t *testing.T) {
+	got := extractConcreteNouns("The soft cotton scarf is woven with indigo dye.")
+	for _, want := range []string{"cotton", "scarf", "indigo", "dye"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("expected %q in concrete nouns, got %v", want, keys(got))
+		}
+	}
+	for _, notWant := range []string{"the", "is", "with", "soft"} {
+		if _, ok := got[notWant]; ok {
+			t.Errorf("did not expect stopword %q in concrete nouns, got %v", notWant, keys(got))
+		}
+	}
+}
+
+func TestExtractConcreteNouns_Singularizes(t *testing.T) {
+	got := extractConcreteNouns("wool slippers and merino socks")
+	for _, want := range []string{"slipper", "sock", "wool", "merino"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("expected singularized %q, got %v", want, keys(got))
+		}
+	}
+	got2 := extractConcreteNouns("glass dress")
+	for _, want := range []string{"glass", "dress"} {
+		if _, ok := got2[want]; !ok {
+			t.Errorf("expected %q unchanged (ss ending), got %v", want, keys(got2))
+		}
+	}
+}
+
+func TestExtractConcreteNouns_KeepsMeasurementTokens(t *testing.T) {
+	got := extractConcreteNouns("Holds 12oz. Two-ply, 100% cotton.")
+	for _, want := range []string{"12oz", "100", "cotton"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("expected measurement-ish token %q, got %v", want, keys(got))
+		}
+	}
+}
+
+// keys is a small test helper for readable failure messages.
+func keys(m map[string]struct{}) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

@@ -233,6 +233,91 @@ func parseColdDraftVariants(raw string, drafting []string) ([]variant, error) {
 	return out, nil
 }
 
+// ---- Anti-hallucination fabrication guard (DSGWOO-1353) ----
+
+const (
+	// anchorNounFloor is the minimum number of distinct concrete nouns the
+	// source anchor must contain before the noun-set-difference fabrication
+	// check runs. Below this floor (a thin rewrite source, or cold-draft
+	// where the anchor is just the product name) the diff is unreliable —
+	// nearly every concrete noun in a good variant reads as "new" — so the
+	// check no-ops and the prompt's anti-fabrication clause is the only
+	// guard. Starting estimate; tune against the seeded apparel catalog
+	// (DSGWOO-1353 follow-up).
+	anchorNounFloor = 6
+
+	// fabricationThreshold is how many concrete nouns a variant may introduce
+	// that are absent from the source anchor before the variant is dropped as
+	// likely-fabricated. Starting estimate; tune against the seeded catalog.
+	fabricationThreshold = 3
+)
+
+// nonWordRe strips everything except lowercase letters and digits from a
+// token (run after strings.ToLower). Keeps measurement-ish tokens like
+// "12oz" and the digits of "100%" intact, which are exactly the falsifiable
+// claims the guard cares about.
+var nonWordRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// nounStopwords are tokens that survive tokenization but are not falsifiable
+// concrete claims: function words, common copywriting verbs/adjectives, and
+// the SEO-rubric banned words. Stored lowercased + singularized. This list is
+// the primary tuning surface for the guard (DSGWOO-1353 follow-up) — a real
+// POS tagger would be more accurate but adding an NLP dependency is a
+// deliberate non-goal (CLAUDE.md: call out new dependencies).
+var nounStopwords = map[string]struct{}{
+	// articles / conjunctions / prepositions (3+ chars; shorter are dropped by length)
+	"the": {}, "and": {}, "for": {}, "with": {}, "from": {}, "into": {},
+	"onto": {}, "over": {}, "under": {}, "between": {}, "through": {},
+	// pronouns / determiners
+	"you": {}, "your": {}, "our": {}, "its": {}, "their": {}, "this": {},
+	"that": {}, "these": {}, "those": {}, "every": {}, "each": {}, "all": {},
+	"any": {}, "more": {}, "most": {}, "some": {},
+	// common copy verbs
+	"made": {}, "make": {}, "use": {}, "using": {}, "add": {}, "get": {},
+	"feel": {}, "look": {}, "come": {}, "bring": {}, "hold": {}, "keep": {},
+	"give": {}, "love": {},
+	// generic copy adjectives (not falsifiable claims)
+	"soft": {}, "cozy": {}, "warm": {}, "lovely": {}, "great": {}, "good": {},
+	"beautiful": {}, "perfect": {}, "simple": {}, "classic": {}, "modern": {},
+	"timeless": {}, "everyday": {}, "favorite": {},
+	// SEO-rubric banned words (kept in sync with the skill prompt's banned set)
+	"luxe": {}, "premium": {}, "elevate": {}, "curated": {},
+}
+
+// singularize naively strips a trailing "s" (but not "ss") from tokens longer
+// than 3 chars so "slippers"→"slipper" and "socks"→"sock" match a source that
+// uses the singular, while "glass"/"dress" stay intact. Crude by design;
+// good enough for set-membership.
+func singularize(w string) string {
+	if len(w) > 3 && strings.HasSuffix(w, "s") && !strings.HasSuffix(w, "ss") {
+		return strings.TrimSuffix(w, "s")
+	}
+	return w
+}
+
+// extractConcreteNouns tokenizes text into a set of candidate concrete nouns:
+// lowercase → strip non-word chars → singularize → drop tokens shorter than 3
+// chars and known stopwords. The remainder approximates the falsifiable
+// concrete claims (materials, measurements, named features) in the text.
+func extractConcreteNouns(text string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, tok := range strings.Fields(strings.ToLower(text)) {
+		tok = nonWordRe.ReplaceAllString(tok, "")
+		if len(tok) < 3 {
+			continue
+		}
+		tok = singularize(tok)
+		if len(tok) < 3 {
+			continue
+		}
+		if _, stop := nounStopwords[tok]; stop {
+			continue
+		}
+		out[tok] = struct{}{}
+	}
+	return out
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
