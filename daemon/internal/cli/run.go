@@ -28,6 +28,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/scheduler"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
@@ -212,6 +213,22 @@ func newRunCmd() *cobra.Command {
 					skills = map[string]registry.Skill{}
 				}
 				env := resolvePersonaEnv(ctx, st.DB, secretStore, envFromOS(), out)
+				// Persona lessons feedback loop (DSGWOO-1354): periodically
+				// digests operator dismissals into a per-persona "lessons"
+				// block injected at draft time. No-ops without an Anthropic
+				// key. Marketing only for now; Pricing/Sales-Support follow up.
+				if dg := lessons.NewAnthropicDigester(env.AnthropicAPIKey, env.AnthropicModel); dg != nil {
+					lj := &lessons.Job{
+						DB:        st.DB,
+						Digester:  dg,
+						Threshold: lessonsThreshold(),
+						Every:     lessonsTick(),
+						Personas:  []string{"marketing"},
+						Out:       out,
+					}
+					go lj.Start(ctx)
+					fmt.Fprintln(out, "→ lessons: feedback loop active (marketing)")
+				}
 				sch := &scheduler.Scheduler{
 					Store:    st,
 					Personas: personas.All(),
@@ -325,6 +342,22 @@ func dismissTTLDays(out io.Writer) int {
 		return defaultDays
 	}
 	return n
+}
+
+// lessonsThreshold reads WOOAGENT_LESSONS_THRESHOLD (new-dismissals trigger; default 5).
+func lessonsThreshold() int {
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WOOAGENT_LESSONS_THRESHOLD"))); err == nil && v > 0 {
+		return v
+	}
+	return 5
+}
+
+// lessonsTick reads WOOAGENT_LESSONS_TICK_MINUTES (digest tick interval; default 10).
+func lessonsTick() time.Duration {
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WOOAGENT_LESSONS_TICK_MINUTES"))); err == nil && v > 0 {
+		return time.Duration(v) * time.Minute
+	}
+	return 10 * time.Minute
 }
 
 // portFromAddr extracts the port suffix from a host:port string, falling
