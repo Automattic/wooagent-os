@@ -677,6 +677,9 @@ func TestFilterFabricatedVariants_DropsFabricatedKeepsSafe(t *testing.T) {
 			t.Errorf("fabricated variant A should have been dropped")
 		}
 	}
+	if !got[0].Recommended {
+		t.Errorf("after dropping the Recommended variant, the first survivor should be re-promoted to Recommended")
+	}
 }
 
 func TestFilterFabricatedVariants_RepromotesRecommended(t *testing.T) {

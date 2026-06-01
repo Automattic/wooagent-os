@@ -348,7 +348,9 @@ func filterFabricatedVariants(variants []variant, anchorText string) ([]variant,
 	for _, v := range variants {
 		body := v.Body
 		if body == "" {
-			// Cold-draft variants carry structured body fields.
+			// Cold-draft variants carry structured body fields. Long first to
+			// match the schema field order; order is irrelevant since
+			// extractConcreteNouns builds a set.
 			body = strings.TrimSpace(v.BodyLong + " " + v.BodyShort)
 		}
 		unknown := 0
