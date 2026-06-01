@@ -352,16 +352,15 @@ func (s *Server) handleGetLessons(w http.ResponseWriter, r *http.Request) {
 		 FROM persona_lessons WHERE persona = ?`, slug).
 		Scan(&resp.Persona, &resp.LessonsText, &resp.GeneratedAt, &resp.SourceCount, &resp.SourceOldest, &resp.SourceNewest)
 	if err == sql.ErrNoRows {
-		http.Error(w, "no lessons for that persona", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "not_found", "no lessons for that persona")
 		return
 	}
 	if err != nil {
-		http.Error(w, "lessons lookup failed", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return
 	}
 	resp.Disabled = lessons.DisabledFor(slug)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {

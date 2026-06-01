@@ -74,6 +74,30 @@ func TestFetchRecentDismissals_OrdersAndCaps(t *testing.T) {
 	}
 }
 
+func TestQueriesIncludeBatchRejected(t *testing.T) {
+	db := newDB(t)
+	ctx := context.Background()
+	// one dismissed (single-issue) + one rejected (batch) — both carry dismiss fields.
+	db.ExecContext(ctx, `INSERT INTO issues (id,persona,status,dismiss_reason,dismiss_comment,dismissed_at,proposal_content) VALUES (?,?,?,?,?,?,?)`,
+		"d1", "marketing", "dismissed", "tone_off", "cold", "2026-05-20T00:00:00Z", "Mug A.")
+	db.ExecContext(ctx, `INSERT INTO issues (id,persona,status,dismiss_reason,dismiss_comment,dismissed_at,proposal_content) VALUES (?,?,?,?,?,?,?)`,
+		"r1", "marketing", "rejected", "wrong_focus", "off", "2026-05-21T00:00:00Z", "Mug B.")
+	n, err := countNewDismissals(ctx, db, "marketing", "")
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("count = %d, want 2 (dismissed + rejected)", n)
+	}
+	recs, err := fetchRecentDismissals(ctx, db, "marketing", 10)
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if len(recs) != 2 {
+		t.Errorf("fetch len = %d, want 2 (dismissed + rejected)", len(recs))
+	}
+}
+
 func TestUpsertAndLoadRow(t *testing.T) {
 	db := newDB(t)
 	ctx := context.Background()

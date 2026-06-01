@@ -32,7 +32,7 @@ func countNewDismissals(ctx context.Context, db *sql.DB, persona, watermark stri
 	var n int
 	err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM issues
-		 WHERE persona = ? AND status = 'dismissed'
+		 WHERE persona = ? AND status IN ('dismissed','rejected')
 		   AND dismissed_at IS NOT NULL AND dismissed_at > ?`,
 		persona, watermark).Scan(&n)
 	if err != nil {
@@ -48,7 +48,7 @@ func fetchRecentDismissals(ctx context.Context, db *sql.DB, persona string, limi
 		`SELECT COALESCE(dismiss_reason,''), COALESCE(dismiss_comment,''),
 		        COALESCE(proposal_content,''), COALESCE(dismissed_at,'')
 		 FROM issues
-		 WHERE persona = ? AND status = 'dismissed' AND dismissed_at IS NOT NULL
+		 WHERE persona = ? AND status IN ('dismissed','rejected') AND dismissed_at IS NOT NULL
 		 ORDER BY dismissed_at DESC
 		 LIMIT ?`, persona, limit)
 	if err != nil {
