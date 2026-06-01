@@ -595,62 +595,23 @@ func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
 	}
 }
 
-func TestExtractConcreteNouns_DropsStopwordsAndShortTokens(t *testing.T) {
-	got := extractConcreteNouns("The soft cotton scarf is woven with indigo dye.")
-	for _, want := range []string{"cotton", "scarf", "indigo", "dye"} {
+func TestExtractSpecClaims_KeepsMeasurementsAndMaterials(t *testing.T) {
+	got := extractSpecClaims("Holds 12oz. 100% merino wool, GOTS-certified two-ply.")
+	for _, want := range []string{"12oz", "100", "merino", "wool", "gots", "certified", "ply"} {
 		if _, ok := got[want]; !ok {
-			t.Errorf("expected %q in concrete nouns, got %v", want, keys(got))
-		}
-	}
-	for _, notWant := range []string{"the", "is", "with", "soft"} {
-		if _, ok := got[notWant]; ok {
-			t.Errorf("did not expect stopword %q in concrete nouns, got %v", notWant, keys(got))
+			t.Errorf("expected spec-claim %q, got %v", want, claimKeys(got))
 		}
 	}
 }
 
-func TestExtractConcreteNouns_Singularizes(t *testing.T) {
-	got := extractConcreteNouns("wool slippers and merino socks")
-	for _, want := range []string{"slipper", "sock", "wool", "merino"} {
-		if _, ok := got[want]; !ok {
-			t.Errorf("expected singularized %q, got %v", want, keys(got))
-		}
-	}
-	got2 := extractConcreteNouns("glass dress")
-	for _, want := range []string{"glass", "dress"} {
-		if _, ok := got2[want]; !ok {
-			t.Errorf("expected %q unchanged (ss ending), got %v", want, keys(got2))
-		}
+func TestExtractSpecClaims_IgnoresUseAndStoryProse(t *testing.T) {
+	got := extractSpecClaims("Cozy on cold mornings. Roomy enough for your daily errands and a slow weekend.")
+	if len(got) != 0 {
+		t.Errorf("use/story prose should yield no spec-claims, got %v", claimKeys(got))
 	}
 }
 
-func TestExtractConcreteNouns_KeepsMeasurementTokens(t *testing.T) {
-	got := extractConcreteNouns("Holds 12oz. Two-ply, 100% cotton.")
-	for _, want := range []string{"12oz", "100", "cotton"} {
-		if _, ok := got[want]; !ok {
-			t.Errorf("expected measurement-ish token %q, got %v", want, keys(got))
-		}
-	}
-}
-
-func TestAnchorReliable_FloorBoundary(t *testing.T) {
-	// Exactly anchorNounFloor (6) distinct concrete nouns → reliable.
-	rich := extractConcreteNouns("cotton scarf woven indigo fringe tassel")
-	if len(rich) < anchorNounFloor {
-		t.Fatalf("test fixture has %d nouns, need >= %d", len(rich), anchorNounFloor)
-	}
-	if !anchorReliable(rich) {
-		t.Errorf("expected reliable anchor for %d nouns", len(rich))
-	}
-	// Thin anchor (a product name) → not reliable.
-	thin := extractConcreteNouns("Wool Slippers")
-	if anchorReliable(thin) {
-		t.Errorf("expected thin anchor (%d nouns) to be unreliable", len(thin))
-	}
-}
-
-// keys is a small test helper for readable failure messages.
-func keys(m map[string]struct{}) []string {
+func claimKeys(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -659,11 +620,11 @@ func keys(m map[string]struct{}) []string {
 }
 
 func TestFilterFabricatedVariants_DropsFabricatedKeepsSafe(t *testing.T) {
-	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	anchor := "Soft fabric scarf. A woven scarf with fringe and tassel detail."
 	vs := []variant{
 		{ID: "var_a", Label: "A", Body: "100% organic cotton scarf, GOTS-certified.", Recommended: true},
-		{ID: "var_b", Label: "B", Body: "Soft woven scarf with fringe and tassel detail."},
-		{ID: "var_c", Label: "C", Body: "A scarf dyed in deep indigo, finished with fringe."},
+		{ID: "var_b", Label: "B", Body: "A soft woven scarf with fringe and tassel detail."},
+		{ID: "var_c", Label: "C", Body: "Drape it over a chair for cozy weekend mornings."},
 	}
 	got, dropped := filterFabricatedVariants(vs, anchor)
 	if dropped != 1 {
@@ -678,53 +639,52 @@ func TestFilterFabricatedVariants_DropsFabricatedKeepsSafe(t *testing.T) {
 		}
 	}
 	if !got[0].Recommended {
-		t.Errorf("after dropping the Recommended variant, the first survivor should be re-promoted to Recommended")
+		t.Errorf("after dropping the Recommended variant, first survivor should be re-promoted")
 	}
 }
 
-func TestFilterFabricatedVariants_RepromotesRecommended(t *testing.T) {
-	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+func TestFilterFabricatedVariants_KeepsFaithfulUseStoryRewrite(t *testing.T) {
+	// Regression for the v1 false-positive: faithful use/story rewrites add
+	// ordinary prose words but no new materials/measurements. Must survive.
+	anchor := "Stoneware mug. Holds 12oz."
 	vs := []variant{
-		{ID: "var_a", Label: "A", Body: "100% organic cotton scarf, GOTS-certified linen.", Recommended: true},
-		{ID: "var_b", Label: "B", Body: "Soft woven scarf with fringe and tassel detail."},
-		{ID: "var_c", Label: "C", Body: "A scarf dyed in deep indigo, finished with fringe."},
+		{ID: "var_a", Label: "A", Body: "Stoneware mug that holds 12oz of your morning coffee.", Recommended: true},
+		{ID: "var_b", Label: "B", Body: "Wrap your hands around it on a slow, generous morning."},
+		{ID: "var_c", Label: "C", Body: "The everyday mug for coffee, tea, and quiet weekends."},
 	}
-	got, _ := filterFabricatedVariants(vs, anchor)
-	if len(got) == 0 {
-		t.Fatal("expected survivors")
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 0 {
+		t.Errorf("faithful use/story rewrites should not be dropped, dropped = %d", dropped)
 	}
-	if !got[0].Recommended {
-		t.Errorf("first survivor should be re-promoted to Recommended")
+	if len(got) != 3 {
+		t.Errorf("survivors = %d, want 3", len(got))
 	}
-	for i := 1; i < len(got); i++ {
-		if got[i].Recommended {
-			t.Errorf("only the first survivor should be Recommended; got[%d] also set", i)
+}
+
+func TestFilterFabricatedVariants_ColdDraftAgainstName(t *testing.T) {
+	anchor := "Wool Slippers" // cold-draft anchor is just the product name
+	vs := []variant{
+		{ID: "var_a", Label: "A", BodyShort: "Merino slippers.", BodyLong: "Pure merino wool, 12oz, hand-loomed."},
+		{ID: "var_b", Label: "B", BodyShort: "Cozy slippers.", BodyLong: "Wool slippers for cold mornings by the fire."},
+		{ID: "var_c", Label: "C", BodyShort: "Warm slippers.", BodyLong: "Slip them on for slow weekend mornings."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want 1 (merino/12oz not grounded in the name)", dropped)
+	}
+	for _, v := range got {
+		if v.Label == "A" {
+			t.Errorf("variant A invents merino + 12oz; should be dropped")
 		}
 	}
 }
 
-func TestFilterFabricatedVariants_ThinAnchorNoDrops(t *testing.T) {
-	anchor := "Wool Slippers"
-	vs := []variant{
-		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified, hand-loomed in Peru."},
-		{ID: "var_b", Label: "B", Body: "Merino wool, two-ply, 12oz."},
-		{ID: "var_c", Label: "C", Body: "Stoneware mug fired in a wood kiln."},
-	}
-	got, dropped := filterFabricatedVariants(vs, anchor)
-	if dropped != 0 {
-		t.Errorf("thin anchor should drop nothing, dropped = %d", dropped)
-	}
-	if len(got) != 3 {
-		t.Errorf("survivors = %d, want 3 (untouched)", len(got))
-	}
-}
-
 func TestFilterFabricatedVariants_AllFabricatedZeroSurvivors(t *testing.T) {
-	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	anchor := "Soft fabric scarf with fringe and tassel detail."
 	vs := []variant{
-		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified linen blend."},
-		{ID: "var_b", Label: "B", Body: "Pure merino wool, two-ply, 200g, hand-loomed."},
-		{ID: "var_c", Label: "C", Body: "Genuine leather strap, brass buckle, waxed canvas lining."},
+		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified."},
+		{ID: "var_b", Label: "B", Body: "Pure merino wool, two-ply, 200g."},
+		{ID: "var_c", Label: "C", Body: "Genuine leather strap with a brass buckle."},
 	}
 	got, dropped := filterFabricatedVariants(vs, anchor)
 	if dropped != 3 {
@@ -732,18 +692,5 @@ func TestFilterFabricatedVariants_AllFabricatedZeroSurvivors(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("survivors = %d, want 0", len(got))
-	}
-}
-
-func TestFilterFabricatedVariants_ColdDraftBodyFields(t *testing.T) {
-	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
-	vs := []variant{
-		{ID: "var_a", Label: "A", BodyShort: "Cotton scarf.", BodyLong: "100% organic cotton, GOTS-certified linen blend."},
-		{ID: "var_b", Label: "B", BodyShort: "Woven scarf.", BodyLong: "Soft woven scarf with fringe and tassel detail."},
-		{ID: "var_c", Label: "C", BodyShort: "Indigo scarf.", BodyLong: "A scarf dyed in deep indigo, finished with fringe."},
-	}
-	_, dropped := filterFabricatedVariants(vs, anchor)
-	if dropped != 1 {
-		t.Errorf("dropped = %d, want 1 (variant A reads BodyLong/BodyShort)", dropped)
 	}
 }
