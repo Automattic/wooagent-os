@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type fakeDigester struct {
@@ -98,6 +99,18 @@ func TestJob_TruncatesOversizeOutput(t *testing.T) {
 	row, _ := loadRow(ctx, db, "marketing")
 	if row == nil || len(row.LessonsText) > maxLessonsChars {
 		t.Errorf("lessons_text not truncated to <= %d: len=%d", maxLessonsChars, len(row.LessonsText))
+	}
+}
+
+func TestTruncateAtWord_MultibyteSafe(t *testing.T) {
+	// 500 "·" (2 bytes each, no spaces) → byte cut at maxLessonsChars must not
+	// split a rune.
+	got := truncateAtWord(strings.Repeat("·", 500), maxLessonsChars)
+	if !utf8.ValidString(got) {
+		t.Errorf("truncated string is not valid UTF-8: %q", got)
+	}
+	if len(got) > maxLessonsChars {
+		t.Errorf("len = %d, want <= %d", len(got), maxLessonsChars)
 	}
 }
 

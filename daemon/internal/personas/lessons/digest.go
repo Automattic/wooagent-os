@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 )
@@ -54,8 +55,9 @@ func (j *Job) every() time.Duration {
 	return 10 * time.Minute
 }
 
-// Start ticks until ctx is cancelled. Fire-and-forget: per-tick errors are
-// logged, never returned (mirrors sweeper.Start).
+// Start ticks until ctx is cancelled, digesting on each tick (no startup
+// digest by design). Fire-and-forget: per-tick errors are logged, never
+// returned (the fire-and-forget error handling mirrors sweeper.Start).
 func (j *Job) Start(ctx context.Context) {
 	t := time.NewTicker(j.every())
 	defer t.Stop()
@@ -134,13 +136,18 @@ func (j *Job) logf(format string, args ...any) {
 	}
 }
 
-// truncateAtWord trims s to at most max chars, cutting at the last space so the
-// block never ends mid-word.
+// truncateAtWord trims s to at most max bytes, backing off to a valid rune
+// boundary and then to the last word boundary so the block never ends mid-rune
+// or mid-word.
 func truncateAtWord(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
 	cut := s[:max]
+	// Back off if the byte cut landed in the middle of a multibyte rune.
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
 	if i := strings.LastIndex(cut, " "); i > 0 {
 		cut = cut[:i]
 	}
