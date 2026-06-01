@@ -633,6 +633,22 @@ func TestExtractConcreteNouns_KeepsMeasurementTokens(t *testing.T) {
 	}
 }
 
+func TestAnchorReliable_FloorBoundary(t *testing.T) {
+	// Exactly anchorNounFloor (6) distinct concrete nouns → reliable.
+	rich := extractConcreteNouns("cotton scarf woven indigo fringe tassel")
+	if len(rich) < anchorNounFloor {
+		t.Fatalf("test fixture has %d nouns, need >= %d", len(rich), anchorNounFloor)
+	}
+	if !anchorReliable(rich) {
+		t.Errorf("expected reliable anchor for %d nouns", len(rich))
+	}
+	// Thin anchor (a product name) → not reliable.
+	thin := extractConcreteNouns("Wool Slippers")
+	if anchorReliable(thin) {
+		t.Errorf("expected thin anchor (%d nouns) to be unreliable", len(thin))
+	}
+}
+
 // keys is a small test helper for readable failure messages.
 func keys(m map[string]struct{}) []string {
 	out := make([]string, 0, len(m))

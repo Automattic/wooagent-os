@@ -317,6 +317,12 @@ func extractConcreteNouns(text string) map[string]struct{} {
 	return out
 }
 
+// anchorReliable reports whether the source anchor has enough concrete nouns
+// for the set-difference fabrication check to be meaningful.
+func anchorReliable(anchorNouns map[string]struct{}) bool {
+	return len(anchorNouns) >= anchorNounFloor
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
