@@ -540,6 +540,19 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 	}
 	var content string
 	if parseErr == nil {
+		// Anti-fabrication guard (DSGWOO-1353): drop variants that invent
+		// concrete claims absent from the source. No-ops when the source is
+		// too thin to diff against (prompt clause covers that case).
+		var dropped int
+		variants, dropped = filterFabricatedVariants(variants, p.Description)
+		if len(variants) == 0 {
+			fmt.Printf("marketing: all variants dropped as likely-fabricated for product #%d; skipping\n", p.ID)
+			return personas.Drafted{
+				Skipped:    true,
+				SkipReason: "all rewrite variants failed the anti-fabrication check",
+			}, nil
+		}
+		_ = dropped
 		target["variants"] = variants
 		// proposal.content is the recommended variant's body. The UI's
 		// multi-variant view reads target.variants; surfaces that handle
