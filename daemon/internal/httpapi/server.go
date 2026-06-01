@@ -136,6 +136,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Use(s.bearerAuth)
 		r.Get("/v1/agents", s.handleListAgents)
 		r.Patch("/v1/agents/{slug}", s.handlePatchAgent)
+		r.Get("/v1/agents/{slug}/lessons", s.handleGetLessons)
 		r.Get("/v1/issues", s.handleListIssues)
 		r.Post("/v1/issues", s.handleCreateIssue)
 		r.Get("/v1/issues/{id}", s.handleGetIssue)
