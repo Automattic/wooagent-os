@@ -323,6 +323,56 @@ func anchorReliable(anchorNouns map[string]struct{}) bool {
 	return len(anchorNouns) >= anchorNounFloor
 }
 
+// filterFabricatedVariants drops variants that introduce >= fabricationThreshold
+// concrete nouns absent from the source anchor — a mechanical backstop against
+// the model inventing materials, measurements, or origins not present in the
+// source.
+//
+// Gated on anchor confidence: when the anchor has fewer than anchorNounFloor
+// concrete nouns (a thin rewrite source, or cold-draft where the anchor is just
+// the product name) the set-difference is unreliable, so all variants pass
+// untouched — the prompt's anti-fabrication clause is the only guard there.
+//
+// Returns the surviving variants and the number dropped. When at least one
+// variant is dropped and survivors remain, Recommended is re-promoted to the
+// first survivor (exactly one Recommended). When zero survive, returns an
+// empty slice; the caller skips the product rather than surfacing fabricated
+// copy.
+func filterFabricatedVariants(variants []variant, anchorText string) ([]variant, int) {
+	anchor := extractConcreteNouns(anchorText)
+	if !anchorReliable(anchor) {
+		return variants, 0
+	}
+	survivors := make([]variant, 0, len(variants))
+	dropped := 0
+	for _, v := range variants {
+		body := v.Body
+		if body == "" {
+			// Cold-draft variants carry structured body fields.
+			body = strings.TrimSpace(v.BodyLong + " " + v.BodyShort)
+		}
+		unknown := 0
+		for n := range extractConcreteNouns(body) {
+			if _, ok := anchor[n]; !ok {
+				unknown++
+			}
+		}
+		if unknown >= fabricationThreshold {
+			fmt.Printf("marketing: dropped variant %s (%d unknown concrete nouns vs source; threshold %d)\n",
+				v.Label, unknown, fabricationThreshold)
+			dropped++
+			continue
+		}
+		survivors = append(survivors, v)
+	}
+	if dropped > 0 && len(survivors) > 0 {
+		for i := range survivors {
+			survivors[i].Recommended = i == 0
+		}
+	}
+	return survivors, dropped
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"

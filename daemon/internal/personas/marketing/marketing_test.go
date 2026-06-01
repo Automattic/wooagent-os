@@ -657,3 +657,90 @@ func keys(m map[string]struct{}) []string {
 	}
 	return out
 }
+
+func TestFilterFabricatedVariants_DropsFabricatedKeepsSafe(t *testing.T) {
+	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton scarf, GOTS-certified.", Recommended: true},
+		{ID: "var_b", Label: "B", Body: "Soft woven scarf with fringe and tassel detail."},
+		{ID: "var_c", Label: "C", Body: "A scarf dyed in deep indigo, finished with fringe."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want 1 (the cotton/organic/GOTS variant)", dropped)
+	}
+	if len(got) != 2 {
+		t.Fatalf("survivors = %d, want 2", len(got))
+	}
+	for _, v := range got {
+		if v.Label == "A" {
+			t.Errorf("fabricated variant A should have been dropped")
+		}
+	}
+}
+
+func TestFilterFabricatedVariants_RepromotesRecommended(t *testing.T) {
+	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton scarf, GOTS-certified linen.", Recommended: true},
+		{ID: "var_b", Label: "B", Body: "Soft woven scarf with fringe and tassel detail."},
+		{ID: "var_c", Label: "C", Body: "A scarf dyed in deep indigo, finished with fringe."},
+	}
+	got, _ := filterFabricatedVariants(vs, anchor)
+	if len(got) == 0 {
+		t.Fatal("expected survivors")
+	}
+	if !got[0].Recommended {
+		t.Errorf("first survivor should be re-promoted to Recommended")
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].Recommended {
+			t.Errorf("only the first survivor should be Recommended; got[%d] also set", i)
+		}
+	}
+}
+
+func TestFilterFabricatedVariants_ThinAnchorNoDrops(t *testing.T) {
+	anchor := "Wool Slippers"
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified, hand-loomed in Peru."},
+		{ID: "var_b", Label: "B", Body: "Merino wool, two-ply, 12oz."},
+		{ID: "var_c", Label: "C", Body: "Stoneware mug fired in a wood kiln."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 0 {
+		t.Errorf("thin anchor should drop nothing, dropped = %d", dropped)
+	}
+	if len(got) != 3 {
+		t.Errorf("survivors = %d, want 3 (untouched)", len(got))
+	}
+}
+
+func TestFilterFabricatedVariants_AllFabricatedZeroSurvivors(t *testing.T) {
+	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified linen blend."},
+		{ID: "var_b", Label: "B", Body: "Pure merino wool, two-ply, 200g, hand-loomed."},
+		{ID: "var_c", Label: "C", Body: "Genuine leather strap, brass buckle, waxed canvas lining."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 3 {
+		t.Errorf("dropped = %d, want 3", dropped)
+	}
+	if len(got) != 0 {
+		t.Errorf("survivors = %d, want 0", len(got))
+	}
+}
+
+func TestFilterFabricatedVariants_ColdDraftBodyFields(t *testing.T) {
+	anchor := "Soft fabric scarf. A woven scarf with fringe trim and tassel detail, dyed in indigo."
+	vs := []variant{
+		{ID: "var_a", Label: "A", BodyShort: "Cotton scarf.", BodyLong: "100% organic cotton, GOTS-certified linen blend."},
+		{ID: "var_b", Label: "B", BodyShort: "Woven scarf.", BodyLong: "Soft woven scarf with fringe and tassel detail."},
+		{ID: "var_c", Label: "C", BodyShort: "Indigo scarf.", BodyLong: "A scarf dyed in deep indigo, finished with fringe."},
+	}
+	_, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 1 {
+		t.Errorf("dropped = %d, want 1 (variant A reads BodyLong/BodyShort)", dropped)
+	}
+}
