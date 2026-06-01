@@ -7,6 +7,11 @@ description: |
   material or the use, not adjectives. Two to four short sentences, 140-220
   characters total per variant.
 
+  Do not invent. Only mention features, materials, measurements, or origins
+  that appear in the source description (rewrite mode) or the product name
+  (cold-draft mode). Do not infer or guess. When you don't know a concrete
+  detail, lead with the use or the story, not invented specifics.
+
   Draft THREE distinct variants — each takes a different angle (e.g.
   material-first, use-first, story-first). For each variant, also emit two
   integer scores in [1, 100]:
@@ -52,6 +57,11 @@ description: |
     - `body_long` (when "long" is in the list): 200–800 characters. The
       product-detail-page body — persuasive, 2–5 short sentences. Plain
       prose; no markdown; no headings.
+
+    In cold-draft mode there is no source description to ground material
+    claims, so prefer use-first and story-first angles over material-first.
+    Do not state a specific material, fiber, measurement, or origin unless it
+    appears in the product name.
 
   In cold-draft mode, leave `body` empty (do not emit it). In rewrite mode,
   leave `body_short` and `body_long` empty.

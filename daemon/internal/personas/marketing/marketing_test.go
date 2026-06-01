@@ -594,3 +594,103 @@ func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
 		t.Errorf("SkipReason should explain threshold: %q", got.SkipReason)
 	}
 }
+
+func TestExtractSpecClaims_KeepsMeasurementsAndMaterials(t *testing.T) {
+	got := extractSpecClaims("Holds 12oz. 100% merino wool, GOTS-certified two-ply.")
+	for _, want := range []string{"12oz", "100", "merino", "wool", "gots", "certified", "ply"} {
+		if _, ok := got[want]; !ok {
+			t.Errorf("expected spec-claim %q, got %v", want, claimKeys(got))
+		}
+	}
+}
+
+func TestExtractSpecClaims_IgnoresUseAndStoryProse(t *testing.T) {
+	got := extractSpecClaims("Cozy on cold mornings. Roomy enough for your daily errands and a slow weekend.")
+	if len(got) != 0 {
+		t.Errorf("use/story prose should yield no spec-claims, got %v", claimKeys(got))
+	}
+}
+
+func claimKeys(m map[string]struct{}) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func TestFilterFabricatedVariants_DropsFabricatedKeepsSafe(t *testing.T) {
+	anchor := "Soft fabric scarf. A woven scarf with fringe and tassel detail."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton scarf, GOTS-certified.", Recommended: true},
+		{ID: "var_b", Label: "B", Body: "A soft woven scarf with fringe and tassel detail."},
+		{ID: "var_c", Label: "C", Body: "Drape it over a chair for cozy weekend mornings."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want 1 (the cotton/organic/GOTS variant)", dropped)
+	}
+	if len(got) != 2 {
+		t.Fatalf("survivors = %d, want 2", len(got))
+	}
+	for _, v := range got {
+		if v.Label == "A" {
+			t.Errorf("fabricated variant A should have been dropped")
+		}
+	}
+	if !got[0].Recommended {
+		t.Errorf("after dropping the Recommended variant, first survivor should be re-promoted")
+	}
+}
+
+func TestFilterFabricatedVariants_KeepsFaithfulUseStoryRewrite(t *testing.T) {
+	// Regression for the v1 false-positive: faithful use/story rewrites add
+	// ordinary prose words but no new materials/measurements. Must survive.
+	anchor := "Stoneware mug. Holds 12oz."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "Stoneware mug that holds 12oz of your morning coffee.", Recommended: true},
+		{ID: "var_b", Label: "B", Body: "Wrap your hands around it on a slow, generous morning."},
+		{ID: "var_c", Label: "C", Body: "The everyday mug for coffee, tea, and quiet weekends."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 0 {
+		t.Errorf("faithful use/story rewrites should not be dropped, dropped = %d", dropped)
+	}
+	if len(got) != 3 {
+		t.Errorf("survivors = %d, want 3", len(got))
+	}
+}
+
+func TestFilterFabricatedVariants_ColdDraftAgainstName(t *testing.T) {
+	anchor := "Wool Slippers" // cold-draft anchor is just the product name
+	vs := []variant{
+		{ID: "var_a", Label: "A", BodyShort: "Merino slippers.", BodyLong: "Pure merino wool, 12oz, hand-loomed."},
+		{ID: "var_b", Label: "B", BodyShort: "Cozy slippers.", BodyLong: "Wool slippers for cold mornings by the fire."},
+		{ID: "var_c", Label: "C", BodyShort: "Warm slippers.", BodyLong: "Slip them on for slow weekend mornings."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want 1 (merino/12oz not grounded in the name)", dropped)
+	}
+	for _, v := range got {
+		if v.Label == "A" {
+			t.Errorf("variant A invents merino + 12oz; should be dropped")
+		}
+	}
+}
+
+func TestFilterFabricatedVariants_AllFabricatedZeroSurvivors(t *testing.T) {
+	anchor := "Soft fabric scarf with fringe and tassel detail."
+	vs := []variant{
+		{ID: "var_a", Label: "A", Body: "100% organic cotton, GOTS-certified."},
+		{ID: "var_b", Label: "B", Body: "Pure merino wool, two-ply, 200g."},
+		{ID: "var_c", Label: "C", Body: "Genuine leather strap with a brass buckle."},
+	}
+	got, dropped := filterFabricatedVariants(vs, anchor)
+	if dropped != 3 {
+		t.Errorf("dropped = %d, want 3", dropped)
+	}
+	if len(got) != 0 {
+		t.Errorf("survivors = %d, want 0", len(got))
+	}
+}

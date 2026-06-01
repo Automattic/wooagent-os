@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -65,6 +66,22 @@ func assertPricingBenchmark(t *testing.T, skills map[string]Skill) {
 	}
 	if _, ok := s.Schema["output"]; !ok {
 		t.Errorf("pricing.benchmark schema.output missing")
+	}
+}
+
+func TestSkills_MarketingHasAntiFabricationClause(t *testing.T) {
+	skills, err := Skills()
+	if err != nil {
+		t.Fatalf("Skills: %v", err)
+	}
+	s, ok := skills["marketing.description-rewrite"]
+	if !ok {
+		t.Fatal("marketing.description-rewrite skill missing from registry")
+	}
+	for _, want := range []string{"Do not invent", "Do not infer or guess"} {
+		if !strings.Contains(s.Description, want) {
+			t.Errorf("marketing skill description missing anti-fabrication phrase %q", want)
+		}
 	}
 }
 

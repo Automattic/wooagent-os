@@ -233,6 +233,142 @@ func parseColdDraftVariants(raw string, drafting []string) ([]variant, error) {
 	return out, nil
 }
 
+// ---- Anti-hallucination spec-claim guard (DSGWOO-1353) ----
+
+const (
+	// fabricationThreshold is how many ungrounded spec-claims (materials,
+	// measurements, certifications absent from the source) a variant may
+	// introduce before it is dropped as likely-fabricated. Two is the trip
+	// point: the canonical "100% organic cotton, GOTS-certified" fabrication
+	// carries several, while a single borderline claim survives to avoid
+	// false drops from lexicon gaps. Starting estimate; 1 is the more
+	// aggressive setting — tune against the seeded catalog (DSGWOO-1353
+	// follow-up).
+	fabricationThreshold = 2
+)
+
+// claimTokenRe splits text into [a-z0-9] runs (after lowercasing), so
+// "GOTS-certified" → "gots","certified", "two-ply" → "two","ply", and "100%"
+// → "100" while "12oz" stays intact. Splitting (rather than stripping within a
+// token) is what lets hyphenated compound claims be matched.
+var claimTokenRe = regexp.MustCompile(`[a-z0-9]+`)
+
+// digitRe flags measurement/quantity tokens (12oz, 200g, 100) — falsifiable
+// by definition.
+var digitRe = regexp.MustCompile(`[0-9]`)
+
+// CUSTOM: specClaimLexicon is a curated set of falsifiable material / fiber /
+// finish / composition / certification words — the things a product
+// description can get factually *wrong*. It deliberately excludes use/story
+// vocabulary and generic adjectives, so faithful use-first/story-first
+// rewrites (which the skill prompt mandates) are not penalized. No WPDS/NLP
+// component fits — this is a domain word list, the primary tuning surface for
+// the guard (DSGWOO-1353 follow-up). Stored lowercase + singular. Origins /
+// place-names are intentionally out of scope here (the prompt clause covers
+// them).
+var specClaimLexicon = map[string]struct{}{
+	// fibers / textiles
+	"cotton": {}, "wool": {}, "merino": {}, "cashmere": {}, "linen": {},
+	"silk": {}, "polyester": {}, "nylon": {}, "rayon": {}, "viscose": {},
+	"denim": {}, "canvas": {}, "felt": {}, "fleece": {}, "flannel": {},
+	"velvet": {}, "corduroy": {}, "tweed": {}, "jersey": {}, "twill": {},
+	"suede": {}, "leather": {}, "shearling": {}, "ply": {},
+	// hard materials
+	"stoneware": {}, "ceramic": {}, "porcelain": {}, "earthenware": {},
+	"glass": {}, "brass": {}, "copper": {}, "bronze": {}, "steel": {},
+	"iron": {}, "aluminum": {}, "pewter": {}, "silver": {}, "gold": {},
+	"oak": {}, "walnut": {}, "maple": {}, "birch": {}, "bamboo": {},
+	"teak": {}, "pine": {}, "cedar": {}, "rattan": {}, "wicker": {},
+	"marble": {}, "granite": {}, "concrete": {}, "rubber": {}, "cork": {},
+	// composition / certification / process claims
+	"organic": {}, "recycled": {}, "reclaimed": {}, "genuine": {},
+	"certified": {}, "gots": {}, "fairtrade": {}, "handwoven": {},
+}
+
+// singularize naively strips a trailing "s" (but not "ss") from tokens longer
+// than 3 chars so a lexicon entry stored in the singular still matches a plural
+// in the copy, while "glass"/"dress" stay intact.
+func singularize(w string) string {
+	if len(w) > 3 && strings.HasSuffix(w, "s") && !strings.HasSuffix(w, "ss") {
+		return strings.TrimSuffix(w, "s")
+	}
+	return w
+}
+
+// extractSpecClaims returns the set of falsifiable spec-claims in text: tokens
+// that either contain a digit (measurement/quantity) or whose form (original or
+// singular) is in specClaimLexicon (material/composition/certification).
+// Use/story prose and generic adjectives are not claims and are ignored — so
+// the set-difference in filterFabricatedVariants measures fabrication, not
+// mere novelty. The original token is checked before the singularized form to
+// handle acronyms/initialisms (e.g. "gots") that must not be singularized.
+func extractSpecClaims(text string) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, tok := range claimTokenRe.FindAllString(strings.ToLower(text), -1) {
+		if digitRe.MatchString(tok) {
+			out[tok] = struct{}{}
+			continue
+		}
+		if _, ok := specClaimLexicon[tok]; ok {
+			out[tok] = struct{}{}
+			continue
+		}
+		sing := singularize(tok)
+		if _, ok := specClaimLexicon[sing]; ok {
+			out[sing] = struct{}{}
+		}
+	}
+	return out
+}
+
+// filterFabricatedVariants drops variants that introduce >= fabricationThreshold
+// spec-claims (materials, measurements, certifications) absent from the source
+// anchor — a mechanical backstop against the model inventing falsifiable claims
+// not grounded in the source.
+//
+// Because only spec-claims are counted (not all nouns), the check is safe
+// against thin or name-only anchors: a faithful rewrite introduces no
+// *ungrounded* material/measurement claims, while a cold-draft asserting
+// "Merino wool, 12oz" for a product named only "Wool Slippers" trips because
+// merino/12oz aren't grounded in the name. No anchor-confidence gate is needed.
+//
+// Returns the surviving variants and the number dropped. When >=1 variant is
+// dropped and survivors remain, Recommended is re-promoted to the first
+// survivor (exactly one Recommended). When zero survive, returns an empty
+// slice; the caller skips the product rather than surfacing fabricated copy.
+func filterFabricatedVariants(variants []variant, anchorText string) ([]variant, int) {
+	anchor := extractSpecClaims(anchorText)
+	survivors := make([]variant, 0, len(variants))
+	dropped := 0
+	for _, v := range variants {
+		body := v.Body
+		if body == "" {
+			// Cold-draft variants carry structured body fields. Order is
+			// irrelevant since extractSpecClaims builds a set.
+			body = strings.TrimSpace(v.BodyLong + " " + v.BodyShort)
+		}
+		ungrounded := 0
+		for c := range extractSpecClaims(body) {
+			if _, ok := anchor[c]; !ok {
+				ungrounded++
+			}
+		}
+		if ungrounded >= fabricationThreshold {
+			fmt.Printf("marketing: dropped variant %s (%d ungrounded spec-claims vs source; threshold %d)\n",
+				v.Label, ungrounded, fabricationThreshold)
+			dropped++
+			continue
+		}
+		survivors = append(survivors, v)
+	}
+	if dropped > 0 && len(survivors) > 0 {
+		for i := range survivors {
+			survivors[i].Recommended = i == 0
+		}
+	}
+	return survivors, dropped
+}
+
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
 	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
@@ -398,6 +534,18 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 	}
 	var content string
 	if parseErr == nil {
+		// Anti-fabrication guard (DSGWOO-1353): drop variants that invent
+		// materials, measurements, or certifications absent from the source.
+		// Only falsifiable spec-claims are counted, so faithful use/story
+		// rewrites are unaffected.
+		variants, _ = filterFabricatedVariants(variants, p.Description)
+		if len(variants) == 0 {
+			fmt.Printf("marketing: all variants dropped as likely-fabricated for product #%d; skipping\n", p.ID)
+			return personas.Drafted{
+				Skipped:    true,
+				SkipReason: "all rewrite variants failed the anti-fabrication check",
+			}, nil
+		}
 		target["variants"] = variants
 		// proposal.content is the recommended variant's body. The UI's
 		// multi-variant view reads target.variants; surfaces that handle
@@ -1026,6 +1174,19 @@ func draftColdDraftForProduct(ctx context.Context, deps personas.Deps, candidate
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("parse cold-draft variants: %v", parseErr),
+		}, nil
+	}
+
+	// Anti-fabrication guard (DSGWOO-1353): cold-draft has no source
+	// description, so the anchor is the product name. The spec-claim guard
+	// still applies — a variant asserting a material/measurement absent from
+	// the name (e.g. "Merino wool, 12oz" for "Wool Slippers") is dropped,
+	// while faithful use/story copy survives.
+	variants, _ = filterFabricatedVariants(variants, full.Name)
+	if len(variants) == 0 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: "all cold-draft variants failed the anti-fabrication check",
 		}, nil
 	}
 
