@@ -1184,6 +1184,20 @@ func draftColdDraftForProduct(ctx context.Context, deps personas.Deps, candidate
 		}, nil
 	}
 
+	// Anti-fabrication guard (DSGWOO-1353): cold-draft has no source
+	// description, so the anchor is the product name. That is essentially
+	// always below anchorNounFloor, so this is a near-always no-op and the
+	// prompt's anti-fabrication clause + use/story angle guidance carry the
+	// load here. Wired uniformly so a rare rich product name still benefits
+	// and the two paths don't diverge.
+	variants, _ = filterFabricatedVariants(variants, full.Name)
+	if len(variants) == 0 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: "all cold-draft variants failed the anti-fabrication check",
+		}, nil
+	}
+
 	target := map[string]any{
 		"product_id":     full.ID,
 		"product_name":   full.Name,
