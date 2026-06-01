@@ -17,6 +17,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
@@ -327,6 +328,39 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	annotateRegistryFlags(&persona)
 	writeJSON(w, http.StatusOK, persona)
+}
+
+// lessonsResponse is the GET /v1/agents/{slug}/lessons body. (DSGWOO-1354)
+type lessonsResponse struct {
+	Persona      string `json:"persona"`
+	LessonsText  string `json:"lessons_text"`
+	GeneratedAt  string `json:"generated_at"`
+	SourceCount  int    `json:"source_count"`
+	SourceOldest string `json:"source_oldest_dismissed_at"`
+	SourceNewest string `json:"source_newest_dismissed_at"`
+	Disabled     bool   `json:"disabled"`
+}
+
+// handleGetLessons returns the current persona_lessons row for {slug}, or 404
+// if none has been digested yet. (DSGWOO-1354)
+func (s *Server) handleGetLessons(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	var resp lessonsResponse
+	err := s.store.DB.QueryRowContext(r.Context(),
+		`SELECT persona, lessons_text, generated_at, source_count,
+		        source_oldest_dismissed_at, source_newest_dismissed_at
+		 FROM persona_lessons WHERE persona = ?`, slug).
+		Scan(&resp.Persona, &resp.LessonsText, &resp.GeneratedAt, &resp.SourceCount, &resp.SourceOldest, &resp.SourceNewest)
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "not_found", "no lessons for that persona")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
+		return
+	}
+	resp.Disabled = lessons.DisabledFor(slug)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleListIssues(w http.ResponseWriter, r *http.Request) {

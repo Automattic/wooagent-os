@@ -18,6 +18,27 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
+// newLessonsTestRig wires a Server with the agents + lessons routes.
+// Mirrors newAgentsTestRig but also registers the lessons route.
+func newLessonsTestRig(t *testing.T) (string, *store.Store) {
+	t.Helper()
+	st, err := store.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	s := &Server{store: st}
+	r := chi.NewRouter()
+	r.Get("/v1/agents", s.handleListAgents)
+	r.Patch("/v1/agents/{slug}", s.handlePatchAgent)
+	r.Get("/v1/agents/{slug}/lessons", s.handleGetLessons)
+
+	ts := httptest.NewServer(r)
+	t.Cleanup(ts.Close)
+	return ts.URL, st
+}
+
 // fakeRegistryPersona is a minimal Persona for registry-driven flag tests.
 // Slug and Addable are configurable; everything else is stubbed.
 type fakeRegistryPersona struct {
@@ -420,5 +441,83 @@ func TestPatchAgent_HoursFormatValidation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// ---------- GET /v1/agents/{slug}/lessons (DSGWOO-1354) ----------
+
+const seedLessonsSQL = `
+INSERT INTO persona_lessons (persona,lessons_text,generated_at,source_count,source_oldest_dismissed_at,source_newest_dismissed_at)
+VALUES ('marketing','- be warm','2026-06-01T00:00:00Z',5,'2026-05-21T00:00:00Z','2026-06-01T00:00:00Z')`
+
+func TestGetLessons_200(t *testing.T) {
+	url, st := newLessonsTestRig(t)
+	if _, err := st.DB.ExecContext(context.Background(), seedLessonsSQL); err != nil {
+		t.Fatalf("seed lessons: %v", err)
+	}
+
+	resp, err := http.Get(url + "/v1/agents/marketing/lessons")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+	var got lessonsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Persona != "marketing" {
+		t.Errorf("persona=%q want marketing", got.Persona)
+	}
+	if got.LessonsText != "- be warm" {
+		t.Errorf("lessons_text=%q want '- be warm'", got.LessonsText)
+	}
+	if got.SourceCount != 5 {
+		t.Errorf("source_count=%d want 5", got.SourceCount)
+	}
+	if got.Disabled {
+		t.Errorf("disabled=true; want false (kill switch not set)")
+	}
+}
+
+func TestGetLessons_404(t *testing.T) {
+	url, _ := newLessonsTestRig(t)
+
+	resp, err := http.Get(url + "/v1/agents/marketing/lessons")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d want 404 body=%s", resp.StatusCode, body)
+	}
+}
+
+func TestGetLessons_DisabledFlag(t *testing.T) {
+	t.Setenv("WOOAGENT_PERSONA_LESSONS_DISABLED", "marketing")
+	url, st := newLessonsTestRig(t)
+	if _, err := st.DB.ExecContext(context.Background(), seedLessonsSQL); err != nil {
+		t.Fatalf("seed lessons: %v", err)
+	}
+
+	resp, err := http.Get(url + "/v1/agents/marketing/lessons")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d want 200 body=%s", resp.StatusCode, body)
+	}
+	var got lessonsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Disabled {
+		t.Errorf("disabled=false; want true (kill switch set for marketing)")
 	}
 }

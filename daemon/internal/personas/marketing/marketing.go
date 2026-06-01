@@ -32,6 +32,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
 
@@ -41,6 +42,7 @@ import (
 type draftOpts struct {
 	Mode     string   // "" or "rewrite" → rewrite path; "cold_draft" → cold-draft path
 	Drafting []string // for cold_draft: which fields to fill ("short", "long")
+	Lessons  string   // DSGWOO-1354: digested operator-dismissal lessons, prepended to the user message. Empty = no block.
 }
 
 func (o draftOpts) isColdDraft() bool { return o.Mode == "cold_draft" }
@@ -509,7 +511,16 @@ func draftForProduct(ctx context.Context, deps personas.Deps, productID int, ski
 		corpus = nil
 	}
 
-	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus, draftOpts{})
+	var lessonsBlock string
+	if deps.Store != nil && deps.Store.DB != nil {
+		if lb, lerr := lessons.LoadFor(ctx, deps.Store.DB, "marketing"); lerr != nil {
+			fmt.Printf("marketing: lessons load errored (%v); proceeding without lessons block\n", lerr)
+		} else {
+			lessonsBlock = lb
+		}
+	}
+
+	rawOutput, skipReason, err := draftWithFallback(ctx, deps.Env, p, skillDescription, corpus, draftOpts{Lessons: lessonsBlock})
 	if err != nil {
 		return personas.Drafted{}, err
 	}
@@ -895,6 +906,10 @@ func computeDrafting(p product) []string {
 // empty ones (declared in opts.Drafting).
 func buildPromptUserMessage(p product, corpus []corpusSample, opts draftOpts) string {
 	var b strings.Builder
+	if opts.Lessons != "" {
+		b.WriteString(opts.Lessons)
+		b.WriteString("\n\n")
+	}
 	if opts.isColdDraft() {
 		fmt.Fprintf(&b, "Product: %s\nSKU: %s\n", p.Name, p.SKU)
 		fmt.Fprintf(&b, "Current short description: %s\n", strings.TrimSpace(p.ShortDesc))

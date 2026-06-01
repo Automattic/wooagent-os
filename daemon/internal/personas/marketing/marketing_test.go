@@ -505,6 +505,26 @@ func TestBuildPromptUserMessage_RewriteMode_Unchanged(t *testing.T) {
 	}
 }
 
+func TestBuildPromptUserMessage_PrependsLessons(t *testing.T) {
+	p := product{Name: "Stoneware Mug", SKU: "SM-001", Description: "A mug."}
+	block := "Lessons from recent operator dismissals (5 dismissals · last 11 days):\n- Avoid cold openers."
+	msg := buildPromptUserMessage(p, nil, draftOpts{Lessons: block})
+	if !strings.HasPrefix(msg, block) {
+		t.Errorf("lessons block should be prepended as the first section:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Stoneware Mug") {
+		t.Errorf("product content missing after lessons block")
+	}
+}
+
+func TestBuildPromptUserMessage_NoLessons_Unchanged(t *testing.T) {
+	p := product{Name: "Stoneware Mug", SKU: "SM-001", Description: "A mug."}
+	msg := buildPromptUserMessage(p, nil, draftOpts{Lessons: ""})
+	if strings.Contains(msg, "Lessons from recent operator dismissals") {
+		t.Errorf("empty lessons must not render a block:\n%s", msg)
+	}
+}
+
 func TestDraftColdDraftBatch_PacksAsSiblings(t *testing.T) {
 	// 4 successful drafts → 1 primary + 3 siblings, title "Review & approve · 4 ..."
 	cands := []productSummary{
