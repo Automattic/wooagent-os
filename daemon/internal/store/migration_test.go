@@ -29,6 +29,27 @@ func TestMigration_PersonaLessonsTable(t *testing.T) {
 	}
 }
 
+func TestMigration_DaemonMetaTable(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	st, err := Open(ctx, filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer st.Close()
+	if _, err := st.DB.ExecContext(ctx,
+		`INSERT INTO daemon_meta (key, value, updated_at) VALUES ('install_id','abc','2026-06-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert daemon_meta: %v", err)
+	}
+	var v string
+	if err := st.DB.QueryRowContext(ctx, `SELECT value FROM daemon_meta WHERE key='install_id'`).Scan(&v); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if v != "abc" {
+		t.Errorf("value = %q, want abc", v)
+	}
+}
+
 func TestMigration011AppliesFresh(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
