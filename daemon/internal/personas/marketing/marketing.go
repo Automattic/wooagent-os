@@ -296,8 +296,8 @@ func singularize(w string) string {
 }
 
 // extractConcreteNouns tokenizes text into a set of candidate concrete nouns:
-// lowercase → strip non-word chars → singularize → drop tokens shorter than 3
-// chars and known stopwords. The remainder approximates the falsifiable
+// lowercase → strip non-word chars → drop tokens shorter than 3 chars →
+// singularize → drop stopwords. The remainder approximates the falsifiable
 // concrete claims (materials, measurements, named features) in the text.
 func extractConcreteNouns(text string) map[string]struct{} {
 	out := make(map[string]struct{})
@@ -306,10 +306,9 @@ func extractConcreteNouns(text string) map[string]struct{} {
 		if len(tok) < 3 {
 			continue
 		}
+		// singularize never shrinks a token below 3 (it only strips a
+		// trailing "s" when len > 3), so the guard above is sufficient.
 		tok = singularize(tok)
-		if len(tok) < 3 {
-			continue
-		}
 		if _, stop := nounStopwords[tok]; stop {
 			continue
 		}
