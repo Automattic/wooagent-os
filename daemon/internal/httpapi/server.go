@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/activation"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/auth"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
@@ -60,6 +61,7 @@ type Server struct {
 	scheduler      *scheduler.Scheduler
 	askCfg         *AskConfig
 	uiSessionToken string
+	activation     activation.Config
 }
 
 // New wires a Server with all required collaborators.
@@ -87,6 +89,7 @@ func New(st *store.Store, am *auth.Manager, p *pep.PEP, sec secrets.Store, m *ma
 		pairing:        pairing.NewClient(),
 		abilities:      abilities.New(st.DB, sec, m),
 		uiSessionToken: uiSessionToken,
+		activation:     activation.ConfigFromEnv(),
 	}
 	s.router = s.buildRouter()
 	return s

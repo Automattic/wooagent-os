@@ -80,6 +80,8 @@ What each shipping persona sends to the LLM:
 
 Inventory, Reporting, Accounting, and Chief of Staff are in progress and will get their own data-handling lines when they ship.
 
+**Optional activation telemetry (off by default).** WooAgent OS does not phone home. The daemon makes no outbound analytics calls unless you set **both** `WOOAGENT_TELEMETRY_ENABLED=1` and `WOOAGENT_TELEMETRY_URL`. If you opt in, the daemon sends a single anonymized event the first time you approve a proposal, containing only: `event` (always `first_approve`), `install_id` (a random UUID generated locally on first run — not derived from your store URL, domain, or account, and identifying nothing about you), `daemon_version`, and `ts` (the event timestamp). No store URL, product or proposal content, or operator identity is ever sent. Leave either variable unset to keep telemetry off.
+
 **Your responsibilities.** You agree to your LLM provider's terms and acceptable-use policies. You own GDPR/CCPA and any other privacy obligations to your customers, including any disclosures about automated processing of order data. You're responsible for reviewing each proposal before approval and for maintaining store backups. WooAgent OS is provided "AS IS" — see [`LICENSE`](./LICENSE) §7–§8.
 
 ## Status

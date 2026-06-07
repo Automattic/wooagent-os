@@ -14,11 +14,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/activation"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
 
 // addableDefaultCadenceSeconds maps a persona slug to the cadence used
@@ -904,6 +906,12 @@ func (s *Server) approveOne(ctx context.Context, issueID, variantID string) (app
 	); err != nil {
 		return approveResult{}, &approveError{HTTPStatus: http.StatusInternalServerError, Code: "db_error", Message: err.Error()}
 	}
+
+	// Activation ping (opt-in, off by default): fire-and-forget on a detached
+	// context so a slow/blocked telemetry endpoint never affects the approve
+	// response. No-op unless explicitly enabled + URL set; fires once per
+	// install. See internal/activation.
+	go activation.MaybePingFirstApprove(context.Background(), s.store.DB, s.activation, version.Version)
 
 	return approveResult{
 		IssueID:   issueID,
