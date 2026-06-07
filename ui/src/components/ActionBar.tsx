@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Badge, Stack, Text } from '@wordpress/ui';
 import { Button } from '@wordpress/components';
 
@@ -126,23 +126,6 @@ interface DoneProps {
 }
 
 type Props = ReviewProps | DoneProps | ArchivedProps;
-
-// Used only for the non-variant badges (price `$`, message `✉` / `#`). The
-// variant badge below uses the shared `.wa-variant-letter` class so the
-// A/B/C circle stays in lockstep with the one on each variant card.
-const badgeBaseStyle: CSSProperties = {
-  height: 28,
-  width: 28,
-  borderRadius: '50%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontWeight: 700,
-  fontSize: 'var(--wpds-typography-font-size-sm)',
-  background: 'var(--wpds-color-bg-interactive-brand-strong)',
-  color: 'var(--wpds-color-fg-interactive-brand-strong)',
-  flex: 'none',
-};
 
 // Sticky bar pinned to the bottom of the IssueDetail viewport. Two states
 // (review / done) and two entities (variant / price). Done state for
@@ -281,21 +264,11 @@ function ReviewBar(props: ReviewProps) {
   const isMessage = entity === 'message';
   const isInternal = isMessage && props.messageNoteType === 'internal';
 
-  let badge: ReactNode;
-  if (isPrice) {
-    badge = (
-      <span style={badgeBaseStyle} aria-hidden="true">
-        $
-      </span>
-    );
-  } else if (isMessage) {
-    badge = (
-      <span style={badgeBaseStyle} aria-hidden="true">
-        {isInternal ? '#' : '✉'}
-      </span>
-    );
-  } else {
-    badge = (
+  // Only marketing variants carry a badge — the A/B/C letter tells the
+  // operator which variant is selected. Pricing and message proposals show no
+  // badge; their headline + summary already carry the identity.
+  const badge: ReactNode =
+    isPrice || isMessage ? null : (
       <span
         className="wa-variant-letter wa-variant-letter--lg"
         data-tone={variantLabel.toUpperCase()}
@@ -304,7 +277,6 @@ function ReviewBar(props: ReviewProps) {
         {variantLabel}
       </span>
     );
-  }
 
   let primaryLine: string;
   let helperLine: string;

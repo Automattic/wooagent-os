@@ -1600,8 +1600,14 @@ a {
 /* ---------- Dismiss dialog ---------- */
 .wa-dismiss-dialog__chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--wpds-dimension-gap-sm);
+}
+/* Content-sized chips so each button keeps uniform padding around its own
+   label (no stretched columns). The `large` dialog width gives all four room
+   to sit on one row; nowrap stops a label from breaking internally. */
+.wa-dismiss-dialog__chips > * {
+  white-space: nowrap;
 }
 .wa-dismiss-dialog__info {
   display: flex;
@@ -1612,11 +1618,6 @@ a {
     var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral-weak);
   border-radius: var(--wpds-border-radius-lg);
-}
-.wa-dismiss-dialog__info-icon {
-  font-size: var(--wpds-typography-font-size-lg);
-  line-height: 1;
-  flex: none;
 }
 
 /* Product thumbnail — shared component used on queue cards (DataViews
