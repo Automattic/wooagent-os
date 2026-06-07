@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Badge, Notice, Stack, Text } from '@wordpress/ui';
-import { Snackbar, Spinner } from '@wordpress/components';
+import { Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { DataViews, filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 import { type Batch, type Issue } from '../api/client';
 import ProductThumbnail from '../components/ProductThumbnail';
+import ActionSnackbar from '../components/ActionSnackbar';
 import { kindFromIssue, kindFromPersonaSlug, type IssueKind } from '../components/StatusBadge';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -404,9 +405,7 @@ export default function NeedsReview({
   );
 
   const snackbar = toast ? (
-    <div className="wa-snackbar-host">
-      <Snackbar onRemove={() => setToast(null)}>{toast.text}</Snackbar>
-    </div>
+    <ActionSnackbar text={toast.text} onRemove={() => setToast(null)} />
   ) : null;
 
   if (error) {

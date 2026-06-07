@@ -22,10 +22,20 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useAskAgentContext } from '../lib/askAgent';
 import { formatDateTime } from '../lib/boardItems';
 import { issueToVisible } from '../lib/visibleItems';
+import { personaLabel as personaLabelFor } from '../lib/personaLabel';
+import { useActionBarHeightVar } from '../lib/useActionBarHeight';
 import Kpi from '../components/Kpi';
 import type { KpiTone } from '../components/Kpi';
 import ActionBar from '../components/ActionBar';
+import ActionSnackbar, { type SnackbarAction } from '../components/ActionSnackbar';
 import DismissDialog from '../components/DismissDialog';
+import {
+  writeConfirmText,
+  writeAllowsUndo,
+  revertConfirmText,
+  dismissConfirmText,
+  type ProposalKind,
+} from '../lib/snackbarCopy';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import SectionHeader from '../components/SectionHeader';
@@ -102,6 +112,12 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   } | null>(null);
   const [approvedVariant, setApprovedVariant] = useState<string | null>(null);
   const [dismissOpen, setDismissOpen] = useState(false);
+  // Post-action confirmation snackbar for the in-place flows (approve, undo).
+  // Dismiss confirms on the board after navigating, so it isn't shown here.
+  const [actionToast, setActionToast] = useState<{
+    text: string;
+    action?: SnackbarAction;
+  } | null>(null);
 
   useAskAgentContext(
     () => ({
@@ -132,6 +148,21 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
     };
   }, [connection, id]);
 
+  // Keep --wa-action-bar-height in sync so the confirmation snackbar floats
+  // just above the bar; re-measures when the bar swaps state (review → done).
+  useActionBarHeightVar([data?.issue.status]);
+
+  // Build the formatted before→after price pair for snackbar copy, reversing
+  // it for the revert message. Returns undefined for non-price proposals,
+  // whose copy doesn't carry a diff.
+  const priceDiffFor = (reverse: boolean) => {
+    const pp = priceProposalFromProposal(data?.proposal ?? null);
+    if (!pp) return undefined;
+    const before = formatPrice(pp.previousPrice, pp.currency);
+    const after = formatPrice(pp.proposedPrice, pp.currency);
+    return reverse ? { from: after, to: before } : { from: before, to: after };
+  };
+
   const onApprove = async () => {
     if (!id) return;
     setBusy('approve');
@@ -141,6 +172,18 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       setApprovedVariant(selectedVariant);
       setData((d) => (d ? { ...d, issue: { ...d.issue, status: res.status } } : d));
       onChanged?.();
+      const kind = data?.proposal?.type as ProposalKind | undefined;
+      if (kind) {
+        setActionToast({
+          text: writeConfirmText(kind, priceDiffFor(false)),
+          // customer_reply_draft has no undo path, so its snackbar omits the
+          // action; everything else offers Undo inline alongside the
+          // persistent footer affordance.
+          action: writeAllowsUndo(kind)
+            ? { label: 'Undo', onClick: handleUndo }
+            : undefined,
+        });
+      }
     } catch (e) {
       setActionMsg({
         kind: 'error',
@@ -178,9 +221,13 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       await api.dismiss(connection, id, { reason, comment });
       setDismissOpen(false);
       onChanged?.();
+      const variantCount = variantsFromProposal(data?.proposal)?.length ?? 1;
       nav('/', {
         state: {
-          toast: { kind: 'success', text: 'Dismissed — moved to Archive.' },
+          toast: {
+            kind: 'success',
+            text: dismissConfirmText(personaLabelFor(data?.issue.persona), variantCount),
+          },
         },
       });
     } catch (e) {
@@ -208,6 +255,10 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       const updated = await api.issue(connection, id);
       setData(updated);
       onChanged?.();
+      const kind = updated?.proposal?.type as ProposalKind | undefined;
+      if (kind) {
+        setActionToast({ text: revertConfirmText(kind, priceDiffFor(true)) });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.code === 'undo_stale') {
         const rawCurrent =
@@ -280,7 +331,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
   }
 
   const { issue, proposal } = data;
-  const personaLabel = personaLabelFrom(issue.persona);
+  const personaLabel = personaLabelFor(issue.persona);
   const reviewable = issue.status === 'in_review';
   const isDone = issue.status === 'done';
   const isArchived = issue.status === 'dismissed' || issue.status === 'rejected';
@@ -299,6 +350,17 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
       busy={busy === 'reject'}
     />
   );
+
+  // Shared across all three layout branches; the host is fixed-position so
+  // its place in the tree doesn't matter.
+  const actionSnackbar = actionToast ? (
+    <ActionSnackbar
+      text={actionToast.text}
+      action={actionToast.action}
+      onRemove={() => setActionToast(null)}
+      placement="above-action-bar"
+    />
+  ) : null;
 
   const priceProposal = priceProposalFromProposal(proposal);
   if (priceProposal !== null) {
@@ -325,6 +387,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           onAskAgent={onAskAgent}
         />
         {dismissDialog}
+        {actionSnackbar}
       </>
     );
   }
@@ -351,6 +414,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           onAskAgent={onAskAgent}
         />
         {dismissDialog}
+        {actionSnackbar}
       </>
     );
   }
@@ -788,6 +852,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
         onConfirm={handleDismissConfirm}
         busy={busy === 'reject'}
       />
+      {actionSnackbar}
     </div>
   );
 }
@@ -1444,25 +1509,4 @@ function MessageIssueView(props: MessageViewProps) {
       )}
     </div>
   );
-}
-
-function personaLabelFrom(persona: string | undefined): string {
-  switch (persona) {
-    case 'marketing':
-      return 'Marketing agent';
-    case 'pricing':
-      return 'Pricing agent';
-    case 'sales-support':
-      return 'Sales support agent';
-    case 'inventory':
-      return 'Inventory agent';
-    case 'accounting':
-      return 'Accounting agent';
-    case 'reporting':
-      return 'Reporting agent';
-    case 'chief-of-staff':
-      return 'Chief of staff';
-    default:
-      return `${persona ?? 'unassigned'} agent`;
-  }
 }

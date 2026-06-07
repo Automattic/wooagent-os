@@ -9,7 +9,6 @@ import { Badge, Notice, Stack, Text } from '@wordpress/ui';
 import {
   Button,
   FormToggle,
-  Snackbar,
   Spinner,
 } from '@wordpress/components';
 import { plus } from '@wordpress/icons';
@@ -19,6 +18,7 @@ import type { Action, Field, View } from '@wordpress/dataviews';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, api, type Connection, type Persona } from '../api/client';
 import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
+import ActionSnackbar from '../components/ActionSnackbar';
 import { useAskAgentContext } from '../lib/askAgent';
 import { personaToVisible } from '../lib/visibleItems';
 import PageGlobalActions from '../components/PageGlobalActions';
@@ -766,22 +766,17 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         </>
       )}
       {toast && (
-        <div className="wa-snackbar-host">
-          <Snackbar
-            onRemove={() => setToast(null)}
-            actions={[
-              {
-                label: 'View board',
-                onClick: () => {
-                  setToast(null);
-                  navigate('/');
-                },
-              },
-            ]}
-          >
-            {toast.text}
-          </Snackbar>
-        </div>
+        <ActionSnackbar
+          text={toast.text}
+          onRemove={() => setToast(null)}
+          action={{
+            label: 'View board',
+            onClick: () => {
+              setToast(null);
+              navigate('/');
+            },
+          }}
+        />
       )}
     </Page>
   );
