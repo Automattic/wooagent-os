@@ -24,6 +24,10 @@ import { issueToVisible } from '../lib/visibleItems';
 import DismissDialog from '../components/DismissDialog';
 import ProductThumbnail from '../components/ProductThumbnail';
 import ProposalHeader from '../components/ProposalHeader';
+import ActionSnackbar from '../components/ActionSnackbar';
+import { personaLabel as personaLabelFor } from '../lib/personaLabel';
+import { batchApproveText, batchDismissText, type ProposalKind } from '../lib/snackbarCopy';
+import { useActionBarHeightVar } from '../lib/useActionBarHeight';
 
 interface Props {
   connection: Connection;
@@ -58,6 +62,10 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     text: string;
   } | null>(null);
   const [dismissOpen, setDismissOpen] = useState(false);
+  // Success confirmation snackbar for batch approve / dismiss. Failures and
+  // partial results stay in the inline actionMsg Notice (it needs to persist
+  // and itemize what failed); only clean successes graduate to a snackbar.
+  const [actionToast, setActionToast] = useState<{ text: string } | null>(null);
 
   useAskAgentContext(
     () => ({
@@ -102,6 +110,10 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection, id]);
+
+  // Keep --wa-action-bar-height in sync so the confirmation snackbar floats
+  // just above the batch action bar.
+  useActionBarHeightVar([!!data]);
 
   const approveRow = async (issueID: string) => {
     const variantID = selectedVariants[issueID];
@@ -164,10 +176,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
       const okCount = res.results.filter((r) => r.ok).length;
       const failed = res.results.filter((r) => !r.ok);
       if (failed.length === 0) {
-        setActionMsg({
-          kind: 'success',
-          text: `Approved ${okCount} of ${pendingChildren.length}.`,
-        });
+        const kind = data.issues[0]?.proposal?.type as ProposalKind | undefined;
+        setActionToast({ text: batchApproveText(kind) });
       } else {
         setActionMsg({
           kind: 'error',
@@ -212,13 +222,9 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
     if (!id) return;
     setBusy('reject-all');
     try {
-      const res = await api.batches.rejectAll(connection, id, { reason, comment });
-      const okCount = res.results.filter((r) => r.ok).length;
+      await api.batches.rejectAll(connection, id, { reason, comment });
       setDismissOpen(false);
-      setActionMsg({
-        kind: 'success',
-        text: `Dismissed ${okCount} ${okCount === 1 ? 'child' : 'children'}.`,
-      });
+      setActionToast({ text: batchDismissText(personaLabelFor(data?.batch.persona)) });
       await refresh();
       onChanged?.();
     } catch (e) {
@@ -284,8 +290,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
   }
 
   const { batch, issues } = data;
-  const personaLabel =
-    batch.persona === 'marketing' ? 'Marketing agent' : `${batch.persona ?? 'unassigned'} agent`;
+  const personaLabel = personaLabelFor(batch.persona);
   const pendingCount = batch.pending;
   const firstProposal = data.issues[0]?.proposal;
   const isPricingBatch = firstProposal?.type === 'product_price_change';
@@ -909,6 +914,13 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
         onConfirm={handleDismissAllConfirm}
         busy={busy === 'reject-all'}
       />
+      {actionToast && (
+        <ActionSnackbar
+          text={actionToast.text}
+          onRemove={() => setActionToast(null)}
+          placement="above-action-bar"
+        />
+      )}
     </div>
   );
 }

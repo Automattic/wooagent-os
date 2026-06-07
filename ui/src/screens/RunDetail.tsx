@@ -15,6 +15,7 @@ import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { useAskAgentContext } from '../lib/askAgent';
+import { formatDateTime } from '../lib/boardItems';
 import { runToVisible } from '../lib/visibleItems';
 
 interface Props {
@@ -25,15 +26,6 @@ interface Props {
    *  board picks up any new issue the run created without waiting for
    *  the 10s background poll. */
   onRunTerminal?: () => void;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
 }
 
 function relativeTime(iso: string | null): string {
@@ -404,7 +396,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                       color: 'var(--wpds-color-fg-content-neutral-weak)',
                     }}
                   >
-                    {formatTime(run.scheduled_at)} · {relativeTime(run.scheduled_at)}
+                    {formatDateTime(run.scheduled_at)} · {relativeTime(run.scheduled_at)}
                   </Text>
                 </Stack>
                 {run.claimed_at && (
@@ -418,7 +410,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                         color: 'var(--wpds-color-fg-content-neutral-weak)',
                       }}
                     >
-                      {formatTime(run.claimed_at)}
+                      {formatDateTime(run.claimed_at)}
                     </Text>
                   </Stack>
                 )}
@@ -433,7 +425,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                         color: 'var(--wpds-color-fg-content-neutral-weak)',
                       }}
                     >
-                      {formatTime(run.completed_at)}
+                      {formatDateTime(run.completed_at)}
                     </Text>
                   </Stack>
                 )}

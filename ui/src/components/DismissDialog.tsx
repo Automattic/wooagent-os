@@ -106,7 +106,7 @@ export default function DismissDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Popup size="medium">
+      <Dialog.Popup size="large">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
         </Dialog.Header>
@@ -135,7 +135,12 @@ export default function DismissDialog({
                   key={r.value}
                   variant={reason === r.value ? 'primary' : 'secondary'}
                   __next40pxDefaultSize
-                  onClick={() => setReason(r.value)}
+                  aria-pressed={reason === r.value}
+                  // Re-clicking the selected chip clears it, so the operator
+                  // can back out of a reason without picking a different one.
+                  onClick={() =>
+                    setReason((cur) => (cur === r.value ? null : r.value))
+                  }
                 >
                   {r.label}
                 </Button>
@@ -154,9 +159,6 @@ export default function DismissDialog({
           />
 
           <div className="wa-dismiss-dialog__info">
-            <span aria-hidden="true" className="wa-dismiss-dialog__info-icon">
-              📒
-            </span>
             <Stack direction="column" gap="xs">
               <Text variant="body-sm">
                 Archived for{' '}

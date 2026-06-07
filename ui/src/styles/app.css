@@ -36,20 +36,48 @@
    * App-level chrome uses z-index up to 61 — without this, modals stack
    * behind the page content. Set above the app's highest layer. */
   --wp-ui-dialog-z-index: 1000;
+
+  /* Left-nav width, shared by the sidebar and the snackbar host so the
+   * snackbar can center within the content canvas (right of the nav). */
+  --wa-sidebar-width: 280px;
 }
 
-/* Host wrapper for the post-action confirmation Snackbar that screens
- * (Kanban et al.) render after navigating in from a confirmation flow.
- * @wordpress/components Snackbar doesn't position itself when used standalone
- * outside SnackbarList, so we anchor the host to the bottom-center of the
- * viewport above the app's highest z-index layer (61). */
+/* Host for the post-action confirmation Snackbar (write / revert / dismiss /
+ * batch). @wordpress/components Snackbar doesn't position itself when used
+ * standalone outside SnackbarList, so the host anchors it. It's centered
+ * within the content canvas — the area right of the sticky sidebar, NOT the
+ * full viewport — and sits above the app's highest z-index layer (61).
+ * pointer-events are off on the host so it doesn't trap clicks across the
+ * full content width; the snackbar itself re-enables them. */
 .wa-snackbar-host {
   position: fixed;
+  left: var(--wa-sidebar-width);
+  right: 0;
   bottom: var(--wpds-dimension-padding-2xl, 24px);
-  left: 50%;
-  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
   z-index: 1100;
+  pointer-events: none;
+}
+.wa-snackbar-host > * {
   pointer-events: auto;
+}
+
+/* On the proposal/batch canvas the snackbar floats just above the fixed
+ * action bar. ActionBar publishes its rendered height to
+ * --wa-action-bar-height (token paddings are breakpoint-variable, so we
+ * measure rather than hardcode); the fallback covers the brief window before
+ * the measurement lands. */
+.wa-snackbar-host--above-action-bar {
+  bottom: calc(var(--wa-action-bar-height, 64px) + var(--wpds-dimension-gap-md));
+}
+
+/* Below 768px the sidebar collapses to an off-canvas drawer, so the content
+ * canvas spans the full viewport and the snackbar centers across all of it. */
+@media (max-width: 768px) {
+  .wa-snackbar-host {
+    left: 0;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -312,7 +340,7 @@ a {
   position: sticky;
   top: 0;
   flex: none;
-  width: 280px;
+  width: var(--wa-sidebar-width);
   /* CUSTOM: near-black surface for the left nav. WPDS has no dark-brand
      surface token that matches; documented in DESIGN.md as a sidebar-only
      exception alongside the persona colors. Hex matches the i3.2 Figma
@@ -351,6 +379,19 @@ a {
    muted gray text color. */
 .wa-sidebar .wa-navlink svg {
   fill: currentColor;
+}
+/* CUSTOM: WPDS Badge ships only filled semantic intents (is-*-intent), none of
+   which read correctly on the near-black sidebar. The CIAB WooPayments Figma
+   (node 778-19640) specifies an outline-only count badge here: transparent
+   fill, hairline stroke, white count. We keep the WPDS Badge component
+   (intent="none" for its border + structure) and re-skin those three
+   properties. Unlayered, so it wins over @layer wp-ui-components without
+   !important; scoped to .wa-sidebar so light-surface badges are untouched.
+   Documented in DESIGN.md (persona/sidebar dark-surface exception). */
+.wa-sidebar .wa-nav-badge {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
 }
 
 /* WPDS @wordpress/components Button variant="link" defaults to
@@ -1600,8 +1641,14 @@ a {
 /* ---------- Dismiss dialog ---------- */
 .wa-dismiss-dialog__chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--wpds-dimension-gap-sm);
+}
+/* Content-sized chips so each button keeps uniform padding around its own
+   label (no stretched columns). The `large` dialog width gives all four room
+   to sit on one row; nowrap stops a label from breaking internally. */
+.wa-dismiss-dialog__chips > * {
+  white-space: nowrap;
 }
 .wa-dismiss-dialog__info {
   display: flex;
@@ -1612,11 +1659,6 @@ a {
     var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral-weak);
   border-radius: var(--wpds-border-radius-lg);
-}
-.wa-dismiss-dialog__info-icon {
-  font-size: var(--wpds-typography-font-size-lg);
-  line-height: 1;
-  flex: none;
 }
 
 /* Product thumbnail — shared component used on queue cards (DataViews
