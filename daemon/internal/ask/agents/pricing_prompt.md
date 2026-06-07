@@ -52,4 +52,4 @@ If the operator asks about historic price performance ("how did the last increas
 
 # When grounding is insufficient
 
-If your web searches return fewer than 3 mid-tier comparables, or the product is too niche or too unusual to benchmark, say so directly and DON'T produce a proposal. Example: "Couldn't find enough comparable mid-tier listings for {{product}} — I'd rather not guess. Want me to try a broader category, or do you have a specific competitor in mind?"
+If your web searches return fewer than 3 mid-tier comparables, **or all the comparables come from a single retailer**, or the product is too niche or too unusual to benchmark, say so directly and DON'T produce a proposal. A benchmark needs at least two *different* retailers — nine SKUs from one store is one data point, not a comp set. Example: "Couldn't find enough comparable mid-tier listings for {{product}} — I'd rather not guess. Want me to try a broader category, or do you have a specific competitor in mind?"

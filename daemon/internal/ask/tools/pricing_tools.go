@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
@@ -68,10 +69,12 @@ func (h *ProduceRecommendationTool) Definition() anthropic.ToolDef {
 		Description: "Create a price-change proposal on the board. Call this " +
 			"after `get_product` (for current_price + currency) and a `web_search` " +
 			"sequence that produced at least 3 mid-tier comparables. `sources` " +
-			"must contain ≥3 entries with retailer + observed price; thinner " +
-			"grounding means decline in chat, don't call this tool. `rationale` " +
-			"explains the recommendation in 2-4 sentences. Returns proposal_id; " +
-			"surface as [proposal #<id>] in your one-line chat receipt.",
+			"must contain ≥3 entries with retailer + observed price, spanning at " +
+			"least 2 different retailers (nine SKUs from one retailer is one " +
+			"source, not a benchmark); thinner grounding means decline in chat, " +
+			"don't call this tool. proposed_price must differ from current_price. " +
+			"`rationale` explains the recommendation in 2-4 sentences. Returns " +
+			"proposal_id; surface as [proposal #<id>] in your one-line chat receipt.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -137,11 +140,23 @@ func (h *ProduceRecommendationTool) Execute(ctx context.Context, raw json.RawMes
 			return "", fmt.Errorf("sources[%d].price must be > 0", i)
 		}
 	}
+	// Distinct-retailer floor — mirrors the cadence-mode persona. Many
+	// comparables from a single retailer (e.g. nine Madewell SKUs) are one
+	// source, not a benchmark; require at least two different retailers.
+	if n := distinctSources(in.Sources); n < 2 {
+		return "", fmt.Errorf("sources span only %d distinct retailer(s); need at least 2 different retailers (got %d entries)", n, len(in.Sources))
+	}
 	// Match the cadence-mode 25% step cap — defense in depth so a runaway
 	// model can't land a wildly out-of-range proposal.
 	pct := ((in.ProposedPrice - in.CurrentPrice) / in.CurrentPrice) * 100.0
 	if math.Abs(pct) > 25.0+0.01 {
 		return "", fmt.Errorf("percent_change %.2f exceeds ±25%% step cap", pct)
+	}
+	// No-op floor — mirrors the cadence-mode no-change skip. A proposal
+	// that rounds to +0.0% in the title leaves the operator nothing to
+	// approve; decline in chat instead of writing it to the board.
+	if math.Abs(pct) < 0.05 {
+		return "", fmt.Errorf("proposed price %.2f equals current %.2f (rounds to +0.0%%); a no-op proposal gives the operator nothing to approve", in.ProposedPrice, in.CurrentPrice)
 	}
 
 	targetField := in.TargetField
@@ -186,6 +201,27 @@ func (h *ProduceRecommendationTool) Execute(ctx context.Context, raw json.RawMes
 		ProposalID:   issueID,
 		ProposalType: "product_price_change",
 	})
+}
+
+// distinctSources counts the unique retailers in the source set, keyed on
+// retailer name (case-insensitive) and falling back to the URL host when a
+// label is blank. Two comparables from one retailer collapse to a single
+// source — see the cadence-mode persona's identical guard.
+func distinctSources(sources []pricingSource) int {
+	seen := map[string]struct{}{}
+	for _, s := range sources {
+		key := strings.ToLower(strings.TrimSpace(s.Retailer))
+		if key == "" {
+			if u, err := url.Parse(strings.TrimSpace(s.URL)); err == nil && u.Host != "" {
+				key = strings.TrimPrefix(strings.ToLower(u.Host), "www.")
+			}
+		}
+		if key == "" {
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+	return len(seen)
 }
 
 // currencySymbol maps an ISO 4217 code to a symbol for the proposal

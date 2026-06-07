@@ -178,6 +178,12 @@ func draftForVariableParent(
 			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 2", len(out.Sources)),
 		}, nil
 	}
+	if n := distinctSources(out.Sources); n < 2 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("proposal cites %d comparable(s) but only %d distinct retailer(s); skill requires at least 2 different retailers", len(out.Sources), n),
+		}, nil
+	}
 	if out.ProposedPrice <= 0 {
 		return personas.Drafted{}, fmt.Errorf("proposed_price must be > 0")
 	}

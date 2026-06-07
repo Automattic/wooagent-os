@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -252,6 +253,12 @@ func draftForProduct(
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("proposal has %d sources, skill requires at least 2", len(out.Sources)),
+		}, nil
+	}
+	if n := distinctSources(out.Sources); n < 2 {
+		return personas.Drafted{
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("proposal cites %d comparable(s) but only %d distinct retailer(s); skill requires at least 2 different retailers", len(out.Sources), n),
 		}, nil
 	}
 	if out.ProposedPrice <= 0 {
@@ -973,6 +980,43 @@ func absFloat(f float64) float64 {
 		return -f
 	}
 	return f
+}
+
+// distinctSources counts the unique retailers represented in the source
+// set. Two comparables from the same retailer (e.g. nine Madewell SKUs)
+// collapse to one source — a single competitor is not a benchmark, no
+// matter how many of its products we list. Retailer name is the primary
+// key; when it's blank we fall back to the URL host so a missing label
+// can't smuggle a single-source proposal past the check. Sources with
+// neither a retailer nor a parseable host don't count toward distinctness.
+func distinctSources(sources []proposalSource) int {
+	seen := map[string]struct{}{}
+	for _, s := range sources {
+		key := sourceIdentity(s.Retailer, s.URL)
+		if key == "" {
+			continue
+		}
+		seen[key] = struct{}{}
+	}
+	return len(seen)
+}
+
+// sourceIdentity derives a stable retailer key from a retailer label and a
+// URL, normalizing case and the www. prefix so "Madewell", "madewell" and
+// "https://www.madewell.com/..." all collapse to the same identity.
+func sourceIdentity(retailer, rawURL string) string {
+	if r := strings.ToLower(strings.TrimSpace(retailer)); r != "" {
+		return r
+	}
+	raw := strings.TrimSpace(rawURL)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return strings.TrimPrefix(strings.ToLower(u.Host), "www.")
 }
 
 func currencySymbol(c string) string {
