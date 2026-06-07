@@ -29,10 +29,17 @@ type Store struct {
 // WAL mode, applies any pending migrations embedded in the binary, and returns
 // a ready-to-use Store.
 func Open(ctx context.Context, dsn string) (*Store, error) {
-	// modernc.org/sqlite takes the file path directly. Appending pragmas via
-	// the URI form is supported but varies by driver; we set them explicitly
-	// after open for clarity.
-	db, err := sql.Open("sqlite", dsn)
+	// modernc.org/sqlite applies most pragmas per *connection*, and
+	// database/sql hands out a pool of them — so a pragma issued once via Exec
+	// only sticks on whichever connection happened to serve it. foreign_keys
+	// in particular MUST be set on every connection or ON DELETE CASCADE
+	// silently no-ops, orphaning child rows (e.g. abilities) when a parent
+	// store is deleted. Pass connection-scoped pragmas through
+	// the DSN so the driver re-applies them on every Open. journal_mode and
+	// synchronous stay below: journal_mode is a persistent, file-level setting
+	// (one Exec suffices) and is invalid for :memory:, so it must not go in the
+	// DSN pragma list.
+	db, err := sql.Open("sqlite", withConnPragmas(dsn))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %s: %w", dsn, err)
 	}
@@ -41,10 +48,8 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
 	for _, pragma := range []string{
-		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 5000",
 	} {
 		if _, err := db.ExecContext(ctx, pragma); err != nil {
 			_ = db.Close()
@@ -72,6 +77,19 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 
 func (s *Store) Close() error {
 	return s.DB.Close()
+}
+
+// withConnPragmas appends the connection-scoped pragmas to dsn as modernc
+// _pragma query parameters, so the driver applies them on every pooled
+// connection (not just the one a post-open Exec happens to use). Works for
+// bare paths, file: URIs, and :memory:.
+func withConnPragmas(dsn string) string {
+	const pragmas = "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + pragmas
 }
 
 func (s *Store) migrate(ctx context.Context) error {

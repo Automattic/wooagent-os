@@ -90,6 +90,50 @@ func TestProduceRecommendation_TooThinGrounding(t *testing.T) {
 	}
 }
 
+// TestProduceRecommendation_SingleRetailerRejected refuses to write when
+// all sources share one retailer — the Madewell-sunglasses case. Three
+// entries clear the count floor but collapse to a single source.
+func TestProduceRecommendation_SingleRetailerRejected(t *testing.T) {
+	db := newTestDB(t)
+	ensureAgent(t, db, "pricing")
+	tool := &ProduceRecommendationTool{DB: db}
+	input, _ := json.Marshal(produceRecommendationInput{
+		ProductID: 1, ProductName: "Solina Oval Sunglasses",
+		CurrentPrice: 90, ProposedPrice: 84, Rationale: "comps lower",
+		Sources: []pricingSource{
+			{Retailer: "Madewell", Price: 75, URL: "https://madewell.com/a"},
+			{Retailer: "Madewell", Price: 88, URL: "https://madewell.com/b"},
+			{Retailer: "Madewell", Price: 98, URL: "https://madewell.com/c"},
+		},
+	})
+	_, err := tool.Execute(context.Background(), input)
+	if err == nil {
+		t.Fatalf("expected single-retailer rejection, got nil")
+	}
+	if !strings.Contains(err.Error(), "distinct retailer") {
+		t.Errorf("err should name the distinct-retailer rule, got: %v", err)
+	}
+}
+
+// TestProduceRecommendation_NoOpRejected refuses a proposal whose price
+// doesn't move — mirrors the cadence-mode no-change skip the chat path
+// previously lacked.
+func TestProduceRecommendation_NoOpRejected(t *testing.T) {
+	db := newTestDB(t)
+	ensureAgent(t, db, "pricing")
+	tool := &ProduceRecommendationTool{DB: db}
+	input, _ := json.Marshal(produceRecommendationInput{
+		ProductID: 1, ProductName: "X",
+		CurrentPrice: 90, ProposedPrice: 90, Rationale: "hold",
+		Sources: []pricingSource{
+			{Retailer: "Madewell", Price: 88}, {Retailer: "Everlane", Price: 92}, {Retailer: "J.Crew", Price: 90},
+		},
+	})
+	if _, err := tool.Execute(context.Background(), input); err == nil {
+		t.Errorf("expected no-op rejection, got nil")
+	}
+}
+
 // TestProduceRecommendation_StepCap mirrors the cadence-mode ±25% guard.
 func TestProduceRecommendation_StepCap(t *testing.T) {
 	db := newTestDB(t)
