@@ -51,6 +51,14 @@ func newTestPEP(t *testing.T, mcpc MCPClient) (*PEP, *sql.DB) {
 	if _, err := db.Exec(abilitiesDDL); err != nil {
 		t.Fatalf("apply abilities ddl: %v", err)
 	}
+	// A live store row so the store-scoped trust/schema lookups resolve. The
+	// abilities DDL defaults store_id to 'store_test', matching this row.
+	if _, err := db.Exec(`CREATE TABLE stores (id TEXT PRIMARY KEY, status TEXT)`); err != nil {
+		t.Fatalf("apply stores ddl: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO stores(id, status) VALUES('store_test', 'paired')`); err != nil {
+		t.Fatalf("seed store: %v", err)
+	}
 	if _, err := db.Exec(budgetUsageDDL); err != nil {
 		t.Fatalf("apply budget ddl: %v", err)
 	}
@@ -115,6 +123,7 @@ CREATE TABLE audit_invocations (
 const abilitiesDDL = `
 CREATE TABLE abilities (
     name        TEXT PRIMARY KEY,
+    store_id    TEXT NOT NULL DEFAULT 'store_test',
     trust_state TEXT NOT NULL DEFAULT 'new',
     revoked_at  TEXT,
     schema_json TEXT,

@@ -56,8 +56,11 @@ func (c *Checker) Has(name string) bool {
 
 	var trustState string
 	var revokedAt, schemaHash sql.NullString
+	// Scoped to the paired store: mirror pep.checkTrustState so a stale row
+	// from an unpaired/removed store can't make an ability look (un)available.
 	err := c.db.QueryRowContext(context.Background(),
-		`SELECT trust_state, revoked_at, schema_hash FROM abilities WHERE name = ?`,
+		`SELECT trust_state, revoked_at, schema_hash FROM abilities
+		   WHERE name = ? AND store_id IN (SELECT id FROM stores WHERE status = 'paired')`,
 		name,
 	).Scan(&trustState, &revokedAt, &schemaHash)
 	if errors.Is(err, sql.ErrNoRows) {
