@@ -1,5 +1,5 @@
 name: pricing.benchmark
-version: 0.5.0
+version: 0.6.0
 description: |
   Propose a price change for a single WooCommerce product, grounded in live
   market research at a known set of accessible mid-tier retailers. The
@@ -65,6 +65,12 @@ description: |
          construction are similar; flag it but don't blindly anchor to it)
     2. Decline to propose (no_proposal=true) when:
        - Fewer than 2 comparables surface across all retailers
+       - The comparables that surface all come from a SINGLE retailer.
+         Two or more products from one retailer (e.g. nine Madewell SKUs)
+         is one source, not a benchmark — sources[] MUST span at least two
+         different retailers. If only one retailer carries the category,
+         decline and name it (the harness hard-skips single-retailer
+         proposals as a backstop).
        - Comparable prices vary by more than 4× (suggests category
          mismatch — search isn't returning a coherent set)
        - The store's product is in a tier the preferred retailers don't
@@ -189,6 +195,10 @@ schema:
       sources:
         type: array
         minItems: 2
+        description: |
+          At least two entries, spanning at least TWO different retailers.
+          Multiple products from the same retailer count as one source —
+          the harness skips any proposal whose sources all share a retailer.
         items:
           type: object
           required: [url, comparable_product, observed_price]

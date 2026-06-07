@@ -660,3 +660,65 @@ func TestProduct_DecodesGroupedProductsField(t *testing.T) {
 		t.Fatalf("GroupedProducts = %v, want [3902 3903 3904]", p.GroupedProducts)
 	}
 }
+
+// TestDistinctSources is the core of the at-least-2-retailers guard: nine
+// comparables from a single retailer (the Madewell-sunglasses case that
+// motivated this rule) must count as one source, while genuine multi-
+// retailer sets count their retailers.
+func TestDistinctSources(t *testing.T) {
+	cases := []struct {
+		name    string
+		sources []proposalSource
+		want    int
+	}{
+		{
+			name: "nine SKUs one retailer collapses to one",
+			sources: []proposalSource{
+				{Retailer: "Madewell", URL: "https://www.madewell.com/a"},
+				{Retailer: "Madewell", URL: "https://www.madewell.com/b"},
+				{Retailer: "Madewell", URL: "https://www.madewell.com/c"},
+			},
+			want: 1,
+		},
+		{
+			name: "case and whitespace insensitive",
+			sources: []proposalSource{
+				{Retailer: "Madewell"},
+				{Retailer: "  madewell "},
+			},
+			want: 1,
+		},
+		{
+			name: "two genuine retailers",
+			sources: []proposalSource{
+				{Retailer: "Madewell"},
+				{Retailer: "Everlane"},
+			},
+			want: 2,
+		},
+		{
+			name: "blank retailer falls back to URL host, www-normalized",
+			sources: []proposalSource{
+				{URL: "https://www.madewell.com/a"},
+				{URL: "https://madewell.com/b"},
+				{URL: "https://everlane.com/c"},
+			},
+			want: 2,
+		},
+		{
+			name: "source with neither retailer nor host does not count",
+			sources: []proposalSource{
+				{Retailer: "Madewell"},
+				{Retailer: "", URL: ""},
+			},
+			want: 1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := distinctSources(tc.sources); got != tc.want {
+				t.Errorf("distinctSources() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
