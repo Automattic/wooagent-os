@@ -184,8 +184,18 @@ func (p *PEP) checkTrustState(ctx context.Context, req Request) ReasonCode {
 
 	var trustState string
 	var revokedAt, schemaHash sql.NullString
+	// Scope to the connected (paired) store. The abilities table holds one row
+	// per (store, ability) and keeps rows for unpaired/deleted stores around
+	// (token-revoke flips status to 'unpaired' but keeps the row; a hard
+	// delete relies on FK cascade). Without this filter a stale row — e.g. an
+	// old-format hash that can never match the manifest — can win the lookup
+	// and produce a spurious schema_drift denial. 'paired' matches how the
+	// daemon resolves the active store elsewhere; V1 is single-store, so it
+	// uniquely identifies the connected store's row. Multi-store will need
+	// store_id threaded into Request.
 	err := p.db.QueryRowContext(ctx,
-		`SELECT trust_state, revoked_at, schema_hash FROM abilities WHERE name = ?`,
+		`SELECT trust_state, revoked_at, schema_hash FROM abilities
+		   WHERE name = ? AND store_id IN (SELECT id FROM stores WHERE status = 'paired')`,
 		req.Ability,
 	).Scan(&trustState, &revokedAt, &schemaHash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -262,8 +272,12 @@ func (p *PEP) checkPersonaScope(req Request) ReasonCode {
 // any compile failure or DB infra error.
 func (p *PEP) checkSchema(ctx context.Context, req Request) ReasonCode {
 	var schemaJSON, schemaHash sql.NullString
+	// Scoped to the paired store for the same reason as checkTrustState: a
+	// stale row from an unpaired/removed store must not supply the schema we
+	// validate against.
 	err := p.db.QueryRowContext(ctx,
-		`SELECT schema_json, schema_hash FROM abilities WHERE name = ?`,
+		`SELECT schema_json, schema_hash FROM abilities
+		   WHERE name = ? AND store_id IN (SELECT id FROM stores WHERE status = 'paired')`,
 		req.Ability,
 	).Scan(&schemaJSON, &schemaHash)
 	if errors.Is(err, sql.ErrNoRows) {

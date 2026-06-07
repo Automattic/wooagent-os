@@ -39,6 +39,12 @@ func buildTestManifest(entries map[string]string) *manifest.Manifest {
 func TestCheckTrustState_Branches(t *testing.T) {
 	t.Parallel()
 
+	// The live store seeded by openTestDB. Rows that don't set storeID belong
+	// to it; rows that name a different (un-seeded) store_id are orphans left
+	// behind by a store that no longer exists in `stores` — checkTrustState
+	// must ignore them.
+	const liveStore = "store_live"
+
 	openTestDB := func(t *testing.T) *sql.DB {
 		t.Helper()
 		db, err := sql.Open("sqlite", ":memory:")
@@ -46,19 +52,29 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			t.Fatalf("open: %v", err)
 		}
 		t.Cleanup(func() { db.Close() })
-		if _, err := db.ExecContext(context.Background(),
+		for _, stmt := range []string{
+			`CREATE TABLE stores (id TEXT PRIMARY KEY, status TEXT)`,
 			`CREATE TABLE abilities (
+				store_id TEXT,
 				name TEXT,
 				trust_state TEXT,
 				revoked_at TEXT,
 				schema_hash TEXT
-			)`); err != nil {
-			t.Fatalf("create: %v", err)
+			)`,
+			// The connected store, plus an unpaired store whose row lingers
+			// (token-revoke keeps the row) — its abilities must be ignored.
+			`INSERT INTO stores(id, status) VALUES('store_live', 'paired')`,
+			`INSERT INTO stores(id, status) VALUES('store_unpaired', 'unpaired')`,
+		} {
+			if _, err := db.ExecContext(context.Background(), stmt); err != nil {
+				t.Fatalf("setup %q: %v", stmt, err)
+			}
 		}
 		return db
 	}
 
 	type row struct {
+		storeID    string // empty = liveStore
 		name       string
 		trustState string
 		revokedAt  string // empty = NULL
@@ -142,6 +158,41 @@ func TestCheckTrustState_Branches(t *testing.T) {
 			ability:    "k",
 			wantReason: ReasonAbilityRevoked,
 		},
+		{
+			// Regression: an orphaned row from a store that no
+			// longer exists (here with a stale/old-format hash) must be
+			// ignored. The live store's matching row decides the call.
+			desc: "orphan store row with drifted hash is ignored; live row matches",
+			rows: []row{
+				{storeID: "store_gone", name: "x", trustState: "new", schemaHash: "old-format-no-prefix"},
+				{storeID: liveStore, name: "x", trustState: "new", schemaHash: manifestSignedHash},
+			},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: "",
+		},
+		{
+			// Only an orphan row exists — the live store hasn't discovered
+			// this ability. Must read as not-yet-discovered, never as the
+			// orphan's (mismatched) hash → schema_drift.
+			desc:       "only an orphan store row exists: not yet discovered",
+			rows:       []row{{storeID: "store_gone", name: "x", trustState: "new", schemaHash: "old-format-no-prefix"}},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: ReasonAbilityNotYetDiscovered,
+		},
+		{
+			// A store whose row lingers as 'unpaired' (token-revoke path) must
+			// be excluded just like a deleted one — the paired store decides.
+			desc: "unpaired store row with drifted hash is ignored; paired row matches",
+			rows: []row{
+				{storeID: "store_unpaired", name: "x", trustState: "new", schemaHash: "old-format-no-prefix"},
+				{storeID: liveStore, name: "x", trustState: "new", schemaHash: manifestSignedHash},
+			},
+			manifest:   map[string]string{"x": ""},
+			ability:    "x",
+			wantReason: "",
+		},
 	}
 
 	for _, tc := range cases {
@@ -157,9 +208,13 @@ func TestCheckTrustState_Branches(t *testing.T) {
 				if r.schemaHash != "" {
 					hash = r.schemaHash
 				}
+				storeID := r.storeID
+				if storeID == "" {
+					storeID = liveStore
+				}
 				if _, err := db.ExecContext(context.Background(),
-					`INSERT INTO abilities(name, trust_state, revoked_at, schema_hash) VALUES(?, ?, ?, ?)`,
-					r.name, r.trustState, revoked, hash); err != nil {
+					`INSERT INTO abilities(store_id, name, trust_state, revoked_at, schema_hash) VALUES(?, ?, ?, ?, ?)`,
+					storeID, r.name, r.trustState, revoked, hash); err != nil {
 					t.Fatalf("insert: %v", err)
 				}
 			}
