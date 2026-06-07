@@ -83,6 +83,19 @@ export function relativeTime(iso: string | undefined): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
+// formatDateTime renders an absolute timestamp in the canonical app format:
+// "July 6 11:00 AM" — full month, no leading-zero day, 12-hour time, no year,
+// no comma. Use this anywhere a literal date+time is shown (order date, run
+// lifecycle, paired date); relativeTime() stays the pattern for "X ago" chips.
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return '—';
+  const date = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${date} ${time}`;
+}
+
 export function personaDisplayName(slug: string | undefined): string {
   if (!slug) return '—';
   if (slug === 'marketing') return 'Marketing & SEO';

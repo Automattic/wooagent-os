@@ -352,6 +352,19 @@ a {
 .wa-sidebar .wa-navlink svg {
   fill: currentColor;
 }
+/* CUSTOM: WPDS Badge ships only filled semantic intents (is-*-intent), none of
+   which read correctly on the near-black sidebar. The CIAB WooPayments Figma
+   (node 778-19640) specifies an outline-only count badge here: transparent
+   fill, hairline stroke, white count. We keep the WPDS Badge component
+   (intent="none" for its border + structure) and re-skin those three
+   properties. Unlayered, so it wins over @layer wp-ui-components without
+   !important; scoped to .wa-sidebar so light-surface badges are untouched.
+   Documented in DESIGN.md (persona/sidebar dark-surface exception). */
+.wa-sidebar .wa-nav-badge {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
 
 /* WPDS @wordpress/components Button variant="link" defaults to
    `text-decoration: underline`. WooAgent text links read as links via

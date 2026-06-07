@@ -20,6 +20,7 @@ import {
 } from '../api/client';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAskAgentContext } from '../lib/askAgent';
+import { formatDateTime } from '../lib/boardItems';
 import { issueToVisible } from '../lib/visibleItems';
 import Kpi from '../components/Kpi';
 import type { KpiTone } from '../components/Kpi';
@@ -1244,7 +1245,7 @@ function MessageIssueView(props: MessageViewProps) {
         >
           <Kpi label="Recipient" value={customerName} hint={proposal.customerEmail ?? '—'} />
           <Kpi label="Order" value={orderLabel} hint={proposal.orderStatus ?? '—'} />
-          <Kpi label="Total" value={orderTotal} hint={proposal.orderDate ?? ''} />
+          <Kpi label="Total" value={orderTotal} hint={proposal.orderDate ? formatDateTime(proposal.orderDate) : ''} />
           <Kpi
             label="Note type"
             value={isInternal ? 'Internal' : 'Customer'}
@@ -1291,7 +1292,7 @@ function MessageIssueView(props: MessageViewProps) {
                   />
                   <OrderMetaRow
                     label="Placed"
-                    value={proposal.orderDate ?? '—'}
+                    value={formatDateTime(proposal.orderDate)}
                   />
                   {proposal.orderStatus && (
                     <OrderMetaRow label="Status" value={proposal.orderStatus} />
@@ -1355,19 +1356,14 @@ function MessageIssueView(props: MessageViewProps) {
                   align="center"
                   style={{ width: '100%' }}
                 >
-                  <Stack direction="row" gap="md" align="center">
-                    <Text
-                      variant="body-md"
-                      style={{
-                        fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                      }}
-                    >
-                      {isInternal ? 'Internal note' : 'Customer-facing message'}
-                    </Text>
-                    {!isInternal && proposal.subjectHint && (
-                      <Badge intent="none">{proposal.subjectHint}</Badge>
-                    )}
-                  </Stack>
+                  <Text
+                    variant="body-md"
+                    style={{
+                      fontWeight: 'var(--wpds-typography-font-weight-medium)',
+                    }}
+                  >
+                    {isInternal ? 'Internal note' : 'Customer-facing message'}
+                  </Text>
                   <Text
                     variant="body-sm"
                     style={{

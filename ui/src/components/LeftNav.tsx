@@ -414,7 +414,11 @@ function NavGroup({ label, items, active, onItemClick }: NavGroupProps) {
               {item.label}
             </span>
             {item.badge !== undefined && (
-              <Badge intent="medium" aria-label={`${item.badge} in review`}>
+              <Badge
+                intent="none"
+                className="wa-nav-badge"
+                aria-label={`${item.badge} in review`}
+              >
                 {String(item.badge)}
               </Badge>
             )}

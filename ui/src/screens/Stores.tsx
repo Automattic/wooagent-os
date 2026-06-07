@@ -6,6 +6,7 @@ import { Page } from '@wordpress/admin-ui';
 import { api, type Connection, type Store } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
 import { useAskAgentContext } from '../lib/askAgent';
+import { formatDateTime } from '../lib/boardItems';
 import { storeToVisible } from '../lib/visibleItems';
 
 interface Props {
@@ -112,7 +113,7 @@ export default function Stores({
                       </Badge>
                       {store.paired_at && (
                         <Text variant="body-sm" style={MUTED}>
-                          Paired {new Date(store.paired_at).toLocaleDateString()}
+                          Paired {formatDateTime(store.paired_at)}
                         </Text>
                       )}
                     </Stack>
