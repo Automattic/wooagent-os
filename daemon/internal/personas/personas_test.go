@@ -56,6 +56,20 @@ func seedAgent(t *testing.T, st *store.Store, slug string, enabled int) {
 	}
 }
 
+func TestMigration_LLMSkipsTableExists(t *testing.T) {
+	st := newStore(t) // store.Open applies all embedded migrations
+	var name string
+	err := st.DB.QueryRowContext(context.Background(),
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='llm_skips'`,
+	).Scan(&name)
+	if err != nil {
+		t.Fatalf("llm_skips table not found after migrations: %v", err)
+	}
+	if name != "llm_skips" {
+		t.Fatalf("got table %q, want llm_skips", name)
+	}
+}
+
 func TestRunAndPersist_DisabledPersonaIsSkipped(t *testing.T) {
 	st := newStore(t)
 	seedAgent(t, st, "fake-disabled", 0)
