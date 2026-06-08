@@ -848,12 +848,17 @@ type DrafterFunc func(targetID int) (Drafted, error)
 // targetName ("product", "order", …) shows up in the cumulative
 // SkipReason when every attempt skips, so the operator can read what was
 // tried. See marketing.go / pricing.go / sales-support.go for usage.
+//
+// onSkip, when non-nil, is invoked with each skipped target id and its
+// reason just before it is added to the run-local skip set — personas use
+// it to persist a cross-run skip cooldown.
 func IterateDraft(
 	maxAttempts int,
 	targetName string,
 	skip map[int]struct{},
 	pickFn PickerFunc,
 	draftFn DrafterFunc,
+	onSkip func(targetID int, reason string),
 ) (Drafted, error) {
 	var attempts []string
 	for i := 0; i < maxAttempts; i++ {
@@ -875,6 +880,9 @@ func IterateDraft(
 			return drafted, nil
 		}
 		attempts = append(attempts, fmt.Sprintf("%s %d: %s", targetName, id, drafted.SkipReason))
+		if onSkip != nil {
+			onSkip(id, drafted.SkipReason)
+		}
 		skip[id] = struct{}{}
 	}
 	return Drafted{

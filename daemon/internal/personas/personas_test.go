@@ -717,6 +717,7 @@ func TestIterateDraft_SuccessFirstAttempt(t *testing.T) {
 			draftCalls++
 			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -749,6 +750,7 @@ func TestIterateDraft_SkipThenSucceed(t *testing.T) {
 			}
 			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -783,6 +785,7 @@ func TestIterateDraft_AllAttemptsSkipped(t *testing.T) {
 			draftCalls++
 			return Drafted{Skipped: true, SkipReason: fmt.Sprintf("no_proposal for %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -811,6 +814,7 @@ func TestIterateDraft_PickerExhaustsAfterSomeSkips(t *testing.T) {
 		func(id int) (Drafted, error) {
 			return Drafted{Skipped: true, SkipReason: "no_proposal"}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -836,6 +840,7 @@ func TestIterateDraft_PickerEmptyOnFirstCall(t *testing.T) {
 			t.Fatalf("draftFn should not be called when picker errs on first attempt; got id=%d", id)
 			return Drafted{}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -855,9 +860,50 @@ func TestIterateDraft_HardErrorFromDraftFnPropagates(t *testing.T) {
 		3, "product", skip,
 		pickFromSequence([]int{1}, errors.New("exhausted")),
 		func(id int) (Drafted, error) { return Drafted{}, hardErr },
+		nil, // onSkip
 	)
 	if !errors.Is(err, hardErr) {
 		t.Errorf("expected hardErr propagated, got %v", err)
+	}
+}
+
+func TestIterateDraft_OnSkipFiresPerSkippedAttempt(t *testing.T) {
+	ids := []int{10, 11, 12}
+	var i int
+	pickFn := func(skip map[int]struct{}) (int, error) {
+		id := ids[i]
+		i++
+		return id, nil
+	}
+	draftFn := func(id int) (Drafted, error) {
+		if id == 12 {
+			return Drafted{Title: "ok"}, nil
+		}
+		return Drafted{Skipped: true, SkipReason: fmt.Sprintf("declined %d", id)}, nil
+	}
+
+	type rec struct {
+		id     int
+		reason string
+	}
+	var got []rec
+	onSkip := func(id int, reason string) { got = append(got, rec{id, reason}) }
+
+	drafted, err := IterateDraft(3, "product", map[int]struct{}{}, pickFn, draftFn, onSkip)
+	if err != nil {
+		t.Fatalf("IterateDraft: %v", err)
+	}
+	if drafted.Skipped {
+		t.Fatalf("expected a successful draft, got skipped: %s", drafted.SkipReason)
+	}
+	want := []rec{{10, "declined 10"}, {11, "declined 11"}}
+	if len(got) != len(want) {
+		t.Fatalf("onSkip fired %d times, want %d: %v", len(got), len(want), got)
+	}
+	for j := range want {
+		if got[j] != want[j] {
+			t.Errorf("onSkip[%d] = %+v, want %+v", j, got[j], want[j])
+		}
 	}
 }
 
