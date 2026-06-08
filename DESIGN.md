@@ -113,10 +113,14 @@ The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variabl
 
 Two previous sites have been retired:
 
-- The brand-header "W" tile in `LeftNav` previously used the marketing persona color but moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma.
+- The brand-header tile in `LeftNav` previously used the marketing persona color, then moved to a WPDS brand-indigo "W" tile, and is now the WooAgent logo asset (see "Brand logo" below) — no persona color involved at any stage now.
 - The persona-colored `KindBadge` "kind pill" on board cards (CONTENT / CAMPAIGN / EMAIL) was removed entirely when the queue moved to DataViews (2026-05-16). Agent identity via `PersonaAvatar` is the canonical visual signal — Kind was redundant on top of it.
 
 **Don't expand this exception further.** A second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
+
+### Brand logo (WooAgent-owned)
+
+The brand mark in the `LeftNav` header is a raster logo asset — a circular black badge with a white horse head — at `ui/src/assets/wooagent-logo.png`, rendered as a 40×40 `<img>` (marked `// CUSTOM:` in `LeftNav.tsx`). WPDS has no product-logo component, so this is a deliberate off-system element. The PNG carries its own black circular badge, which reads against the `#1e1e1e` sidebar surface, so no tile wrapper or background token is applied. The "WooAgent" wordmark beside it uses `Text variant="heading-md"` (white, inherited from `.wa-sidebar`) with an off-token `fontWeight: 700` inline style (marked `// CUSTOM:`). WPDS exposes no `bold` weight — only `regular` and `medium` — so matching the approved 700-weight brand lockup requires going off-token. This is a brand-header-only exception; everywhere else, text stays on the WPDS weight tokens.
 
 ### Sidebar surface color (WooAgent-owned)
 
