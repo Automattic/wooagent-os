@@ -94,6 +94,7 @@ type CooldownPolicy struct {
 	TargetKey string
 	Approved  time.Duration
 	Dismissed time.Duration
+	Skipped   time.Duration // cooldown after an LLM-level skip; 0 disables
 }
 
 // Deps is everything a persona is allowed to reach for. Adding new fields
@@ -377,6 +378,50 @@ func RecentlyTouchedTargets(
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate target ids: %w", err)
+	}
+	return out, nil
+}
+
+// RecentlySkippedTargets returns the set of integer target ids the persona
+// LLM-skipped (examined and declined at draft time) within policy.Skipped of
+// now. These are merged into the picker's skip set so a recently-declined
+// target drops out of contention until its cooldown lapses. Returns an empty
+// (non-nil) map when policy.Skipped == 0 (feature off) or nothing qualifies.
+func RecentlySkippedTargets(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) (map[int]struct{}, error) {
+	out := make(map[int]struct{})
+	if policy.Skipped == 0 {
+		return out, nil
+	}
+	cutoff := time.Now().UTC().Add(-policy.Skipped).Format(time.RFC3339)
+
+	rows, err := st.DB.QueryContext(ctx, `
+		SELECT target_id
+		FROM llm_skips
+		WHERE persona = ?
+		  AND attempted_at > ?`,
+		slug, cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recently-skipped targets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tid sql.NullInt64
+		if err := rows.Scan(&tid); err != nil {
+			return nil, fmt.Errorf("scan skip target id: %w", err)
+		}
+		if tid.Valid && tid.Int64 > 0 {
+			out[int(tid.Int64)] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate skip target ids: %w", err)
 	}
 	return out, nil
 }

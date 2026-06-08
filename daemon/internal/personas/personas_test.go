@@ -584,6 +584,68 @@ func TestInsertIssue_EmptyDedupKeyStoresNull(t *testing.T) {
 	}
 }
 
+// ---- RecentlySkippedTargets ----
+
+func seedSkip(t *testing.T, st *store.Store, persona string, targetID int, reason, attemptedAt string) {
+	t.Helper()
+	if _, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO llm_skips(persona, target_id, skip_reason, attempted_at) VALUES(?, ?, ?, ?)`,
+		persona, targetID, reason, attemptedAt,
+	); err != nil {
+		t.Fatalf("seed skip: %v", err)
+	}
+}
+
+func TestRecentlySkippedTargets(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	seedAgent(t, st, "other", 1)
+	now := time.Now().UTC()
+	rfc := func(d time.Duration) string { return now.Add(-d).Format(time.RFC3339) }
+
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	seedSkip(t, st, "pricing", 11, "price optimal", rfc(1*time.Hour)) // inside window
+	seedSkip(t, st, "pricing", 12, "no comps", rfc(6*24*time.Hour))   // inside window
+	seedSkip(t, st, "pricing", 21, "stale", rfc(8*24*time.Hour))      // outside window
+	seedSkip(t, st, "other", 31, "price optimal", rfc(1*time.Hour))   // other persona
+
+	got, err := RecentlySkippedTargets(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	want := map[int]struct{}{11: {}, 12: {}}
+	if len(got) != len(want) {
+		t.Errorf("got %d ids, want %d; got=%v", len(got), len(want), got)
+	}
+	for id := range want {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected product_id %d in skip set, missing", id)
+		}
+	}
+	for id := range got {
+		if _, ok := want[id]; !ok {
+			t.Errorf("unexpected product_id %d in skip set", id)
+		}
+	}
+}
+
+func TestRecentlySkippedTargets_ZeroDurationReturnsEmpty(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "pricing", 1)
+	seedSkip(t, st, "pricing", 11, "price optimal", time.Now().UTC().Format(time.RFC3339))
+
+	got, err := RecentlySkippedTargets(context.Background(), st, "pricing",
+		CooldownPolicy{TargetKey: "product_id", Skipped: 0})
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty set when Skipped==0, got %v", got)
+	}
+}
+
 // ---- IterateDraft ----
 
 // pickFromSequence returns a PickerFunc that yields ids from `seq` in
