@@ -646,6 +646,50 @@ func TestRecentlySkippedTargets_ZeroDurationReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestRecordLLMSkip_InsertsAndUpserts(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	t0 := time.Now().UTC().Add(-time.Hour)
+	if err := RecordLLMSkip(ctx, st, "pricing", 42, "price optimal", t0); err != nil {
+		t.Fatalf("first RecordLLMSkip: %v", err)
+	}
+	got, err := RecentlySkippedTargets(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	if _, ok := got[42]; !ok || len(got) != 1 {
+		t.Fatalf("after insert want {42}, got %v", got)
+	}
+
+	t1 := time.Now().UTC()
+	if err := RecordLLMSkip(ctx, st, "pricing", 42, "no comps now", t1); err != nil {
+		t.Fatalf("second RecordLLMSkip (upsert): %v", err)
+	}
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing' AND target_id=42`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("want exactly 1 row after upsert, got %d", count)
+	}
+	var reason, attemptedAt string
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT skip_reason, attempted_at FROM llm_skips WHERE persona='pricing' AND target_id=42`,
+	).Scan(&reason, &attemptedAt); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if reason != "no comps now" {
+		t.Errorf("upsert did not refresh skip_reason: got %q", reason)
+	}
+	if attemptedAt != t1.Format(time.RFC3339) {
+		t.Errorf("upsert did not refresh attempted_at: got %q want %q", attemptedAt, t1.Format(time.RFC3339))
+	}
+}
+
 // ---- IterateDraft ----
 
 // pickFromSequence returns a PickerFunc that yields ids from `seq` in

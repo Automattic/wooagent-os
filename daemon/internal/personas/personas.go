@@ -426,6 +426,33 @@ func RecentlySkippedTargets(
 	return out, nil
 }
 
+// RecordLLMSkip upserts an LLM-level skip for (slug, targetID): the persona
+// examined the target at draft time and declined to propose. Re-recording the
+// same (persona, targetID) refreshes attempted_at and skip_reason, restarting
+// the Skipped cooldown clock. now is passed in for testability; callers use
+// time.Now().UTC().
+func RecordLLMSkip(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	targetID int,
+	reason string,
+	now time.Time,
+) error {
+	_, err := st.DB.ExecContext(ctx, `
+		INSERT INTO llm_skips(persona, target_id, skip_reason, attempted_at)
+		VALUES(?, ?, ?, ?)
+		ON CONFLICT(persona, target_id)
+		DO UPDATE SET skip_reason = excluded.skip_reason,
+		              attempted_at = excluded.attempted_at`,
+		slug, targetID, reason, now.Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("record llm skip (%s/%d): %w", slug, targetID, err)
+	}
+	return nil
+}
+
 // findOpenIssueWithDedupKey returns the id of an in_review issue for the
 // given persona whose dedup_key matches the supplied key, or an empty
 // string when none exists. NULL-stored keys never match (the partial
