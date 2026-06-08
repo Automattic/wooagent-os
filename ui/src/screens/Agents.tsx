@@ -21,6 +21,7 @@ import { PersonaAvatar, personaKeyFrom } from '../components/PersonaAvatar';
 import ActionSnackbar from '../components/ActionSnackbar';
 import { useAskAgentContext } from '../lib/askAgent';
 import { personaToVisible } from '../lib/visibleItems';
+import { summarizeReason } from '../lib/runText';
 import PageGlobalActions from '../components/PageGlobalActions';
 
 interface Props {
@@ -643,7 +644,10 @@ export default function Agents({ connection, onAskAgent, onChanged }: Props) {
         slug,
         kind: 'run',
         personaName: nameFor(slug),
-        message: outcome.message,
+        // Run reasons can be a long per-product trace (Pricing especially).
+        // The notice shows only the leading clause as a summary; the full
+        // text stays available on the Runs page / run detail.
+        message: summarizeReason(outcome.message),
         intent: outcome.isSkip ? 'info' : 'error',
       });
     }

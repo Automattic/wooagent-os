@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Card, Notice, Stack, Text } from '@wordpress/ui';
+import { Card, CollapsibleCard, Notice, Stack, Text } from '@wordpress/ui';
 import { Button, Spinner } from '@wordpress/components';
 import { Page } from '@wordpress/admin-ui';
 import { api, type Connection, type Run } from '../api/client';
@@ -9,6 +9,7 @@ import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
 import { useAskAgentContext } from '../lib/askAgent';
 import { runToVisible } from '../lib/visibleItems';
+import { isLongReason, summarizeReason } from '../lib/runText';
 
 const PAGE_SIZE = 50;
 
@@ -50,6 +51,107 @@ function personaDisplayName(slug: string): string {
   if (slug === 'sales-support') return 'Sales support';
   if (slug === 'chief') return 'Chief of staff';
   return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
+function formatLatency(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
+
+// Run row for a run whose skip/failure reason is long (see isLongReason). The
+// collapsed header carries the same meta as a short row plus a one-clause
+// summary; expanding reveals the full reason and links out to the run detail.
+// Used instead of the click-to-open navigate card so the verbose trace no
+// longer floods the list inline (the prior behaviour). The whole-card navigate
+// affordance moves to the "View run details" link inside the expanded content.
+function RunReasonCard({
+  run,
+  output,
+  isFailure,
+}: {
+  run: Run;
+  output: string;
+  isFailure: boolean;
+}) {
+  const personaKey = personaKeyFrom(run.persona);
+  const metaColor = 'var(--wpds-color-fg-content-neutral-weak)';
+  const xs = 'var(--wpds-typography-font-size-xs)';
+  return (
+    <CollapsibleCard.Root>
+      <CollapsibleCard.Header>
+        <Stack direction="column" gap="xs" style={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" gap="sm" align="center" wrap="wrap">
+            <PersonaAvatar persona={personaKey} size="sm" />
+            <Text
+              variant="body-sm"
+              style={{ fontWeight: 'var(--wpds-typography-font-weight-medium)' }}
+            >
+              {personaDisplayName(run.persona)}
+            </Text>
+            <RunStatusBadge status={run.status} />
+            <Text variant="body-sm" style={{ color: metaColor, fontSize: xs }}>
+              {triggerLabel(run.trigger)}
+            </Text>
+            <Text variant="body-sm" style={{ color: metaColor, fontSize: xs }}>
+              {relativeTime(run.scheduled_at)}
+            </Text>
+          </Stack>
+          <Stack direction="row" gap="md" align="center" wrap="wrap">
+            <span className="wa-mono" style={{ fontSize: xs, color: metaColor }}>
+              {run.id.slice(0, 8).toUpperCase()}
+            </span>
+            {run.latency_ms !== null && (
+              <Text variant="body-sm" style={{ fontSize: xs, color: metaColor }}>
+                {formatLatency(run.latency_ms)}
+              </Text>
+            )}
+            <Text
+              variant="body-sm"
+              style={{
+                fontSize: xs,
+                color: isFailure
+                  ? 'var(--wpds-color-fg-content-warning)'
+                  : metaColor,
+              }}
+            >
+              {summarizeReason(output)}
+            </Text>
+          </Stack>
+        </Stack>
+      </CollapsibleCard.Header>
+      <CollapsibleCard.Content>
+        <Stack direction="column" gap="sm">
+          <Text
+            variant="body-sm"
+            style={{
+              whiteSpace: 'pre-wrap',
+              fontSize: xs,
+              color: isFailure
+                ? 'var(--wpds-color-fg-content-warning)'
+                : 'var(--wpds-color-fg-content-neutral)',
+            }}
+          >
+            {output}
+          </Text>
+          <Stack direction="row" gap="md" align="center" wrap="wrap">
+            {run.issue_id && (
+              <Link
+                to={`/issues/${run.issue_id}`}
+                style={{ fontSize: xs, color: metaColor }}
+              >
+                Issue {run.issue_id.slice(0, 8).toUpperCase()}
+              </Link>
+            )}
+            <Link
+              to={`/runs/${run.id}`}
+              style={{ fontSize: 'var(--wpds-typography-font-size-sm)' }}
+            >
+              View run details
+            </Link>
+          </Stack>
+        </Stack>
+      </CollapsibleCard.Content>
+    </CollapsibleCard.Root>
+  );
 }
 
 export default function Runs({ connection, onAskAgent }: Props) {
@@ -190,6 +292,20 @@ export default function Runs({ connection, onAskAgent }: Props) {
         <Stack direction="column" gap="sm">
           {runs.map((run) => {
             const personaKey = personaKeyFrom(run.persona);
+            // Failure takes precedence over skip (a run is one or the other in
+            // practice). When that reason is long, render the progressive-
+            // disclosure card instead of dumping the full trace inline.
+            const output = run.failure_reason ?? run.skip_reason ?? null;
+            if (isLongReason(output)) {
+              return (
+                <RunReasonCard
+                  key={run.id}
+                  run={run}
+                  output={(output as string).trim()}
+                  isFailure={run.failure_reason !== null}
+                />
+              );
+            }
             return (
               // CUSTOM: whole-card run row click target. (a) WPDS has no clickable-card component. (b) <button> with reset chrome wraps <Card.Root> which owns visuals. (c) Same CardLink pattern noted in Kanban.tsx.
               <button
