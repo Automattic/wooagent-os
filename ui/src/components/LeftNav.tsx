@@ -19,6 +19,7 @@ import {
 } from '@wordpress/icons';
 import type { Connection, Store } from '../api/client';
 import { relativeTime } from '../lib/boardItems';
+import logoUrl from '../assets/wooagent-logo.png';
 
 interface NavItem {
   to: string;
@@ -158,9 +159,7 @@ export default function LeftNav({
 
   return (
     <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
-      {/* Brand header. The W tile uses the marketing persona color since the
-          marketing agent is the V1 product surface — same documented exception
-          as the rest of the persona-color use sites. */}
+      {/* Brand header: horse-head badge logo + WooAgent wordmark. */}
       <div
         style={{
           padding:
@@ -168,24 +167,24 @@ export default function LeftNav({
         }}
       >
         <Stack direction="row" gap="sm" align="center">
-          {/* Brand tile uses WPDS interactive-brand-strong (indigo) per the
-              i3.2 Figma. Was previously the marketing-persona pink as part
-              of the persona-color exception, but moved to brand indigo so
-              the persona-color exception stays scoped to identity surfaces
-              (PersonaAvatar) only. */}
-          <div
-            className="wa-persona-avatar wa-persona-avatar--md"
-            style={{
-              background: 'var(--wpds-color-bg-interactive-brand-strong)',
-              color: 'var(--wpds-color-fg-interactive-brand-strong)',
-              borderRadius: 'var(--wpds-border-radius-md)',
-            }}
+          {/* CUSTOM: the brand mark is a raster logo asset (circular horse-head
+              badge), not a WPDS component — there is no design-system component
+              for a product logo. The PNG carries its own black circular badge,
+              which reads against the #1e1e1e sidebar. Documented in DESIGN.md
+              alongside the sidebar-surface exception. */}
+          <img
+            src={logoUrl}
+            alt=""
             aria-hidden="true"
-          >
-            W
-          </div>
-          {/* Wordmark inherits `color: #ffffff` from .wa-sidebar (see app.css). No inline color needed. */}
-          <Text variant="heading-sm">
+            style={{ width: 40, height: 40, objectFit: 'contain', display: 'block' }}
+          />
+          {/* Wordmark inherits `color: #ffffff` from .wa-sidebar (see app.css). No inline color needed.
+              CUSTOM: fontWeight 700 is off-token — WPDS exposes no `bold` weight (only
+              regular/medium). Used here to match the approved brand lockup, which is a
+              700-weight wordmark. Brand-header exception only; documented in DESIGN.md
+              under "Brand logo". Don't reuse this weight elsewhere — body/heading text
+              stays on the WPDS weight tokens. */}
+          <Text variant="heading-md" style={{ fontWeight: 700 }}>
             WooAgent
           </Text>
         </Stack>
