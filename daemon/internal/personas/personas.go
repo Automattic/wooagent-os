@@ -453,6 +453,51 @@ func RecordLLMSkip(
 	return nil
 }
 
+// CooldownSkipSet is the seed skip set a persona's Draft passes to its
+// picker(s): targets recently turned into proposals (RecentlyTouchedTargets)
+// unioned with targets recently LLM-skipped (RecentlySkippedTargets, only when
+// policy.Skipped > 0). A DB error from the touched query is fatal (matches
+// today's behavior); a skipped-query error is non-fatal — we degrade to the
+// touched-only set rather than abort the run.
+func CooldownSkipSet(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) (map[int]struct{}, error) {
+	skip, err := RecentlyTouchedTargets(ctx, st, slug, policy)
+	if err != nil {
+		return nil, err
+	}
+	if policy.Skipped > 0 {
+		if skipped, serr := RecentlySkippedTargets(ctx, st, slug, policy); serr == nil {
+			for id := range skipped {
+				skip[id] = struct{}{}
+			}
+		}
+	}
+	return skip, nil
+}
+
+// SkipRecorder returns a best-effort recorder for LLM-level skips. When
+// policy.Skipped == 0 the persona has opted out and the returned func is a
+// no-op, so call sites never need to nil-check. Recording errors are
+// swallowed: a failed skip-write must never fail a run (worst case the target
+// is re-examined next run, i.e. pre-feature behavior).
+func SkipRecorder(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) func(targetID int, reason string) {
+	if policy.Skipped == 0 {
+		return func(int, string) {}
+	}
+	return func(targetID int, reason string) {
+		_ = RecordLLMSkip(ctx, st, slug, targetID, reason, time.Now().UTC())
+	}
+}
+
 // findOpenIssueWithDedupKey returns the id of an in_review issue for the
 // given persona whose dedup_key matches the supplied key, or an empty
 // string when none exists. NULL-stored keys never match (the partial

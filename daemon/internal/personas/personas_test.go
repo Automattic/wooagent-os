@@ -1139,3 +1139,98 @@ func TestRunAndPersist_DraftSkipPropagated(t *testing.T) {
 		t.Errorf("expected 0 issues after skipped Draft; got %d", n)
 	}
 }
+
+// ---- CooldownSkipSet + SkipRecorder ----
+
+func TestCooldownSkipSet_UnionsTouchedAndSkipped(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	now := time.Now().UTC()
+	policy := CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+		Skipped:   7 * 24 * time.Hour,
+	}
+	seedIssue(t, st, "pricing", "in_review", "product_id", 11, now.Add(-time.Hour).Format(time.RFC3339), "")
+	seedSkip(t, st, "pricing", 12, "price optimal", now.Add(-time.Hour).Format(time.RFC3339))
+
+	got, err := CooldownSkipSet(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("CooldownSkipSet: %v", err)
+	}
+	for _, id := range []int{11, 12} {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected id %d in union, missing; got=%v", id, got)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("want 2 ids, got %d: %v", len(got), got)
+	}
+}
+
+func TestCooldownSkipSet_SkippedZeroOmitsSkips(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	now := time.Now().UTC()
+	policy := CooldownPolicy{TargetKey: "product_id", Approved: 7 * 24 * time.Hour, Dismissed: 30 * 24 * time.Hour, Skipped: 0}
+	seedIssue(t, st, "pricing", "in_review", "product_id", 11, now.Add(-time.Hour).Format(time.RFC3339), "")
+	seedSkip(t, st, "pricing", 12, "price optimal", now.Add(-time.Hour).Format(time.RFC3339))
+
+	got, err := CooldownSkipSet(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("CooldownSkipSet: %v", err)
+	}
+	if _, ok := got[12]; ok {
+		t.Errorf("skip id 12 must be omitted when Skipped==0; got=%v", got)
+	}
+	if _, ok := got[11]; !ok {
+		t.Errorf("touched id 11 must still be present; got=%v", got)
+	}
+}
+
+func TestSkipRecorder_RecordsWhenEnabled(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	rec := SkipRecorder(ctx, st, "pricing", policy)
+	if rec == nil {
+		t.Fatal("SkipRecorder returned nil; must always return a callable")
+	}
+	rec(55, "price optimal")
+
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing' AND target_id=55`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("recorder did not write a row: count=%d", count)
+	}
+}
+
+func TestSkipRecorder_NoOpWhenDisabled(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 0}
+
+	rec := SkipRecorder(ctx, st, "pricing", policy)
+	if rec == nil {
+		t.Fatal("SkipRecorder must return a callable even when disabled")
+	}
+	rec(55, "price optimal") // must be a no-op
+
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing'`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("disabled recorder wrote %d rows, want 0", count)
+	}
+}
