@@ -64,6 +64,7 @@ func (SalesSupport) Cooldown() personas.CooldownPolicy {
 		TargetKey: "order_id",
 		Approved:  30 * 24 * time.Hour,
 		Dismissed: 90 * 24 * time.Hour,
+		Skipped:   30 * 24 * time.Hour,
 	}
 }
 
@@ -123,15 +124,17 @@ func (SalesSupport) Draft(ctx context.Context, deps personas.Deps) (personas.Dra
 		model = defaultAnthropicModel
 	}
 
-	// Persistent cooldown set (see SalesSupport.Cooldown).
+	// Persistent cooldown set (touched ∪ recently-skipped; see SalesSupport.Cooldown).
 	ss := SalesSupport{}
-	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, ss.Slug(), ss.Cooldown())
+	policy := ss.Cooldown()
+	skip, err := personas.CooldownSkipSet(ctx, deps.Store, ss.Slug(), policy)
 	if err != nil {
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("look up recently-touched orders: %v", err),
 		}, nil
 	}
+	rec := personas.SkipRecorder(ctx, deps.Store, ss.Slug(), policy)
 
 	// Within-run iteration: if the LLM yields no_proposal / empty message
 	// for an order, add it to the run-local skip set and try the next
@@ -153,6 +156,7 @@ func (SalesSupport) Draft(ctx context.Context, deps personas.Deps) (personas.Dra
 		func(id int) (personas.Drafted, error) {
 			return draftForOrder(ctx, deps, id, pickedStatus, model)
 		},
+		rec,
 	)
 }
 

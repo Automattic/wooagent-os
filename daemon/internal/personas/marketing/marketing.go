@@ -399,6 +399,7 @@ func (Marketing) Cooldown() personas.CooldownPolicy {
 		TargetKey: "product_id",
 		Approved:  7 * 24 * time.Hour,
 		Dismissed: 30 * 24 * time.Hour,
+		Skipped:   7 * 24 * time.Hour,
 	}
 }
 
@@ -448,13 +449,15 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 	// proposal within the last 7d, or a dismissed proposal within the
 	// last 30d for this persona (see Marketing.Cooldown).
 	m := Marketing{}
-	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, m.Slug(), m.Cooldown())
+	policy := m.Cooldown()
+	skip, err := personas.CooldownSkipSet(ctx, deps.Store, m.Slug(), policy)
 	if err != nil {
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
 		}, nil
 	}
+	rec := personas.SkipRecorder(ctx, deps.Store, m.Slug(), policy)
 
 	// Cold-draft batch path: if enough products have empty short/long
 	// descriptions out of cooldown, draft them in one batch this tick
@@ -469,7 +472,7 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 			ids = append(ids, c.ID)
 		}
 		fmt.Printf("marketing: cold-draft scan found %d candidates (ids: %v); drafting batch\n", len(candidates), ids)
-		batch, err := draftColdDraftBatch(ctx, deps, candidates, skill.Description, draftColdDraftForProduct)
+		batch, err := draftColdDraftBatch(ctx, deps, candidates, skill.Description, draftColdDraftForProduct, rec)
 		if err != nil {
 			return personas.Drafted{}, err
 		}
@@ -490,6 +493,7 @@ func (Marketing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafte
 		skip,
 		func(s map[int]struct{}) (int, error) { return pickFirstPublished(ctx, deps.MCP, s) },
 		func(id int) (personas.Drafted, error) { return draftForProduct(ctx, deps, id, skill.Description) },
+		rec,
 	)
 }
 
@@ -1244,7 +1248,7 @@ func draftColdDraftForProduct(ctx context.Context, deps personas.Deps, candidate
 // caller falls through to single-rewrite. The first successful draft
 // carries BatchSiblings + BatchTitle + BatchIntent; subsequent successes
 // become siblings.
-func draftColdDraftBatch(ctx context.Context, deps personas.Deps, candidates []productSummary, skillDescription string, drafterFn func(context.Context, personas.Deps, productSummary, string) (personas.Drafted, error)) (personas.Drafted, error) {
+func draftColdDraftBatch(ctx context.Context, deps personas.Deps, candidates []productSummary, skillDescription string, drafterFn func(context.Context, personas.Deps, productSummary, string) (personas.Drafted, error), rec func(targetID int, reason string)) (personas.Drafted, error) {
 	drafts := make([]personas.Drafted, 0, len(candidates))
 	for _, p := range candidates {
 		d, err := drafterFn(ctx, deps, p, skillDescription)
@@ -1253,6 +1257,7 @@ func draftColdDraftBatch(ctx context.Context, deps personas.Deps, candidates []p
 			continue
 		}
 		if d.Skipped {
+			rec(p.ID, d.SkipReason)
 			fmt.Printf("marketing(cold_draft): product %d skipped (%s); dropping\n", p.ID, d.SkipReason)
 			continue
 		}

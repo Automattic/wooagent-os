@@ -94,6 +94,7 @@ type CooldownPolicy struct {
 	TargetKey string
 	Approved  time.Duration
 	Dismissed time.Duration
+	Skipped   time.Duration // cooldown after an LLM-level skip; 0 disables
 }
 
 // Deps is everything a persona is allowed to reach for. Adding new fields
@@ -379,6 +380,122 @@ func RecentlyTouchedTargets(
 		return nil, fmt.Errorf("iterate target ids: %w", err)
 	}
 	return out, nil
+}
+
+// RecentlySkippedTargets returns the set of integer target ids the persona
+// LLM-skipped (examined and declined at draft time) within policy.Skipped of
+// now. These are merged into the picker's skip set so a recently-declined
+// target drops out of contention until its cooldown lapses. Returns an empty
+// (non-nil) map when policy.Skipped == 0 (feature off) or nothing qualifies.
+func RecentlySkippedTargets(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) (map[int]struct{}, error) {
+	out := make(map[int]struct{})
+	if policy.Skipped == 0 {
+		return out, nil
+	}
+	cutoff := time.Now().UTC().Add(-policy.Skipped).Format(time.RFC3339)
+
+	rows, err := st.DB.QueryContext(ctx, `
+		SELECT target_id
+		FROM llm_skips
+		WHERE persona = ?
+		  AND attempted_at > ?`,
+		slug, cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recently-skipped targets: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tid sql.NullInt64
+		if err := rows.Scan(&tid); err != nil {
+			return nil, fmt.Errorf("scan skip target id: %w", err)
+		}
+		if tid.Valid && tid.Int64 > 0 {
+			out[int(tid.Int64)] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate skip target ids: %w", err)
+	}
+	return out, nil
+}
+
+// RecordLLMSkip upserts an LLM-level skip for (slug, targetID): the persona
+// examined the target at draft time and declined to propose. Re-recording the
+// same (persona, targetID) refreshes attempted_at and skip_reason, restarting
+// the Skipped cooldown clock. now is passed in for testability; callers use
+// time.Now().UTC().
+func RecordLLMSkip(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	targetID int,
+	reason string,
+	now time.Time,
+) error {
+	_, err := st.DB.ExecContext(ctx, `
+		INSERT INTO llm_skips(persona, target_id, skip_reason, attempted_at)
+		VALUES(?, ?, ?, ?)
+		ON CONFLICT(persona, target_id)
+		DO UPDATE SET skip_reason = excluded.skip_reason,
+		              attempted_at = excluded.attempted_at`,
+		slug, targetID, reason, now.Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("record llm skip (%s/%d): %w", slug, targetID, err)
+	}
+	return nil
+}
+
+// CooldownSkipSet is the seed skip set a persona's Draft passes to its
+// picker(s): targets recently turned into proposals (RecentlyTouchedTargets)
+// unioned with targets recently LLM-skipped (RecentlySkippedTargets, only when
+// policy.Skipped > 0). A DB error from the touched query is fatal (matches
+// today's behavior); a skipped-query error is non-fatal — we degrade to the
+// touched-only set rather than abort the run.
+func CooldownSkipSet(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) (map[int]struct{}, error) {
+	skip, err := RecentlyTouchedTargets(ctx, st, slug, policy)
+	if err != nil {
+		return nil, err
+	}
+	if policy.Skipped > 0 {
+		if skipped, serr := RecentlySkippedTargets(ctx, st, slug, policy); serr == nil {
+			for id := range skipped {
+				skip[id] = struct{}{}
+			}
+		}
+	}
+	return skip, nil
+}
+
+// SkipRecorder returns a best-effort recorder for LLM-level skips. When
+// policy.Skipped == 0 the persona has opted out and the returned func is a
+// no-op, so call sites never need to nil-check. Recording errors are
+// swallowed: a failed skip-write must never fail a run (worst case the target
+// is re-examined next run, i.e. pre-feature behavior).
+func SkipRecorder(
+	ctx context.Context,
+	st *store.Store,
+	slug string,
+	policy CooldownPolicy,
+) func(targetID int, reason string) {
+	if policy.Skipped == 0 {
+		return func(int, string) {}
+	}
+	return func(targetID int, reason string) {
+		_ = RecordLLMSkip(ctx, st, slug, targetID, reason, time.Now().UTC())
+	}
 }
 
 // findOpenIssueWithDedupKey returns the id of an in_review issue for the
@@ -731,12 +848,17 @@ type DrafterFunc func(targetID int) (Drafted, error)
 // targetName ("product", "order", …) shows up in the cumulative
 // SkipReason when every attempt skips, so the operator can read what was
 // tried. See marketing.go / pricing.go / sales-support.go for usage.
+//
+// onSkip, when non-nil, is invoked with each skipped target id and its
+// reason just before it is added to the run-local skip set — personas use
+// it to persist a cross-run skip cooldown.
 func IterateDraft(
 	maxAttempts int,
 	targetName string,
 	skip map[int]struct{},
 	pickFn PickerFunc,
 	draftFn DrafterFunc,
+	onSkip func(targetID int, reason string),
 ) (Drafted, error) {
 	var attempts []string
 	for i := 0; i < maxAttempts; i++ {
@@ -758,6 +880,9 @@ func IterateDraft(
 			return drafted, nil
 		}
 		attempts = append(attempts, fmt.Sprintf("%s %d: %s", targetName, id, drafted.SkipReason))
+		if onSkip != nil {
+			onSkip(id, drafted.SkipReason)
+		}
 		skip[id] = struct{}{}
 	}
 	return Drafted{
