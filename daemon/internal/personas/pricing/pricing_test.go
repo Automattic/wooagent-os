@@ -5,9 +5,20 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 )
+
+func TestCooldown_IncludesSkippedWindow(t *testing.T) {
+	p := Pricing{}.Cooldown()
+	if p.TargetKey != "product_id" {
+		t.Errorf("TargetKey: got %q want product_id", p.TargetKey)
+	}
+	if p.Skipped != 7*24*time.Hour {
+		t.Errorf("Skipped: got %v want 168h", p.Skipped)
+	}
+}
 
 // The lenient UnmarshalJSON handles three real drifts we've seen from the
 // model: `recommendation` instead of `direction`, `price_change_percent`
