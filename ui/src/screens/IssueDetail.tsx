@@ -518,7 +518,6 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                 : 'Not yet scored'
             }
           />
-          <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
         </div>
 
         {/* Body */}
