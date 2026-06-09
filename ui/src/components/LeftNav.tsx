@@ -19,7 +19,6 @@ import {
 } from '@wordpress/icons';
 import type { Connection, Store } from '../api/client';
 import { relativeTime } from '../lib/boardItems';
-import logoUrl from '../assets/wooagent-logo.png';
 
 interface NavItem {
   to: string;
@@ -159,25 +158,45 @@ export default function LeftNav({
 
   return (
     <aside className={`wa-sidebar${isOpen ? ' is-open' : ''}`}>
-      {/* Brand header: horse-head badge logo + WooAgent wordmark. */}
+      {/* Brand header: indigo "W" brand tile + WooAgent wordmark.
+          Uniform 16px padding matches the i3.2 Figma (node I2:9719;838:8825,
+          p-[16px]); padding-lg resolves to 16px in the default density. */}
       <div
         style={{
-          padding:
-            'var(--wpds-dimension-padding-md) var(--wpds-dimension-padding-md)',
+          padding: 'var(--wpds-dimension-padding-lg)',
         }}
       >
         <Stack direction="row" gap="sm" align="center">
-          {/* CUSTOM: the brand mark is a raster logo asset (circular horse-head
-              badge), not a WPDS component — there is no design-system component
-              for a product logo. The PNG carries its own black circular badge,
-              which reads against the #1e1e1e sidebar. Documented in DESIGN.md
-              alongside the sidebar-surface exception. */}
-          <img
-            src={logoUrl}
-            alt=""
+          {/* CUSTOM: the brand mark is a "W" tile, not a WPDS component — there
+              is no design-system component for a product logo. Matches the i3.2
+              Figma (node I2:9719;838:8826): a 24×24 brand-indigo square with a
+              centered white "W". The fill is the WPDS brand token
+              (--wpds-color-bg-interactive-brand-strong, #3858e9) and the radius
+              is --wpds-border-radius-sm, so only the lockup itself is off-system.
+              Documented in DESIGN.md under "Brand logo". */}
+          <div
             aria-hidden="true"
-            style={{ width: 40, height: 40, objectFit: 'contain', display: 'block' }}
-          />
+            style={{
+              width: 24,
+              height: 24,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--wpds-border-radius-sm)',
+              background: 'var(--wpds-color-bg-interactive-brand-strong)',
+            }}
+          >
+            {/* White "W" inherits `color: #ffffff` from .wa-sidebar (see app.css).
+                fontWeight 700 matches the wordmark lockup beside it — same
+                off-token exception, documented in DESIGN.md under "Brand logo". */}
+            <Text
+              variant="body-sm"
+              style={{ fontWeight: 700, lineHeight: 1 }}
+            >
+              W
+            </Text>
+          </div>
           {/* Wordmark inherits `color: #ffffff` from .wa-sidebar (see app.css). No inline color needed.
               CUSTOM: fontWeight 700 is off-token — WPDS exposes no `bold` weight (only
               regular/medium). Used here to match the approved brand lockup, which is a

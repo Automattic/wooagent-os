@@ -81,10 +81,13 @@ interface ReviewProps {
    */
   priceSummary?: string;
   /**
-   * Used when entity='message'. The recipient label, e.g.
-   * "Maria · maria@example.com" or "Internal note".
+   * Used when entity='message'. Split so the header line shows the name
+   * and the helper line shows the email — no repetition across the two.
+   * Name shows next to the title ("Customer note ready · Maria"); email
+   * goes in the "Approval will email this note to …" helper line.
    */
-  messageRecipient?: string;
+  messageRecipientName?: string;
+  messageRecipientEmail?: string;
   /** Used when entity='message'. 'customer' or 'internal'. */
   messageNoteType?: 'customer' | 'internal';
   onApprove: () => void;
@@ -108,8 +111,6 @@ interface DoneProps {
   variantId?: string;
   /** When entity='price': summary line, e.g. "$44.99 (was $39.00)". */
   priceSummary?: string;
-  /** When entity='message': recipient label. */
-  messageRecipient?: string;
   /** When entity='message': 'customer' or 'internal'. */
   messageNoteType?: 'customer' | 'internal';
   /** Product / scope label, e.g., "Handwoven Wool Throw - Slate". */
@@ -294,8 +295,8 @@ function ReviewBar(props: ReviewProps) {
     primaryLine = isInternal ? 'Internal note ready' : 'Customer note ready';
     helperLine = isInternal
       ? 'Approval will save this note to wp-admin · not visible to the customer'
-      : props.messageRecipient
-        ? `Approval will email this note to ${props.messageRecipient}`
+      : props.messageRecipientEmail
+        ? `Approval will email this note to ${props.messageRecipientEmail}`
         : 'Approval will email this note to the customer';
     approveLabel = isInternal ? 'Approve & save note' : 'Approve & send';
     approveBusy = isInternal ? 'Saving…' : 'Sending…';
@@ -330,12 +331,12 @@ function ReviewBar(props: ReviewProps) {
                   {props.priceSummary}
                 </Text>
               )}
-              {isMessage && props.messageRecipient && !isInternal && (
+              {isMessage && props.messageRecipientName && !isInternal && (
                 <Text
                   variant="body-sm"
                   style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
                 >
-                  {props.messageRecipient}
+                  {props.messageRecipientName}
                 </Text>
               )}
             </Stack>

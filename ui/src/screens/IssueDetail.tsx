@@ -87,6 +87,13 @@ const CURRENCY_SYMBOL: Record<string, string> = {
   EUR: '€',
 };
 
+// Generic guidance line shown under every proposal title (all personas).
+// Kept persona-agnostic on purpose — it tells the operator how to read and
+// act on the page rather than restating per-proposal details that already
+// appear in the title and KPI tiles.
+const PROPOSAL_REVIEW_GUIDANCE =
+  'Review the proposal details and decide: Approve to apply, or dismiss to skip';
+
 export function formatPrice(amount: number, currency: string): string {
   const sym = CURRENCY_SYMBOL[currency.toUpperCase()] ?? '';
   return `${sym}${amount.toFixed(2)}`;
@@ -457,10 +464,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
           timestamp={issue.updated_at}
           modelLine="Claude Sonnet 4.6"
           title={issue.title}
-          description={
-            issue.description ??
-            'Three voice variants. Pick one, approve, and the agent writes it straight to WooCommerce.'
-          }
+          description={PROPOSAL_REVIEW_GUIDANCE}
           imageUrl={typeof data.proposal?.target?.image_url === 'string' ? data.proposal.target.image_url : undefined}
           imageAlt={typeof data.proposal?.target?.image_alt === 'string' ? data.proposal.target.image_alt : undefined}
         />
@@ -938,10 +942,7 @@ function PriceIssueView(props: PriceViewProps) {
           timestamp={issue.updated_at}
           modelLine="Claude Haiku 4.5 · web_search"
           title={issue.title}
-          description={
-            issue.description ??
-            `Benchmarked against ${proposal.sources.length} comparable products. Approval writes regular_price to WooCommerce.`
-          }
+          description={PROPOSAL_REVIEW_GUIDANCE}
           imageUrl={typeof rawProposal?.target?.image_url === 'string' ? rawProposal.target.image_url : undefined}
           imageAlt={typeof rawProposal?.target?.image_alt === 'string' ? rawProposal.target.image_alt : undefined}
         />
@@ -1257,9 +1258,6 @@ function MessageIssueView(props: MessageViewProps) {
   const { issue, proposal, personaLabel } = props;
   const isInternal = proposal.noteType === 'internal';
   const customerName = proposal.customerName ?? 'the customer';
-  const recipientLabel = proposal.customerEmail
-    ? `${customerName} · ${proposal.customerEmail}`
-    : customerName;
   const orderLabel = proposal.orderNumber
     ? `#${proposal.orderNumber}`
     : `#${proposal.orderId}`;
@@ -1295,12 +1293,7 @@ function MessageIssueView(props: MessageViewProps) {
           timestamp={issue.updated_at}
           modelLine="Claude Haiku 4.5"
           title={issue.title}
-          description={
-            issue.description ??
-            (isInternal
-              ? `Internal note for order ${orderLabel}. Saves to wp-admin only — not visible to the customer.`
-              : `Customer-facing note for ${customerName}. Approval emails this directly to ${proposal.customerEmail ?? 'the customer'}.`)
-          }
+          description={PROPOSAL_REVIEW_GUIDANCE}
         />
 
         {/* KPI row */}
@@ -1487,7 +1480,6 @@ function MessageIssueView(props: MessageViewProps) {
         <ActionBar
           state="done"
           entity="message"
-          messageRecipient={recipientLabel}
           messageNoteType={proposal.noteType}
           scope={scope}
           onUndo={props.onUndo}
@@ -1500,7 +1492,8 @@ function MessageIssueView(props: MessageViewProps) {
           productBound={productBound}
           busy={props.busy as 'approve' | 'reject' | null}
           disabled={!props.reviewable}
-          messageRecipient={recipientLabel}
+          messageRecipientName={customerName}
+          messageRecipientEmail={proposal.customerEmail}
           messageNoteType={proposal.noteType}
           onApprove={props.onApprove}
           onReject={props.onReject}
