@@ -758,12 +758,35 @@ a {
   --color-error: var(--wpds-color-fg-content-error);
   --color-link: var(--wpds-color-fg-interactive-brand, var(--wpds-color-bg-interactive-brand-strong));
   --font-sans: var(--wpds-typography-font-family-body);
+  /* Re-point Agenttic's type scale at WPDS typography tokens so the chat
+     reads in the app's voice, not Big Sky's. Mapped by semantic role:
+     base → body-md (the body size used elsewhere), sm → sm, xs → xs, each
+     with its matching WPDS line-height. Agenttic's -.01em tracking is reset
+     to normal (WPDS has no negative tracking). Weights collapse to the WPDS
+     scale: medium/semibold/bold all resolve to `medium` — WPDS exposes only
+     regular + medium, and the operator UI renders no bold anywhere, so the
+     chat matches (see DESIGN.md Typography). The remaining hardcoded sizes
+     in Agenttic live only in its ImageUploader and chart sub-components,
+     which this drawer doesn't surface. */
+  --text-base: var(--wpds-typography-font-size-md);
+  --text-base--line-height: var(--wpds-typography-line-height-md);
+  --text-base--tracking: normal;
+  --text-sm: var(--wpds-typography-font-size-sm);
+  --text-sm--line-height: var(--wpds-typography-line-height-sm);
+  --text-xs: var(--wpds-typography-font-size-xs);
+  --text-xs--line-height: var(--wpds-typography-line-height-xs);
+  --font-weight-medium: var(--wpds-typography-font-weight-medium);
+  --font-weight-semibold: var(--wpds-typography-font-weight-medium);
+  --font-weight-bold: var(--wpds-typography-font-weight-medium);
 }
 .wa-chat-stack {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Gap between the agent picker above and the chat content (suggestions /
+     messages) below — 24px = padding-2xl at the standard density. */
+  margin-top: var(--wpds-dimension-padding-2xl);
 }
 .wa-chat-stack [data-slot="messages"] {
   padding-left: var(--wpds-dimension-padding-md);
@@ -771,6 +794,9 @@ a {
 }
 .wa-chat-stack [data-slot="chat-input"] {
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
+  /* 24px gap (padding-2xl at standard density) above the composer's top
+     border, separating the chat content from the input divider. */
+  margin-top: var(--wpds-dimension-padding-2xl);
   border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
 }
 

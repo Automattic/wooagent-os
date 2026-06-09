@@ -391,7 +391,6 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
           score={bestSeo ?? undefined}
           hint="Product-copy rubric · out of 100"
         />
-        <Kpi label="Est. impact" value="+14% CTR" hint="on product listing pages" tone="success" />
       </div>
 
       {counterStrip}

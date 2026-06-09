@@ -51,7 +51,11 @@ export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Pro
                 color: TONE_FG[tone],
                 fontSize: 'var(--wpds-typography-font-size-lg)',
                 fontWeight: 700,
-                lineHeight: 'var(--wpds-typography-line-height-lg)',
+                // Snug line-height (20px, between line-height-xs's 16px and the
+                // default line-height-lg's 28px) so a value that wraps to two
+                // lines — e.g. a long product name in SCOPE — reads as a compact
+                // title without crowding. Single-line values are unaffected.
+                lineHeight: 'var(--wpds-typography-line-height-sm)',
               }}
             >
               {value ?? '—'}

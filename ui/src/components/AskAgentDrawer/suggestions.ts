@@ -47,11 +47,11 @@ const CHIEF_OF_STAFF_DEFAULT = [
 const SPECIALIST_SUGGESTIONS: Record<Exclude<AskAgent, 'chief_of_staff'>, string[]> = {
   marketing: [
     'What did you draft this week?',
-    'What’s our voice for towels?',
+    'What’s our brand voice?',
   ],
   pricing: [
     'What price changes have you recommended this month?',
-    'Look at the Linen Napkin pricing.',
+    'How do you decide what to reprice?',
   ],
   'sales-support': [
     'What customer notes did you draft last week?',

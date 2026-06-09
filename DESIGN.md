@@ -113,14 +113,14 @@ The seven agent identities each have a `bg` / `ink` pair, exposed as CSS variabl
 
 Two previous sites have been retired:
 
-- The brand-header tile in `LeftNav` previously used the marketing persona color, then moved to a WPDS brand-indigo "W" tile, and is now the WooAgent logo asset (see "Brand logo" below) — no persona color involved at any stage now.
+- The brand-header tile in `LeftNav` previously used the marketing persona color; it now uses a WPDS brand-indigo "W" tile (see "Brand logo" below) — no persona color involved.
 - The persona-colored `KindBadge` "kind pill" on board cards (CONTENT / CAMPAIGN / EMAIL) was removed entirely when the queue moved to DataViews (2026-05-16). Agent identity via `PersonaAvatar` is the canonical visual signal — Kind was redundant on top of it.
 
 **Don't expand this exception further.** A second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. The exception is small on purpose — broadening it makes the UI feel costumed.
 
 ### Brand logo (WooAgent-owned)
 
-The brand mark in the `LeftNav` header is a raster logo asset — a circular black badge with a white horse head — at `ui/src/assets/wooagent-logo.png`, rendered as a 40×40 `<img>` (marked `// CUSTOM:` in `LeftNav.tsx`). WPDS has no product-logo component, so this is a deliberate off-system element. The PNG carries its own black circular badge, which reads against the `#1e1e1e` sidebar surface, so no tile wrapper or background token is applied. The "WooAgent" wordmark beside it uses `Text variant="heading-md"` (white, inherited from `.wa-sidebar`) with an off-token `fontWeight: 700` inline style (marked `// CUSTOM:`). WPDS exposes no `bold` weight — only `regular` and `medium` — so matching the approved 700-weight brand lockup requires going off-token. This is a brand-header-only exception; everywhere else, text stays on the WPDS weight tokens.
+The brand mark in the `LeftNav` header is a **"W" tile** — a 24×24 brand-indigo square with a centered white "W" — matching the i3.2 Figma (node `I2:9719;838:8826`), marked `// CUSTOM:` in `LeftNav.tsx`. WPDS has no product-logo component, so the lockup itself is a deliberate off-system element, but it's built from WPDS tokens: the fill is `--wpds-color-bg-interactive-brand-strong` (`#3858e9`, brand indigo), the radius is `--wpds-border-radius-sm`, and the white "W" inherits `color: #ffffff` from `.wa-sidebar`. The "WooAgent" wordmark beside it uses `Text variant="heading-md"` (white, inherited) with an off-token `fontWeight: 700` inline style; the tile's "W" matches that 700 weight. WPDS exposes no `bold` weight — only `regular` and `medium` — so matching the approved 700-weight brand lockup requires going off-token. This is a brand-header-only exception; everywhere else, text stays on the WPDS weight tokens. (The earlier raster horse-head asset at `ui/src/assets/wooagent-logo.png` is no longer used.)
 
 ### Sidebar surface color (WooAgent-owned)
 
@@ -223,6 +223,8 @@ Uses WPDS intent variants only (`high`, `medium`, `low`, `stable`, `informationa
 ### `AskAgentDrawer` (`ui/src/components/AskAgentDrawer.tsx`)
 
 Right-side drawer triggered from the "Ask agent" button in `PageGlobalActions` (or globally via ⌘K / Ctrl+K). Conversational chat with the relevant persona. Streaming is a single steady spinner — no typewriter, no shimmer.
+
+The message transcript, composer, and send button are composed from `@automattic/agenttic-ui` (the drawer shell, header, agent `Picker`, suggestion rows, `ThinkingBlock`, and chips stay WooAgent-native). Agenttic ships its own design language, so it's re-skinned to WPDS in the `.wa-drawer .agenttic` block of `app.css` by re-pointing its CSS custom properties: colors (`--color-*`) → WPDS color tokens, and **type styles** (`--text-base/sm/xs` + their line-heights, `--font-weight-*`, `--font-sans`) → the WPDS typography scale. The type mapping is by semantic role — `base → body-md`, `sm → sm`, `xs → xs` — and Agenttic's three weights all collapse to WPDS `medium` (WPDS has no bold; the operator UI renders none either). Agenttic's negative letter-spacing is reset to `normal`. A few sizes Agenttic hardcodes with `!important` live only in its `ImageUploader` and chart sub-components, which this drawer doesn't surface, so they're left alone.
 
 ### `EditPersonaModal` (`ui/src/components/EditPersonaModal.tsx`)
 
