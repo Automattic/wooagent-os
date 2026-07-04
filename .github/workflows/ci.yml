@@ -56,7 +56,7 @@ jobs:
       - run: go test ./...
 
   ui:
-    name: UI (typecheck + build)
+    name: UI (test + typecheck + build)
     needs: changes
     if: ${{ needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -73,4 +73,5 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - run: npm ci
+      - run: npm test
       - run: npm run build
