@@ -15,7 +15,12 @@ import { RunStatusBadge } from '../components/RunStatusBadge';
 import PageGlobalActions from '../components/PageGlobalActions';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { useAskAgentContext } from '../lib/askAgent';
-import { formatDateTime } from '../lib/boardItems';
+import {
+  formatDateTime,
+  personaDisplayName,
+  relativeTime,
+} from '../lib/boardItems';
+import { formatLatency, triggerLabel } from '../lib/run';
 import { runToVisible } from '../lib/visibleItems';
 
 interface Props {
@@ -26,41 +31,6 @@ interface Props {
    *  board picks up any new issue the run created without waiting for
    *  the 10s background poll. */
   onRunTerminal?: () => void;
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '—';
-  const diffMs = Date.now() - then;
-  const min = Math.round(diffMs / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const days = Math.round(hr / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
-}
-
-function personaDisplayName(slug: string): string {
-  if (slug === 'marketing') return 'Marketing & SEO';
-  if (slug === 'inventory') return 'Inventory manager';
-  if (slug === 'sales-support') return 'Sales support';
-  if (slug === 'chief') return 'Chief of staff';
-  return slug.charAt(0).toUpperCase() + slug.slice(1);
-}
-
-function triggerLabel(trigger: Run['trigger']): string {
-  switch (trigger) {
-    case 'tick':
-      return 'Scheduled';
-    case 'manual':
-      return 'Manual';
-    case 'bootstrap':
-      return 'Bootstrap';
-    case 'retry':
-      return 'Retry';
-  }
 }
 
 // Safely pull a named array out of the turn_event blob for trace rendering.
@@ -362,11 +332,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                 {run.latency_ms !== null && (
                   <Stack direction="column" gap="xs">
                     <span className="wa-eyebrow">Latency</span>
-                    <Text variant="body-sm">
-                      {run.latency_ms >= 1000
-                        ? `${(run.latency_ms / 1000).toFixed(1)}s`
-                        : `${run.latency_ms}ms`}
-                    </Text>
+                    <Text variant="body-sm">{formatLatency(run.latency_ms)}</Text>
                   </Stack>
                 )}
                 {run.issue_id && (
@@ -533,9 +499,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                           color: 'var(--wpds-color-fg-content-neutral-weak)',
                         }}
                       >
-                        {r.latency_ms >= 1000
-                          ? `${(r.latency_ms / 1000).toFixed(1)}s`
-                          : `${r.latency_ms}ms`}
+                        {formatLatency(r.latency_ms)}
                       </Text>
                     )}
                   </Stack>

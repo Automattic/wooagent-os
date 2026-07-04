@@ -32,6 +32,29 @@ interface Props {
   onComplete(): void;
 }
 
+export async function probeOnboardingResume(
+  connection: Connection,
+): Promise<{ store: Store | null; provider: ModelProvider | null }> {
+  const [storeRes, providerRes] = await Promise.all([
+    api.stores.list(connection).catch((e) => {
+      if (e instanceof ApiError && e.status === 401) throw e;
+      return { stores: [] as Store[] };
+    }),
+    api.modelProviders
+      .list(connection)
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 401) throw e;
+        return { providers: [] as ModelProvider[] };
+      }),
+  ]);
+  const paired =
+    storeRes.stores.find((s) => s.status === 'paired') ?? null;
+  return {
+    store: paired ?? storeRes.stores[0] ?? null,
+    provider: providerRes.providers[0] ?? null,
+  };
+}
+
 // Maps the URL suffix back to the step key. Anything else falls through to
 // "daemon" (the resume index handles redirects from /onboard root).
 function keyFromPath(pathname: string): OnboardingStepKey {
@@ -63,23 +86,10 @@ export default function OnboardingShell({
     let cancelled = false;
     (async () => {
       try {
-        const [storeRes, providerRes] = await Promise.all([
-          api.stores.list(connection).catch((e) => {
-            if (e instanceof ApiError && e.status === 401) throw e;
-            return { stores: [] as Store[] };
-          }),
-          api.modelProviders
-            .list(connection)
-            .catch((e) => {
-              if (e instanceof ApiError && e.status === 401) throw e;
-              return { providers: [] as ModelProvider[] };
-            }),
-        ]);
+        const resume = await probeOnboardingResume(connection);
         if (cancelled) return;
-        const paired =
-          storeRes.stores.find((s) => s.status === 'paired') ?? null;
-        setStore(paired ?? storeRes.stores[0] ?? null);
-        setProvider(providerRes.providers[0] ?? null);
+        setStore(resume.store);
+        setProvider(resume.provider);
       } finally {
         if (!cancelled) setProbed(true);
       }
