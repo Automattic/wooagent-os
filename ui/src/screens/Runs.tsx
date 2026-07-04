@@ -10,51 +10,14 @@ import PageGlobalActions from '../components/PageGlobalActions';
 import { useAskAgentContext } from '../lib/askAgent';
 import { runToVisible } from '../lib/visibleItems';
 import { isLongReason, summarizeReason } from '../lib/runText';
+import { personaDisplayName, relativeTime } from '../lib/boardItems';
+import { formatLatency, triggerLabel } from '../lib/run';
 
 const PAGE_SIZE = 50;
 
 interface Props {
   connection: Connection;
   onAskAgent: () => void;
-}
-
-function relativeTime(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return '—';
-  const diffMs = Date.now() - then;
-  const min = Math.round(diffMs / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const days = Math.round(hr / 24);
-  return `${days} day${days === 1 ? '' : 's'} ago`;
-}
-
-function triggerLabel(trigger: Run['trigger']): string {
-  switch (trigger) {
-    case 'tick':
-      return 'Scheduled';
-    case 'manual':
-      return 'Manual';
-    case 'bootstrap':
-      return 'Bootstrap';
-    case 'retry':
-      return 'Retry';
-  }
-}
-
-function personaDisplayName(slug: string): string {
-  if (slug === 'marketing') return 'Marketing & SEO';
-  if (slug === 'inventory') return 'Inventory manager';
-  if (slug === 'sales-support') return 'Sales support';
-  if (slug === 'chief') return 'Chief of staff';
-  return slug.charAt(0).toUpperCase() + slug.slice(1);
-}
-
-function formatLatency(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
 // Run row for a run whose skip/failure reason is long (see isLongReason). The
@@ -384,9 +347,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                                   'var(--wpds-color-fg-content-neutral-weak)',
                               }}
                             >
-                              {run.latency_ms >= 1000
-                                ? `${(run.latency_ms / 1000).toFixed(1)}s`
-                                : `${run.latency_ms}ms`}
+                              {formatLatency(run.latency_ms)}
                             </Text>
                           )}
                           {run.skip_reason && (
