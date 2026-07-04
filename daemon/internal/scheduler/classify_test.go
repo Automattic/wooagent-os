@@ -24,8 +24,10 @@ func TestClassify(t *testing.T) {
 		{"mcp session lost is transient", fmt.Errorf("call: %w", mcp.ErrSessionLost), FailureTransient, "MCP session"},
 		{"mcp transport is transient", fmt.Errorf("call: %w", mcp.ErrTransport), FailureTransient, "MCP transport"},
 		{"http 429 in message is transient", errors.New("anthropic http 429: rate limited"), FailureTransient, "rate limit"},
+		{"standalone rate limit message is transient", errors.New("anthropic rate limit exceeded"), FailureTransient, "rate limit"},
 		{"http 401 is permanent", errors.New("anthropic http 401: bad key"), FailurePermanent, "auth"},
 		{"http 403 is permanent", errors.New("openai http 403: forbidden"), FailurePermanent, "auth"},
+		{"invalid api key message is permanent", errors.New("anthropic invalid api key"), FailurePermanent, "auth"},
 		{"unknown error defaults to transient", errors.New("some weird thing"), FailureTransient, "unknown error"},
 		{
 			"per-run budget exceeded is permanent",
