@@ -77,6 +77,9 @@ Used in **one place only**: the agent avatar squares in the sidebar (`PersonaAva
 ## Build & dev
 
 - `cd ui && npm run dev` — port 5173. Connects to a local daemon via stored bearer token.
+- `cd ui && npm test` — run the Vitest + React Testing Library suite once.
+- `cd ui && npm run test:watch` — run Vitest in watch mode while developing UI behavior.
+- UI tests live next to the code they cover as `*.test.ts` / `*.test.tsx`; shared test setup and browser polyfills live in `ui/src/test/setup.ts`.
 - `scripts/build-companion-plugin-zip.sh` — packages the Companion Plugin for upload to a Woo store. Output at `build/wooagent-companion.zip`.
 
 ## Manifest refresh
