@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Full history so the changelog generator can read prior tags
           # to build the release notes.
@@ -38,7 +38,7 @@ jobs:
           cache-dependency-path: daemon/go.sum
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           # Node is required because goreleaser's before-hooks build the
           # React UI and copy it into the daemon's embed dir before
