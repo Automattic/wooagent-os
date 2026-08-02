@@ -280,8 +280,55 @@ func specialistSuggestions(ctx context.Context, db *sql.DB, agent ask.AgentSlug)
 	return trimSuggestions(out, 4)
 }
 
+// pairedSince returns the paired store's paired_at timestamp, used as the
+// floor for which proposals may seed a chip.
+//
+// This is load-bearing, not defensive. `issues` has no store column, so a
+// proposal carries no record of which store it was made against. Without
+// a floor, re-pairing to a different store leaves months of proposals
+// naming products from the *previous* catalog — which is the exact bug
+// DSGWOO-1371 was filed to fix, arriving through a different door.
+// Observed live: a store paired 2026-08-02 served Pricing chips seeded
+// from May and June proposals.
+//
+// Matches the store the daemon's MCP client actually resolves to —
+// `status = 'paired' ORDER BY paired_at DESC LIMIT 1`, same as
+// cli.pairedStoreTarget (DSGWOO-1470). If those two ever disagree, chips
+// describe one store while approvals write to another.
+//
+// Returns "" when nothing is paired, which disables the floor. That's the
+// right default: with no paired store there's no catalog to contradict,
+// and headless/CI runs resolve MCP from the environment instead.
+//
+// Both columns are daemon-written RFC3339 (`2026-08-02T15:40:04Z`), so
+// the caller's lexicographic `>=` is a valid time comparison. Don't
+// compare either against SQLite's `datetime('now')`, which uses a space
+// separator — see readQueueState.
+func pairedSince(ctx context.Context, db *sql.DB) string {
+	var pairedAt string
+	err := db.QueryRowContext(ctx, `
+		SELECT COALESCE(paired_at, '')
+		FROM stores
+		WHERE status = 'paired'
+		ORDER BY paired_at DESC
+		LIMIT 1
+	`).Scan(&pairedAt)
+	if err != nil {
+		// sql.ErrNoRows is the ordinary "nothing paired yet" case.
+		return ""
+	}
+	return pairedAt
+}
+
 // groundedSuggestions turns this persona's recent proposals into
 // store-aware questions, at most one per distinct subject.
+//
+// Only proposals made since the current store was paired are eligible —
+// see pairedSince. Right after a re-pair that means specialists show
+// generics until the personas have proposed against the new catalog,
+// which is correct: we genuinely don't know those products exist yet, and
+// the issue's acceptance criteria call for staying generic rather than
+// guessing.
 //
 // Dismissed and rejected proposals are skipped: the operator has already
 // said no to those, and leading the empty-thread state with them invites
@@ -296,9 +343,10 @@ func groundedSuggestions(ctx context.Context, db *sql.DB, persona string, want i
 		FROM issues
 		WHERE persona = ?
 		  AND status NOT IN ('dismissed', 'rejected')
+		  AND created_at >= ?
 		ORDER BY created_at DESC
 		LIMIT ?
-	`, persona, subjectScanLimit)
+	`, persona, pairedSince(ctx, db), subjectScanLimit)
 	if err != nil {
 		return nil
 	}

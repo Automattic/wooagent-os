@@ -140,6 +140,99 @@ func TestHandleAskSuggestions_DedupesRepeatedSubjects(t *testing.T) {
 	}
 }
 
+// TestHandleAskSuggestions_IgnoresProposalsFromAPreviousStore is the
+// regression test for the bug this shipped with: `issues` has no store
+// column, so before the paired_at floor a re-pair left specialists
+// naming products from the catalog they used to be connected to.
+//
+// Observed live — a store paired 2026-08-02 served Pricing chips seeded
+// from May and June proposals made against a different store.
+func TestHandleAskSuggestions_IgnoresProposalsFromAPreviousStore(t *testing.T) {
+	srv, db := newSuggestionsHarness(t)
+	pairedAt := time.Now().Add(-2 * time.Hour)
+	seedPairedStore(t, db, "store_current", pairedAt)
+
+	// Made against the store we used to be paired with.
+	seedProposal(t, db, "i_old", "pricing", "in_review", "product_price_change",
+		"Price change · Product From Old Store · $10.00 → $12.00 (+20.0%)",
+		pairedAt.Add(-30*24*time.Hour))
+	// Made against the store we're paired with now.
+	seedProposal(t, db, "i_new", "pricing", "in_review", "product_price_change",
+		"Price change · Product From Current Store · $20.00 → $22.00 (+10.0%)",
+		pairedAt.Add(10*time.Minute))
+
+	resp := suggestionsRequest(t, srv, "pricing", "board")
+	for _, s := range resp {
+		if strings.Contains(s, "Product From Old Store") {
+			t.Errorf("chip names a product from a previously paired store: %q", s)
+		}
+	}
+	if !has(resp, "Why did you propose that price for the Product From Current Store?") {
+		t.Errorf("expected a chip from the current store's proposals; got %v", resp)
+	}
+}
+
+// TestHandleAskSuggestions_FreshPairingShowsGenerics asserts the state
+// right after re-pairing: nothing has been proposed against the new
+// catalog yet, so we stay generic rather than guessing.
+func TestHandleAskSuggestions_FreshPairingShowsGenerics(t *testing.T) {
+	srv, db := newSuggestionsHarness(t)
+	pairedAt := time.Now().Add(-1 * time.Minute)
+	seedPairedStore(t, db, "store_fresh", pairedAt)
+	seedProposal(t, db, "i_stale", "marketing", "in_review", "product_description_rewrite",
+		"Product description rewrite · Product From Old Store",
+		pairedAt.Add(-90*24*time.Hour))
+
+	resp := suggestionsRequest(t, srv, "marketing", "board")
+	if !has(resp, "What did you draft this week?") {
+		t.Errorf("expected generics after a fresh pairing; got %v", resp)
+	}
+	for _, s := range resp {
+		if strings.Contains(s, "Product From Old Store") {
+			t.Errorf("expected no grounded chip after a fresh pairing; got %q", s)
+		}
+	}
+}
+
+// TestHandleAskSuggestions_NoPairedStoreDisablesTheFloor covers the
+// headless / CI case: MCP resolves from the environment, no store row
+// exists, and there's no catalog to contradict — so proposals stay
+// eligible rather than the floor silently blanking every chip.
+func TestHandleAskSuggestions_NoPairedStoreDisablesTheFloor(t *testing.T) {
+	srv, db := newSuggestionsHarness(t)
+	seedProposal(t, db, "i_env", "pricing", "in_review", "product_price_change",
+		"Price change · Env Store Product · $5.00 → $6.00 (+20.0%)",
+		time.Now().Add(-48*time.Hour))
+
+	resp := suggestionsRequest(t, srv, "pricing", "board")
+	if !has(resp, "Why did you propose that price for the Env Store Product?") {
+		t.Errorf("expected grounded chip when no store is paired; got %v", resp)
+	}
+}
+
+// TestHandleAskSuggestions_UsesMostRecentPairing asserts we follow the
+// same row the daemon's MCP client resolves to — paired_at DESC — so
+// chips describe the store approvals actually write to.
+func TestHandleAskSuggestions_UsesMostRecentPairing(t *testing.T) {
+	srv, db := newSuggestionsHarness(t)
+	older := time.Now().Add(-10 * 24 * time.Hour)
+	newer := time.Now().Add(-1 * time.Hour)
+	seedPairedStore(t, db, "store_older", older)
+	seedPairedStore(t, db, "store_newer", newer)
+
+	// Between the two pairings — belongs to the older store only.
+	seedProposal(t, db, "i_between", "pricing", "in_review", "product_price_change",
+		"Price change · Between Pairings · $1.00 → $2.00 (+100.0%)",
+		older.Add(24*time.Hour))
+
+	resp := suggestionsRequest(t, srv, "pricing", "board")
+	for _, s := range resp {
+		if strings.Contains(s, "Between Pairings") {
+			t.Errorf("floor should track the newest pairing; got %q", s)
+		}
+	}
+}
+
 // TestSubjectFromTitle covers the title-parsing edge cases directly —
 // cheaper than driving each one through the handler.
 func TestSubjectFromTitle(t *testing.T) {
@@ -230,6 +323,23 @@ func seedIssue(t *testing.T, st *store.Store, id, persona, status string, create
 	)
 	if err != nil {
 		t.Fatalf("seed issue: %v", err)
+	}
+}
+
+// seedPairedStore inserts a paired store row. Only the columns the
+// suggestion floor reads are populated — status and paired_at.
+func seedPairedStore(t *testing.T, st *store.Store, id string, pairedAt time.Time) {
+	t.Helper()
+	ts := pairedAt.UTC().Format(time.RFC3339)
+	_, err := st.DB.Exec(
+		`INSERT INTO stores (id, url, mcp_endpoint, status, paired_at, created_at, updated_at)
+		 VALUES (?, ?, ?, 'paired', ?, ?, ?)`,
+		id, "https://"+id+".example.com",
+		"https://"+id+".example.com/wp-json/mcp/mcp-adapter-default-server",
+		ts, ts, ts,
+	)
+	if err != nil {
+		t.Fatalf("seed paired store: %v", err)
 	}
 }
 
