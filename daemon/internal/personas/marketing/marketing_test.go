@@ -1,12 +1,16 @@
 package marketing
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
@@ -230,6 +234,84 @@ func TestFetchVoiceCorpus_FiltersExcludesAndSorts(t *testing.T) {
 		if s.Name == "Draft" {
 			t.Errorf("non-publish status leaked into corpus")
 		}
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns
+// whatever was written. fetchVoiceCorpus logs diagnostics via fmt.Printf
+// (the established idiom in this file), so this is the seam for asserting
+// on them without changing the function's signature.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+
+	fn()
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	return out
+}
+
+func TestFetchVoiceCorpus_SparseCorpusLogsDiagnostic(t *testing.T) {
+	// Thin-copy store: only two products survive filtering, which is below
+	// the sparse floor of 3. DSGWOO-1329 — the operator needs a log line
+	// explaining why voice scoring will come back missing.
+	fake := &fakeMCP{
+		listProductsResp: []byte(`{"products":[
+			{"id":10,"name":"P10","status":"publish","description":"Stylish ribbed wool slippers."},
+			{"id":11,"name":"P11","status":"publish","description":"Soft merino beanie."},
+			{"id":99,"name":"Excluded","status":"publish","description":"the product being rewritten"},
+			{"id":20,"name":"Draft","status":"draft","description":"filtered out by status"}
+		]}`),
+	}
+
+	var got []corpusSample
+	var err error
+	out := captureStdout(t, func() {
+		got, err = fetchVoiceCorpus(context.Background(), fake, 99)
+	})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d corpus samples, want 2", len(got))
+	}
+	if !strings.Contains(out, "voice corpus has 2 samples (want 5)") {
+		t.Errorf("expected sparse-corpus diagnostic, got stdout: %q", out)
+	}
+}
+
+func TestFetchVoiceCorpus_HealthyCorpusIsSilent(t *testing.T) {
+	// At or above the sparse floor there's nothing to warn about — the log
+	// should not fire, or it'd be noise on every run of a well-stocked store.
+	fake := &fakeMCP{
+		listProductsResp: []byte(`{"products":[
+			{"id":10,"name":"P10","status":"publish","description":"aaaaaaaaaaaaaaaaaaaa"},
+			{"id":11,"name":"P11","status":"publish","description":"bbbbbbbbbbbbbbbbbbbb"},
+			{"id":12,"name":"P12","status":"publish","description":"cccccccccccccccccccc"}
+		]}`),
+	}
+
+	out := captureStdout(t, func() {
+		if _, err := fetchVoiceCorpus(context.Background(), fake, 99); err != nil {
+			t.Errorf("unexpected err: %v", err)
+		}
+	})
+	if strings.Contains(out, "voice corpus has") {
+		t.Errorf("healthy corpus should not log a sparse diagnostic, got: %q", out)
 	}
 }
 
@@ -474,6 +556,16 @@ func TestComputeDrafting(t *testing.T) {
 	}
 }
 
+func TestCooldown_IncludesSkippedWindow(t *testing.T) {
+	c := Marketing{}.Cooldown()
+	if c.TargetKey != "product_id" {
+		t.Errorf("TargetKey: got %q want product_id", c.TargetKey)
+	}
+	if c.Skipped != 7*24*time.Hour {
+		t.Errorf("Skipped: got %v want 168h", c.Skipped)
+	}
+}
+
 func TestBuildPromptUserMessage_ColdDraftMode(t *testing.T) {
 	p := product{
 		Name: "Wool Slippers", SKU: "wool-slippers",
@@ -539,7 +631,7 @@ func TestDraftColdDraftBatch_PacksAsSiblings(t *testing.T) {
 			Target:       map[string]any{"product_id": p.ID},
 		}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill desc", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill desc", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}
@@ -565,7 +657,7 @@ func TestDraftColdDraftBatch_DropsErrors(t *testing.T) {
 		}
 		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}
@@ -587,7 +679,7 @@ func TestDraftColdDraftBatch_DropsSkippedDrafts(t *testing.T) {
 		}
 		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
 	}
-	got, _ := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, _ := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	total := 1 + len(got.BatchSiblings)
 	if total != 3 {
 		t.Errorf("expected 3 children, got %d", total)
@@ -603,7 +695,7 @@ func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
 		}
 		return personas.Drafted{Title: "d1", ProposalType: "product_cold_draft"}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}

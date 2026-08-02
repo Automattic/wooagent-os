@@ -25,20 +25,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history so the changelog generator can read prior tags
           # to build the release notes.
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           cache-dependency-path: daemon/go.sum
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # Node is required because goreleaser's before-hooks build the
           # React UI and copy it into the daemon's embed dir before
@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           # Keep a stable major version; new minor/patch releases of
           # goreleaser within v2 are picked up automatically.

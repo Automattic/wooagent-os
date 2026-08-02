@@ -53,12 +53,24 @@ type Config struct {
 // handshake and the rest see the cached session. The session is automatically
 // invalidated when the server returns ErrSessionLost, so a follow-up
 // Initialize re-handshakes cleanly.
-type Client struct {
+// target is the connection identity: which store this client talks to and
+// how it authenticates. Mutable because the operator can re-pair to a
+// different store while the daemon runs — see Client.Retarget
+// (DSGWOO-1470).
+type target struct {
 	endpoint string
 	username string
 	password string
 	bearer   string
-	http     *http.Client
+}
+
+type Client struct {
+	// targetMu guards target. Held only long enough to copy the struct,
+	// never across a network call.
+	targetMu sync.RWMutex
+	target   target
+
+	http *http.Client
 
 	// initMu serializes Initialize callers. Held for the whole call, including
 	// the HTTP round-trip; that's fine because Initialize fast-paths once a
@@ -79,12 +91,80 @@ func NewClient(cfg Config) *Client {
 		timeout = 30 * time.Second
 	}
 	return &Client{
+		target: target{
+			endpoint: cfg.Endpoint,
+			username: cfg.Username,
+			password: cfg.Password,
+			bearer:   cfg.BearerToken,
+		},
+		http: &http.Client{Timeout: timeout},
+	}
+}
+
+// Endpoint reports the URL this client currently talks to. Callers use it
+// to detect that the active connection no longer matches the paired store.
+func (c *Client) Endpoint() string {
+	c.targetMu.RLock()
+	defer c.targetMu.RUnlock()
+	return c.target.endpoint
+}
+
+// Retarget points the client at a different store. Returns true when the
+// target actually changed.
+//
+// This exists because the daemon holds one *Client for its whole lifetime
+// — the PEP, the personas and the Ask Agent tools all share it — while the
+// operator can re-pair to a different store at any time. Without this,
+// re-pairing had no effect until the daemon was restarted, and every run
+// kept calling the old store (DSGWOO-1470).
+//
+// Any cached session id is dropped: a session established with the old
+// store is meaningless to the new one, and keeping it would make the first
+// post-retarget call fail with ErrSessionLost.
+func (c *Client) Retarget(cfg Config) bool {
+	next := target{
 		endpoint: cfg.Endpoint,
 		username: cfg.Username,
 		password: cfg.Password,
 		bearer:   cfg.BearerToken,
-		http:     &http.Client{Timeout: timeout},
 	}
+
+	c.targetMu.Lock()
+	changed := c.target != next
+	if changed {
+		c.target = next
+	}
+	c.targetMu.Unlock()
+
+	if changed {
+		c.setSessionID("")
+	}
+	return changed
+}
+
+// newRequest builds an authenticated JSON-RPC POST against the current
+// target. Both the request/response and notification paths go through
+// here so auth and endpoint can never drift apart between them.
+func (c *Client) newRequest(ctx context.Context, body []byte) (*http.Request, error) {
+	c.targetMu.RLock()
+	t := c.target
+	c.targetMu.RUnlock()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if t.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+t.bearer)
+	} else {
+		req.SetBasicAuth(t.username, t.password)
+	}
+	if sid := c.getSessionID(); sid != "" {
+		req.Header.Set("Mcp-Session-Id", sid)
+	}
+	return req, nil
 }
 
 // MCP-adapter meta-tool names. The WordPress MCP Adapter exposes a fixed
@@ -248,7 +328,42 @@ func (c *Client) Initialize(ctx context.Context) (ServerInfo, error) {
 
 // CallTool invokes a tool by name with the given arguments. The result is
 // the raw tools/call envelope; callers unwrap the content payload.
+//
+// Re-handshakes and retries once when the server reports the session is
+// gone. The daemon holds one Client — and therefore one MCP session — for
+// its whole lifetime, while the server expires sessions on its own
+// schedule. A persona calls Initialize once at the top of Draft and then
+// makes several tool calls, so without this the first call after an
+// expiry fails, handleEnvelopeError clears the cached id, and every
+// remaining call in that run goes out with no Mcp-Session-Id header at
+// all — surfacing to the operator as "Missing Mcp-Session-Id header"
+// (DSGWOO-1473).
+//
+// The recovery this performs is the one the package already assumed
+// happened: handleEnvelopeError's comment says a subsequent Initialize
+// re-handshakes, but nothing was performing that follow-up inside a run.
+//
+// Retries exactly once. If the fresh session is rejected too, that is a
+// real failure and the caller should see it rather than have the client
+// spin.
 func (c *Client) CallTool(ctx context.Context, name string, args any) (ToolCallResult, error) {
+	res, err := c.callToolOnce(ctx, name, args)
+	if err == nil || !errors.Is(err, ErrSessionLost) {
+		return res, err
+	}
+
+	// handleEnvelopeError has already cleared the cached id, so Initialize
+	// takes the handshake path rather than its fast path. Concurrent
+	// callers serialize on initMu; whichever loses the race sees the new
+	// session and fast-paths.
+	if _, initErr := c.Initialize(ctx); initErr != nil {
+		return ToolCallResult{}, fmt.Errorf("tools/call %s: re-initialize after session loss: %w", name, initErr)
+	}
+	return c.callToolOnce(ctx, name, args)
+}
+
+// callToolOnce is a single tools/call round-trip with no session recovery.
+func (c *Client) callToolOnce(ctx context.Context, name string, args any) (ToolCallResult, error) {
 	var result ToolCallResult
 	err := c.doRequest(ctx, "tools/call", map[string]any{
 		"name":      name,
@@ -306,19 +421,9 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	req, err := c.newRequest(ctx, body)
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	if c.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearer)
-	} else {
-		req.SetBasicAuth(c.username, c.password)
-	}
-	if sid := c.getSessionID(); sid != "" {
-		req.Header.Set("Mcp-Session-Id", sid)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -344,7 +449,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 		if jsonErr := json.Unmarshal(raw, &rpcResp); jsonErr == nil && rpcResp.Error != nil {
 			return c.handleEnvelopeError(method, rpcResp.Error.Message)
 		}
-		return fmt.Errorf("http %d: %s", resp.StatusCode, string(raw))
+		return NewStatusError(c.Endpoint(), resp.StatusCode, raw)
 	}
 	var rpcResp rpcResponse
 	if err := json.Unmarshal(raw, &rpcResp); err != nil {
@@ -398,19 +503,9 @@ func (c *Client) doNotification(ctx context.Context, method string, params any) 
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+	req, err := c.newRequest(ctx, body)
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	if c.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearer)
-	} else {
-		req.SetBasicAuth(c.username, c.password)
-	}
-	if sid := c.getSessionID(); sid != "" {
-		req.Header.Set("Mcp-Session-Id", sid)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

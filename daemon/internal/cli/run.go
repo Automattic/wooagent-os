@@ -120,14 +120,15 @@ func newRunCmd() *cobra.Command {
 			// MCP wiring is optional. The approve endpoint requires it; everything
 			// else (kanban, issue detail, list/create) runs without.
 			//
-			// TODO(plan #4 — Companion Plugin): cut MCP over to paired stores.
-			// Once the device-pair handshake lands and `stores` rows can reach
-			// status='paired', resolve mcp.Client config from the row +
-			// keychain (token_ref) here, with env-var fallback. The auth
-			// shape (bearer vs Basic vs WP App Password issued at pair time)
-			// is decided by the plugin work, so we stay env-var-only here
-			// until then to avoid locking in an assumption.
-			mcpClient := loadMCPClient(cmd.OutOrStdout())
+			// The paired store is the source of truth; env vars are the
+			// headless/CI fallback. A reconciler below keeps this client
+			// pointed at the current store, so re-pairing takes effect
+			// without a daemon restart (DSGWOO-1470).
+			var mcpClient *mcp.Client
+			if target, ok := resolveMCPTarget(ctx, st.DB, secretStore, cmd.OutOrStdout()); ok {
+				mcpClient = mcp.NewClient(target.Config)
+				fmt.Fprintf(cmd.OutOrStdout(), "→ mcp: using %s (%s)\n", target.Label, target.Source)
+			}
 
 			// Build the PEP. The manifest is the trust allowlist; the PEP wraps
 			// the MCP client so callers can never reach MCP directly. When the
@@ -176,19 +177,29 @@ func newRunCmd() *cobra.Command {
 			go srv.Abilities().RunAll(ctx)
 			srv.Abilities().SchedulePeriodic(ctx)
 
-			// 30-day TTL purge for dismissed issues (DSGWOO-1277). Runs
-			// once at startup then every 24h until shutdown. Override the
-			// window via WOOAGENT_DISMISS_TTL_DAYS (e.g., 0 for immediate
-			// during demos).
+			// Keep the shared MCP client pointed at the current paired
+			// store. Without this, re-pairing to a different store has
+			// no effect on personas or Approve until the daemon is
+			// restarted (DSGWOO-1470).
+			go startMCPReconciler(ctx, mcpClient, st.DB, secretStore, cmd.OutOrStdout())
+
+			// Background retention. Both sweeps run once at startup then
+			// every 24h until shutdown:
+			//   - dismissed-issue purge (DSGWOO-1277), WOOAGENT_DISMISS_TTL_DAYS
+			//   - terminal runs + orphaned turn_events (DSGWOO-1294),
+			//     WOOAGENT_RUNS_TTL_DAYS
 			ttlDays := dismissTTLDays(cmd.OutOrStdout())
+			runsDays := runsTTLDays(cmd.OutOrStdout())
 			sw := &sweeper.Sweeper{
-				DB:    st.DB,
-				TTL:   time.Duration(ttlDays) * 24 * time.Hour,
-				Every: 24 * time.Hour,
-				Out:   cmd.OutOrStdout(),
+				DB:      st.DB,
+				TTL:     ttlDuration(ttlDays),
+				RunsTTL: ttlDuration(runsDays),
+				Every:   24 * time.Hour,
+				Out:     cmd.OutOrStdout(),
 			}
 			go sw.Start(ctx)
 			fmt.Fprintf(cmd.OutOrStdout(), "→ sweeper: dismiss-TTL active (%d days; override via WOOAGENT_DISMISS_TTL_DAYS)\n", ttlDays)
+			fmt.Fprintf(cmd.OutOrStdout(), "→ sweeper: runs-retention active (%d days; override via WOOAGENT_RUNS_TTL_DAYS)\n", runsDays)
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)
@@ -270,25 +281,6 @@ func newRunCmd() *cobra.Command {
 	return c
 }
 
-// loadMCPClient assembles an MCP client from env vars if all three are set;
-// otherwise returns nil and writes a hint to out. The caller decides whether
-// nil is fatal (it isn't, for v0.1).
-func loadMCPClient(out interface{ Write([]byte) (int, error) }) *mcp.Client {
-	url := os.Getenv("WOOAGENT_MCP_URL")
-	user := os.Getenv("WOOAGENT_MCP_USER")
-	pass := os.Getenv("WOOAGENT_MCP_APP_PASSWORD")
-	if url == "" || user == "" || pass == "" {
-		return nil
-	}
-	return mcp.NewClient(mcp.Config{
-		Endpoint: url,
-		Username: user,
-		// WP shows app passwords with spaces for readability; strip them so
-		// pasted values from the admin UI work without preprocessing.
-		Password: strings.ReplaceAll(pass, " ", ""),
-	})
-}
-
 // loadSkillsForPersonas returns the embedded skill registry by default,
 // or whatever WOOAGENT_SKILLS_DIR points at if the env var is set.
 // Personas that need a specific skill look it up by name in this map;
@@ -342,6 +334,37 @@ func dismissTTLDays(out io.Writer) int {
 		return defaultDays
 	}
 	return n
+}
+
+// runsTTLDays reads WOOAGENT_RUNS_TTL_DAYS, the retention window for
+// terminal runs rows (DSGWOO-1294). Same contract as dismissTTLDays: a
+// positive day count, zero allowed as the demo / dogfood escape hatch.
+func runsTTLDays(out io.Writer) int {
+	const defaultDays = 30
+	raw := os.Getenv("WOOAGENT_RUNS_TTL_DAYS")
+	if raw == "" {
+		return defaultDays
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		fmt.Fprintf(out, "→ sweeper: ignoring invalid WOOAGENT_RUNS_TTL_DAYS=%q; using default %d\n", raw, defaultDays)
+		return defaultDays
+	}
+	return n
+}
+
+// ttlDuration converts a day count to the duration the Sweeper expects.
+//
+// Zero days means "purge everything eligible right now" — the documented
+// escape hatch for demos and dogfooding. The Sweeper reads a zero duration
+// as "field unset, use my default" (the idiomatic Go zero-value contract),
+// so zero has to become the smallest positive duration instead: every
+// candidate row's timestamp is then below the cutoff.
+func ttlDuration(days int) time.Duration {
+	if days <= 0 {
+		return time.Nanosecond
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // lessonsThreshold reads WOOAGENT_LESSONS_THRESHOLD (new-dismissals trigger; default 5).

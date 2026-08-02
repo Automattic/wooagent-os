@@ -1,11 +1,16 @@
-// Package sweeper implements the 30-day TTL purge for dismissed issues
-// (DSGWOO-1277). The Dismiss dialog promises operators that archived
-// proposals are permanently deleted 30 days after dismiss; this is the
-// background job that makes that true.
+// Package sweeper implements the daemon's background retention jobs.
 //
-// One Sweeper per daemon process. Start() fires SweepOnce immediately
-// (catches issues that crossed the TTL while the daemon was down) and
-// then loops on a 24-hour ticker.
+// Two independent sweeps, each with its own TTL, run on a shared ticker:
+//
+//   - SweepOnce — the 30-day purge for dismissed issues (DSGWOO-1277).
+//     The Dismiss dialog promises operators that archived proposals are
+//     permanently deleted 30 days after dismiss; this makes that true.
+//   - SweepRunsOnce — retention for terminal runs rows and orphaned
+//     turn_events (DSGWOO-1294). See runs.go.
+//
+// One Sweeper per daemon process. Start() fires both sweeps immediately
+// (catching rows that crossed a TTL while the daemon was down) and then
+// loops on a 24-hour ticker.
 package sweeper
 
 import (
@@ -34,6 +39,11 @@ type Sweeper struct {
 	Every time.Duration
 	Now   func() time.Time
 	Out   io.Writer
+
+	// RunsTTL is the retention window for terminal runs rows
+	// (DSGWOO-1294). Independent of TTL, which governs dismissed issues.
+	// Defaults to DefaultRunsTTL. See SweepRunsOnce in runs.go.
+	RunsTTL time.Duration
 }
 
 // SweepOnce runs a single sweep cycle. Returns the number of issues
@@ -116,9 +126,7 @@ func (s *Sweeper) SweepOnce(ctx context.Context) (int64, error) {
 // ctx is cancelled. Fire-and-forget: errors are logged to s.Out, never
 // returned (a transient DB hiccup shouldn't take down the daemon).
 func (s *Sweeper) Start(ctx context.Context) {
-	if _, err := s.SweepOnce(ctx); err != nil && s.Out != nil {
-		fmt.Fprintf(s.Out, "→ sweeper: initial sweep failed: %v\n", err)
-	}
+	s.cycle(ctx, "initial")
 	t := time.NewTicker(s.every())
 	defer t.Stop()
 	for {
@@ -126,10 +134,23 @@ func (s *Sweeper) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if _, err := s.SweepOnce(ctx); err != nil && s.Out != nil {
-				fmt.Fprintf(s.Out, "→ sweeper: cycle failed: %v\n", err)
-			}
+			s.cycle(ctx, "cycle")
 		}
+	}
+}
+
+// cycle runs both sweeps back to back. The dismissed-issue sweep goes
+// first so that any runs it orphans are eligible for the retention sweep
+// in the same pass rather than waiting another 24 hours.
+//
+// Each sweep's error is logged independently: a failure in one must not
+// skip the other, and neither should take down the daemon.
+func (s *Sweeper) cycle(ctx context.Context, label string) {
+	if _, err := s.SweepOnce(ctx); err != nil && s.Out != nil {
+		fmt.Fprintf(s.Out, "→ sweeper: %s dismissed-issue sweep failed: %v\n", label, err)
+	}
+	if _, err := s.SweepRunsOnce(ctx); err != nil && s.Out != nil {
+		fmt.Fprintf(s.Out, "→ sweeper: %s runs-retention sweep failed: %v\n", label, err)
 	}
 }
 
