@@ -3,7 +3,6 @@ package scheduler
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
@@ -15,9 +14,8 @@ import (
 // to decide whether to enqueue a retry; the reason lands in
 // runs.failure_reason for the run-log UI.
 //
-// Order matters: sentinel checks (errors.Is) come first, then the legacy
-// string matching, then the default. Every check is against a wrapped error
-// chain rather than a formatted message, so a persona adding context with
+// Every check matches against the wrapped error chain via errors.Is, never
+// against a formatted message, so a persona adding context with
 // fmt.Errorf("...: %w", err) cannot break classification.
 //
 // The conservative default for unknown errors is FailureTransient — better
@@ -45,10 +43,12 @@ func classify(err error) (FailureClass, string) {
 	if errors.Is(err, telemetry.ErrRunBudgetExceeded) {
 		return FailurePermanent, err.Error()
 	}
-	// Typed LLM failures. Every persona now calls through
-	// internal/llm{,/anthropic}, which returns *llm.APIStatusError wrapping
-	// one of these sentinels, so classification survives however the
-	// message is worded or wrapped (DSGWOO-1292).
+	// Typed LLM failures. Every LLM call in the daemon goes through
+	// internal/llm/anthropic.Client (or, on Marketing's OpenAI-compatible
+	// fallback, wraps the same type), so these arrive as
+	// *llm.APIStatusError and classify correctly however the message is
+	// worded or however many layers of fmt.Errorf("%w") wrap it.
+	// DSGWOO-1292 / DSGWOO-1467.
 	if errors.Is(err, llm.ErrRateLimited) {
 		return FailureTransient, "LLM rate limited"
 	}
@@ -61,22 +61,12 @@ func classify(err error) (FailureClass, string) {
 	if errors.Is(err, llm.ErrInvalidRequest) {
 		return FailurePermanent, "LLM rejected the request; check model name and prompt size"
 	}
-
-	// String fallback for LLM-shaped errors that don't come from our
-	// clients — a third-party SDK, or a path not yet migrated. Retained on
-	// purpose: it costs one strings.Contains on the failure path and it is
-	// what keeps a reworded upstream error from silently degrading to
-	// "unknown". Safe to delete once nothing can produce a bare-string LLM
-	// error.
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "http 429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "rate_limit_error") {
-		return FailureTransient, "LLM rate limited"
-	}
-	if strings.Contains(msg, "http 401") || strings.Contains(msg, "http 403") || strings.Contains(msg, "invalid api key") {
-		return FailurePermanent, "LLM auth failure; check provider API key in Settings"
-	}
 	// Conservative default: retry. Worst case we waste 3 retries before
 	// marking failed_permanent — which is still better than silently
 	// ignoring a flake.
+	//
+	// This is also where a genuinely untyped failure lands: an LLM
+	// transport error, an MCP error that isn't one of the sentinels above,
+	// a decode failure. Transient is right for all of them.
 	return FailureTransient, "unknown error: " + err.Error()
 }

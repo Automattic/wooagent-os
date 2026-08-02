@@ -24,16 +24,11 @@ func TestClassify(t *testing.T) {
 		{"deadline exceeded is transient", context.DeadlineExceeded, FailureTransient, "timed out"},
 		{"mcp session lost is transient", fmt.Errorf("call: %w", mcp.ErrSessionLost), FailureTransient, "MCP session"},
 		{"mcp transport is transient", fmt.Errorf("call: %w", mcp.ErrTransport), FailureTransient, "MCP transport"},
-		{"http 429 in message is transient", errors.New("anthropic http 429: rate limited"), FailureTransient, "rate limit"},
-		{"standalone rate limit message is transient", errors.New("anthropic rate limit exceeded"), FailureTransient, "rate limit"},
-		{"http 401 is permanent", errors.New("anthropic http 401: bad key"), FailurePermanent, "auth"},
-		{"http 403 is permanent", errors.New("openai http 403: forbidden"), FailurePermanent, "auth"},
-		{"invalid api key message is permanent", errors.New("anthropic invalid api key"), FailurePermanent, "auth"},
 		{"unknown error defaults to transient", errors.New("some weird thing"), FailureTransient, "unknown error"},
 
-		// Typed LLM errors (DSGWOO-1292). These are what the personas
-		// actually return now; the bare-string cases above are the retained
-		// fallback for anything that isn't one of our clients.
+		// Typed LLM errors. Every LLM call in the daemon routes through
+		// llm/anthropic.Client, so this is the only shape classify sees for
+		// a provider failure (DSGWOO-1292).
 		{
 			"typed rate limit is transient",
 			llm.NewAPIStatusError("anthropic", 429, []byte("slow down")),
@@ -88,5 +83,35 @@ func TestClassify(t *testing.T) {
 				t.Errorf("reason = %q, want substring %q", reason, tc.wantSub)
 			}
 		})
+	}
+}
+
+// TestClassify_BareStringLLMErrorsFallThrough pins the deliberate behavior
+// change from DSGWOO-1467, which removed the string-matching fallback.
+//
+// classify no longer reads error text at all. An LLM-shaped error that
+// arrives as a bare string is therefore NOT recognized — it lands on the
+// transient default. That is safe because no such path exists: every LLM
+// call routes through llm/anthropic.Client, Marketing's OpenAI-compatible
+// fallback wraps *llm.APIStatusError, the Reporting persona makes no LLM
+// calls, and lessons/digest.go already used the shared client.
+//
+// If this test ever starts failing because someone expects a bare string to
+// classify, the fix is to make that call site return a typed error — not to
+// reinstate string matching.
+func TestClassify_BareStringLLMErrorsFallThrough(t *testing.T) {
+	for _, raw := range []string{
+		"anthropic http 429: rate limited",
+		"anthropic http 401: bad key",
+		"openai http 403: forbidden",
+		"anthropic invalid api key",
+	} {
+		cls, reason := classify(errors.New(raw))
+		if cls != FailureTransient {
+			t.Errorf("classify(%q) = %q, want %q (the conservative default)", raw, cls, FailureTransient)
+		}
+		if !strings.HasPrefix(reason, "unknown error: ") {
+			t.Errorf("classify(%q) reason = %q, want the unknown-error default", raw, reason)
+		}
 	}
 }

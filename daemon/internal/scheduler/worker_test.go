@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
@@ -235,7 +236,11 @@ func TestWorker_PermanentError_NoRetry(t *testing.T) {
 		Persona: "marketing", Trigger: TriggerTick, ScheduledAt: fixed,
 	})
 	runner := &stubRunner{onRun: func(ctx context.Context, p personas.Persona, opts RunOpts) (personas.Result, error) {
-		return personas.Result{}, errors.New("anthropic http 401 invalid api key")
+		// A typed auth failure, which is what a persona actually returns
+		// now that they all call through llm/anthropic.Client. classify no
+		// longer inspects error text, so a bare "anthropic http 401" string
+		// would land on the transient default instead (DSGWOO-1467).
+		return personas.Result{}, llm.NewAPIStatusError("anthropic", 401, []byte("invalid api key"))
 	}}
 	w := &Worker{
 		Queue: q, Runner: runner,
