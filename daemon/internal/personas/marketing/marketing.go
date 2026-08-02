@@ -780,6 +780,12 @@ var _ mcpLister = (*mcp.Client)(nil)
 // is logged but the caller proceeds with whatever was assembled.
 func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([]corpusSample, error) {
 	const want = 5
+	// Below this many samples the prompt's empty/thin-corpus path usually
+	// makes the LLM emit a null voice score, which the validator clears and
+	// the UI renders as "Not yet scored". That's working as designed, but
+	// without a log line an operator staring at "Brand voice match: —" has
+	// no signal explaining why. DSGWOO-1329.
+	const sparseFloor = 3
 	type productListItem struct {
 		ID          int    `json:"id"`
 		Name        string `json:"name"`
@@ -848,6 +854,9 @@ func fetchVoiceCorpus(ctx context.Context, c mcpLister, excludeProductID int) ([
 	samples := make([]corpusSample, 0, len(filtered))
 	for _, p := range filtered {
 		samples = append(samples, corpusSample{Name: p.Name, Body: p.Description})
+	}
+	if len(samples) < sparseFloor {
+		fmt.Printf("marketing: voice corpus has %d samples (want %d); voice scoring will likely be missing\n", len(samples), want)
 	}
 	return samples, nil
 }
