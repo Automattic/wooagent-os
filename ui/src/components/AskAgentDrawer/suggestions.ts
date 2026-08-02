@@ -1,12 +1,24 @@
-// Per-agent + per-page suggestion seeds for the Ask Agent drawer.
+// Offline fallback for the Ask Agent drawer's suggestion chips.
+//
+// The daemon's GET /v1/ask/suggestions is the live source: it shapes CoS
+// chips from queue state and specialist chips from the persona's own
+// recent proposals, so a Pricing chip names a product the store actually
+// carries (DSGWOO-1371). This map is what renders when that endpoint is
+// unreachable — a transient 503 shouldn't leave the operator staring at
+// an empty row.
 //
 // Critical rule: every suggestion here is a query the corresponding
 // agent prompt's hand-trace eval passes. If a suggestion makes a promise
 // the LLM can't deliver on, the operator stops trusting the affordance
-// — pull the suggestion before adding it.
+// — pull the suggestion before adding it. That rules out naming specific
+// products here: this file can't see the catalog, and hardcoded example
+// names are exactly how the demo-catalog bug (towels and linen napkins
+// on a merino wool store) shipped. Keep these product-agnostic and let
+// the daemon do the grounding.
 //
-// Dynamic page-aware generation is a follow-up (DSGWOO-1357 B5); this
-// file is the static map that ships in v1.
+// The specialist lists mirror `specialistGenerics` in
+// daemon/internal/httpapi/handlers_ask_suggestions.go. Change one, change
+// the other.
 
 import type { AskAgent } from '../../api/client';
 
@@ -41,9 +53,9 @@ const CHIEF_OF_STAFF_DEFAULT = [
   'What did the agents do today?',
 ];
 
-/** Specialist suggestions don't vary by page in v1 — the work the
- *  operator can ask each specialist for is the same wherever they
- *  opened the drawer. Page-aware dynamic suggestions land in 1357. */
+/** Specialist fallbacks don't vary by page — the work the operator can
+ *  ask each specialist for is the same wherever they opened the drawer.
+ *  Online, the daemon replaces these with proposal-grounded chips. */
 const SPECIALIST_SUGGESTIONS: Record<Exclude<AskAgent, 'chief_of_staff'>, string[]> = {
   marketing: [
     'What did you draft this week?',

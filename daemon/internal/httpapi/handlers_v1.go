@@ -19,6 +19,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/version"
 )
@@ -63,12 +64,12 @@ type Persona struct {
 
 // Issue is the v0.1 issue wire shape.
 type Issue struct {
-	ID          string    `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	Persona     string    `json:"persona,omitempty"`
-	Status      string    `json:"status"`
-	Priority    string    `json:"priority"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	Persona     string `json:"persona,omitempty"`
+	Status      string `json:"status"`
+	Priority    string `json:"priority"`
 	// BatchID is set when this issue is part of a batch (POST /v1/batches).
 	// Empty string for unbatched issues; the json:"omitempty" drops the
 	// field on the wire so single-issue clients see no change.
@@ -497,9 +498,10 @@ func (s *Server) handleCreateIssue(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	id := uuid.NewString()
 	if _, err := s.store.DB.ExecContext(r.Context(),
-		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id, store_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, req.Title, req.Description, nullIfEmpty(req.Persona), req.Status, req.Priority, now, now,
 		proposalType, proposalContent, proposalTarget, nullIfEmpty(req.BatchID),
+		nullIfEmpty(store.CurrentStoreID(r.Context(), s.store.DB)),
 	); err != nil {
 		writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 		return

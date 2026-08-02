@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/mcpresolve"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 )
@@ -314,7 +316,32 @@ func (s *Server) handleListStores(w http.ResponseWriter, r *http.Request) {
 		row.CapabilityGaps = s.capabilityGaps(ctx, row)
 		stores = append(stores, row)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"stores": stores})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"stores": stores,
+		// null when the environment and the paired store agree, or when
+		// only one of them is configured.
+		"mcp_mismatch": s.mcpMismatch(ctx),
+	})
+}
+
+// mcpMismatch reports a WOOAGENT_MCP_URL that disagrees with the paired
+// store, so the UI can say what daemon stdout already says.
+//
+// The daemon has warned about this since DSGWOO-1470, but only on stdout —
+// which nobody running the desktop app or the embedded UI ever sees. The
+// operator most likely to be in this state is precisely the one who won't
+// see it: env vars exported months ago, then a re-pair through the UI. It
+// belongs on the Stores screen, next to the store it's about.
+//
+// Attached to the store list rather than a new endpoint because that list
+// is what the Stores screen and App.tsx's initial gate already fetch, so
+// this costs no extra round-trip. Same advisory philosophy as
+// capabilityGaps: never worth failing the request over.
+func (s *Server) mcpMismatch(ctx context.Context) *mcpresolve.Mismatch {
+	// io.Discard: the paired-store fallback diagnostics are startup
+	// concerns for a terminal, not something to log on every list request.
+	_, mismatch, _ := mcpresolve.Describe(ctx, s.store.DB, s.secrets, io.Discard)
+	return mismatch
 }
 
 // capabilityGaps attaches the compatibility report for a paired store.

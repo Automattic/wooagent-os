@@ -13,6 +13,7 @@ import (
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
 // ListProductsTool wraps the `wooagent-products/list` MCP ability. Both
@@ -180,12 +181,12 @@ type ProduceDescriptionRewriteTool struct {
 }
 
 type produceDescriptionRewriteInput struct {
-	ProductID   int     `json:"product_id"`
-	ProductName string  `json:"product_name,omitempty"`
-	ProductSKU  string  `json:"product_sku,omitempty"`
-	Previous    string  `json:"previous,omitempty"`
-	ImageURL    string  `json:"image_url,omitempty"`
-	ImageAlt    string  `json:"image_alt,omitempty"`
+	ProductID   int              `json:"product_id"`
+	ProductName string           `json:"product_name,omitempty"`
+	ProductSKU  string           `json:"product_sku,omitempty"`
+	Previous    string           `json:"previous,omitempty"`
+	ImageURL    string           `json:"image_url,omitempty"`
+	ImageAlt    string           `json:"image_alt,omitempty"`
 	Variants    []rewriteVariant `json:"variants"`
 }
 
@@ -480,10 +481,11 @@ func insertOperatorAskedProposal(
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO issues(id, title, description, persona, status, priority,
 		                    created_at, updated_at, proposal_type, proposal_content,
-		                    proposal_target, dedup_key)
-		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                    proposal_target, dedup_key, store_id)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, title, description, persona, "in_review", "medium", now, now,
 		proposalType, proposalContent, string(targetJSON), dedup,
+		store.CurrentStoreID(ctx, db),
 	)
 	if err != nil {
 		return "", fmt.Errorf("insert issue: %w", err)
