@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
@@ -373,12 +374,18 @@ func filterFabricatedVariants(variants []variant, anchorText string) ([]variant,
 
 const (
 	defaultAnthropicModel = "claude-sonnet-4-6"
-	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
-	anthropicVersion      = "2023-06-01"
+	anthropicAPIURL       = anthropic.APIURL
+	// callTimeout bounds one draft on either provider. 90s covers a
+	// 3-variant rewrite; the local LM Studio fallback is the slower of the
+	// two on modest hardware.
+	callTimeout = 90 * time.Second
 
 	defaultOpenAIBase  = "http://localhost:1234/v1"
 	defaultOpenAIModel = "google/gemma-4-e4b"
 	defaultOpenAIKey   = "lm-studio"
+	// openAIProvider is the identifier used for cost accounting, telemetry
+	// and llm.APIStatusError on the OpenAI-compatible fallback path.
+	openAIProvider = "openai"
 )
 
 func init() {
@@ -992,83 +999,35 @@ func draftWithFallback(ctx context.Context, env personas.Env, p product, skillDe
 
 // ---- Anthropic ----
 
-type anthropicMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type anthropicReq struct {
-	Model     string         `json:"model"`
-	MaxTokens int            `json:"max_tokens"`
-	System    string         `json:"system"`
-	Messages  []anthropicMsg `json:"messages"`
-}
-
-type anthropicContentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
-type anthropicResp struct {
-	Content []anthropicContentBlock `json:"content"`
-	Usage   struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage,omitempty"`
-	Error struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
 func draftRewriteAnthropic(ctx context.Context, apiKey, model string, p product, skillDescription string, corpus []corpusSample, opts draftOpts) (string, error) {
 	user := buildPromptUserMessage(p, corpus, opts)
 
-	body, _ := json.Marshal(anthropicReq{
-		Model:     model,
-		MaxTokens: 2048, // headroom for 3 variants × ~220 chars + JSON overhead
-		System:    skillDescription,
-		Messages:  []anthropicMsg{{Role: "user", Content: user}},
-	})
-
-	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(cctx, "POST", anthropicAPIURL, bytes.NewReader(body))
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("content-type", "application/json")
-
-	res, err := http.DefaultClient.Do(req)
+	resp, err := anthropic.New(apiKey, model).
+		WithAPIURL(anthropicAPIURL).
+		WithTimeout(callTimeout).
+		Call(ctx, anthropic.Request{
+			MaxTokens: 2048, // headroom for 3 variants × ~220 chars + JSON overhead
+			System:    skillDescription,
+			Messages:  []anthropic.Message{anthropic.UserMessage(user)},
+		})
 	if err != nil {
-		return "", fmt.Errorf("anthropic http: %w", err)
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(res.Body)
-	if res.StatusCode != 200 {
-		return "", fmt.Errorf("anthropic http %d: %s", res.StatusCode, raw)
-	}
-	var parsed anthropicResp
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("anthropic decode: %w", err)
-	}
-	if parsed.Error.Type != "" {
-		return "", fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+		return "", err
 	}
 
 	if t := telemetry.TrackerFromContext(ctx); t != nil {
 		if err := t.RecordModelCall(telemetry.ModelCall{
-			Provider:     "anthropic",
+			Provider:     anthropic.Provider,
 			Model:        model,
-			InputTokens:  parsed.Usage.InputTokens,
-			OutputTokens: parsed.Usage.OutputTokens,
-			CostUSD:      llm.CostUSD("anthropic", model, parsed.Usage.InputTokens, parsed.Usage.OutputTokens),
+			InputTokens:  resp.Usage.InputTokens,
+			OutputTokens: resp.Usage.OutputTokens,
+			CostUSD:      llm.CostUSD(anthropic.Provider, model, resp.Usage.InputTokens, resp.Usage.OutputTokens),
 		}); err != nil {
 			return "", err
 		}
 	}
 
 	var sb strings.Builder
-	for _, b := range parsed.Content {
+	for _, b := range resp.Content {
 		if b.Type == "text" {
 			sb.WriteString(b.Text)
 		}
@@ -1133,7 +1092,10 @@ func draftRewriteOpenAI(
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		raw, _ := io.ReadAll(res.Body)
-		return "", fmt.Errorf("llm http %d: %s", res.StatusCode, raw)
+		// Same typed error as the Anthropic path so scheduler.classify
+		// treats a throttled or misconfigured local endpoint identically,
+		// whichever provider produced it (DSGWOO-1292).
+		return "", llm.NewAPIStatusError(openAIProvider, res.StatusCode, raw)
 	}
 	var parsed chatResp
 	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {

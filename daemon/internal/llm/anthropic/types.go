@@ -18,6 +18,9 @@ const (
 	// Version is the Anthropic API version we target. Matches the value
 	// already in use by the cadence-mode personas.
 	Version = "2023-06-01"
+	// Provider is the short identifier used for cost accounting
+	// (llm.CostUSD), telemetry.ModelCall.Provider, and llm.APIStatusError.
+	Provider = "anthropic"
 )
 
 // Message is one turn in a conversation.

@@ -23,12 +23,9 @@
 package pricing
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -36,6 +33,7 @@ import (
 	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
@@ -43,9 +41,14 @@ import (
 
 const (
 	defaultAnthropicModel = "claude-haiku-4-5-20251001"
-	anthropicAPIURL       = "https://api.anthropic.com/v1/messages"
-	anthropicVersion      = "2023-06-01"
+	anthropicAPIURL       = anthropic.APIURL
 	skillName             = "pricing.benchmark"
+	// webSearchToolType is Anthropic's server-managed web-search tool.
+	webSearchToolType = "web_search_20250305"
+	// callTimeout bounds one benchmark. Generous because the model runs up
+	// to 4 web_search rounds server-side before it answers — this is the
+	// most expensive LLM call in the system.
+	callTimeout = 180 * time.Second
 )
 
 func init() {
@@ -734,43 +737,6 @@ func (p *proposalOut) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type anthropicTool struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	MaxUses int    `json:"max_uses,omitempty"`
-}
-
-type anthropicMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type anthropicReq struct {
-	Model     string          `json:"model"`
-	MaxTokens int             `json:"max_tokens"`
-	System    string          `json:"system"`
-	Messages  []anthropicMsg  `json:"messages"`
-	Tools     []anthropicTool `json:"tools,omitempty"`
-}
-
-type anthropicContentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
-type anthropicResp struct {
-	Content    []anthropicContentBlock `json:"content"`
-	StopReason string                  `json:"stop_reason,omitempty"`
-	Usage      struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage,omitempty"`
-	Error struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
 const userPromptTemplate = `Product to analyze:
 - id: %d
 - name: %s
@@ -860,64 +826,53 @@ func draftProposal(
 
 	user := buildUserPrompt(p, currency, currentPrice, anchorField, cost)
 
-	body, _ := json.Marshal(anthropicReq{
-		Model: model,
-		// max_tokens counts EVERY output token: the model's thinking text
-		// between web_search calls, the tool_use blocks themselves, and the
-		// final JSON. A 1024 cap proved too tight in practice — the model
-		// often spent its budget on inter-search reasoning ("I'll try X,
-		// then Y…") and got cut off before producing the structured JSON,
-		// which the parser rejected with "no JSON object found in model
-		// output". 2048 is the new floor: still half of the original 4096,
-		// but with enough headroom for 3-4 search rounds + the final JSON.
-		MaxTokens: 2048,
-		System:    system,
-		Messages:  []anthropicMsg{{Role: "user", Content: user}},
-		// MaxUses caps how many web_search calls the model can issue. The
-		// skill requires ≥3 sources in the response. We give the model 4
-		// uses so one search can fail or come back thin without forcing a
-		// no_proposal skip — gives the planner some breathing room.
-		Tools: []anthropicTool{{Type: "web_search_20250305", Name: "web_search", MaxUses: 4}},
-	})
-
-	cctx, cancel := context.WithTimeout(ctx, 180*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(cctx, "POST", anthropicAPIURL, bytes.NewReader(body))
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("content-type", "application/json")
-
-	res, err := http.DefaultClient.Do(req)
+	// web_search is server-managed: Anthropic runs the search loop on its
+	// side and returns the finished answer, so a single Call is right here
+	// — no local RunToolLoop.
+	resp, err := anthropic.New(apiKey, model).
+		WithAPIURL(anthropicAPIURL).
+		// The default transport timeout is 90s, which would cut a
+		// multi-round web_search short. Must stay above callTimeout's worth
+		// of searching. DSGWOO-1292.
+		WithTimeout(callTimeout).
+		Call(ctx, anthropic.Request{
+			// max_tokens counts EVERY output token: the model's thinking text
+			// between web_search calls, the tool_use blocks themselves, and the
+			// final JSON. A 1024 cap proved too tight in practice — the model
+			// often spent its budget on inter-search reasoning ("I'll try X,
+			// then Y…") and got cut off before producing the structured JSON,
+			// which the parser rejected with "no JSON object found in model
+			// output". 2048 is the new floor: still half of the original 4096,
+			// but with enough headroom for 3-4 search rounds + the final JSON.
+			MaxTokens: 2048,
+			System:    system,
+			Messages:  []anthropic.Message{anthropic.UserMessage(user)},
+			// MaxUses caps how many web_search calls the model can issue. The
+			// skill requires ≥3 sources in the response. We give the model 4
+			// uses so one search can fail or come back thin without forcing a
+			// no_proposal skip — gives the planner some breathing room.
+			Tools: []anthropic.ToolDef{{Type: webSearchToolType, Name: "web_search", MaxUses: 4}},
+		})
 	if err != nil {
-		return proposalOut{}, "", fmt.Errorf("anthropic http: %w", err)
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(res.Body)
-	if res.StatusCode != 200 {
-		return proposalOut{}, string(raw), fmt.Errorf("anthropic http %d", res.StatusCode)
-	}
-	var parsed anthropicResp
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return proposalOut{}, string(raw), fmt.Errorf("anthropic decode: %w", err)
-	}
-	if parsed.Error.Type != "" {
-		return proposalOut{}, string(raw), fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+		// The caller folds this raw body into its error message; the typed
+		// class rides along on err itself.
+		return proposalOut{}, llm.ErrorBody(err), err
 	}
 
 	if t := telemetry.TrackerFromContext(ctx); t != nil {
 		if err := t.RecordModelCall(telemetry.ModelCall{
-			Provider:     "anthropic",
+			Provider:     anthropic.Provider,
 			Model:        model,
-			InputTokens:  parsed.Usage.InputTokens,
-			OutputTokens: parsed.Usage.OutputTokens,
-			CostUSD:      llm.CostUSD("anthropic", model, parsed.Usage.InputTokens, parsed.Usage.OutputTokens),
+			InputTokens:  resp.Usage.InputTokens,
+			OutputTokens: resp.Usage.OutputTokens,
+			CostUSD:      llm.CostUSD(anthropic.Provider, model, resp.Usage.InputTokens, resp.Usage.OutputTokens),
 		}); err != nil {
 			return proposalOut{}, "", err
 		}
 	}
 
 	var textOut strings.Builder
-	for _, block := range parsed.Content {
+	for _, block := range resp.Content {
 		if block.Type == "text" {
 			textOut.WriteString(block.Text)
 		}

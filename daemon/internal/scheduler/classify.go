@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
 )
@@ -13,6 +14,11 @@ import (
 // and a one-sentence operator-readable reason. The scheduler uses the class
 // to decide whether to enqueue a retry; the reason lands in
 // runs.failure_reason for the run-log UI.
+//
+// Order matters: sentinel checks (errors.Is) come first, then the legacy
+// string matching, then the default. Every check is against a wrapped error
+// chain rather than a formatted message, so a persona adding context with
+// fmt.Errorf("...: %w", err) cannot break classification.
 //
 // The conservative default for unknown errors is FailureTransient — better
 // to waste a retry than to give up on a flaky LLM call.
@@ -39,14 +45,33 @@ func classify(err error) (FailureClass, string) {
 	if errors.Is(err, telemetry.ErrRunBudgetExceeded) {
 		return FailurePermanent, err.Error()
 	}
+	// Typed LLM failures. Every persona now calls through
+	// internal/llm{,/anthropic}, which returns *llm.APIStatusError wrapping
+	// one of these sentinels, so classification survives however the
+	// message is worded or wrapped (DSGWOO-1292).
+	if errors.Is(err, llm.ErrRateLimited) {
+		return FailureTransient, "LLM rate limited"
+	}
+	if errors.Is(err, llm.ErrAuth) {
+		return FailurePermanent, "LLM auth failure; check provider API key in Settings"
+	}
+	if errors.Is(err, llm.ErrServer) {
+		return FailureTransient, "LLM provider error; retrying"
+	}
+	if errors.Is(err, llm.ErrInvalidRequest) {
+		return FailurePermanent, "LLM rejected the request; check model name and prompt size"
+	}
+
+	// String fallback for LLM-shaped errors that don't come from our
+	// clients — a third-party SDK, or a path not yet migrated. Retained on
+	// purpose: it costs one strings.Contains on the failure path and it is
+	// what keeps a reworded upstream error from silently degrading to
+	// "unknown". Safe to delete once nothing can produce a bare-string LLM
+	// error.
 	msg := strings.ToLower(err.Error())
-	// LLM rate limits — until a centralized LLM package exists with typed
-	// errors, pattern-match on the HTTP status code that the persona's
-	// ad-hoc client returns.
 	if strings.Contains(msg, "http 429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "rate_limit_error") {
 		return FailureTransient, "LLM rate limited"
 	}
-	// Auth failures — permanent until operator fixes config.
 	if strings.Contains(msg, "http 401") || strings.Contains(msg, "http 403") || strings.Contains(msg, "invalid api key") {
 		return FailurePermanent, "LLM auth failure; check provider API key in Settings"
 	}
