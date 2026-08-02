@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/ask"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
 // handleAskSuggestions serves dynamic, queue-aware chat suggestions
@@ -323,10 +324,23 @@ func pairedSince(ctx context.Context, db *sql.DB) string {
 // groundedSuggestions turns this persona's recent proposals into
 // store-aware questions, at most one per distinct subject.
 //
-// Only proposals made since the current store was paired are eligible —
-// see pairedSince. Right after a re-pair that means specialists show
-// generics until the personas have proposed against the new catalog,
-// which is correct: we genuinely don't know those products exist yet, and
+// Eligibility is store provenance, checked two ways:
+//
+//   - `store_id = <current>` for rows written since migration 023, which
+//     record which store they were proposed against directly.
+//   - `store_id IS NULL AND created_at >= <paired_at>` for older rows,
+//     whose provenance can only be inferred from a timestamp.
+//
+// The NULL branch is why both tests exist. Migration 023 deliberately
+// doesn't backfill — stamping old rows with the current store id would
+// claim provenance we don't have and would re-admit exactly the proposals
+// this is meant to exclude. So pre-migration rows keep the timestamp
+// behavior, and new rows get the precise check. The NULL branch can be
+// dropped once no pre-023 rows remain in any install worth supporting.
+//
+// Right after a re-pair, both branches exclude everything and specialists
+// show generics until the personas have proposed against the new catalog.
+// That's correct: we genuinely don't know those products exist yet, and
 // the issue's acceptance criteria call for staying generic rather than
 // guessing.
 //
@@ -338,15 +352,19 @@ func pairedSince(ctx context.Context, db *sql.DB) string {
 // caller backfills with generics, so a locked database degrades to the
 // v1 behavior instead of an empty drawer.
 func groundedSuggestions(ctx context.Context, db *sql.DB, persona string, want int) []string {
+	currentStore := store.CurrentStoreID(ctx, db)
 	rows, err := db.QueryContext(ctx, `
 		SELECT COALESCE(proposal_type, ''), title
 		FROM issues
 		WHERE persona = ?
 		  AND status NOT IN ('dismissed', 'rejected')
-		  AND created_at >= ?
+		  AND (
+		        (store_id IS NOT NULL AND store_id = ?)
+		     OR (store_id IS NULL AND created_at >= ?)
+		      )
 		ORDER BY created_at DESC
 		LIMIT ?
-	`, persona, pairedSince(ctx, db), subjectScanLimit)
+	`, persona, currentStore, pairedSince(ctx, db), subjectScanLimit)
 	if err != nil {
 		return nil
 	}

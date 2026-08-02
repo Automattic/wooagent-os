@@ -45,27 +45,27 @@ import (
 // When adding a new persona (Inventory, Accounting, Reporting, Chief of
 // Staff, …), apply ALL THREE established patterns:
 //
-//   1. Implement Cooldown() with the right TargetKey + per-risk durations.
-//      Customer-facing targets (orders, messages) → longer windows; pure
-//      back-of-house copy/price tweaks → shorter windows. Call
-//      RecentlyTouchedTargets at the top of Draft and pass the set into
-//      the picker. Digest-style personas with no per-target id leave
-//      Cooldown zero-value and rely on DedupKey (pattern 3) instead.
+//  1. Implement Cooldown() with the right TargetKey + per-risk durations.
+//     Customer-facing targets (orders, messages) → longer windows; pure
+//     back-of-house copy/price tweaks → shorter windows. Call
+//     RecentlyTouchedTargets at the top of Draft and pass the set into
+//     the picker. Digest-style personas with no per-target id leave
+//     Cooldown zero-value and rely on DedupKey (pattern 3) instead.
 //
-//   2. Run an in-Draft loop up to maxDraftAttempts (=3, defined per
-//      package). If the LLM returns no_proposal / empty draft for the
-//      first pick, add that target to a RUN-LOCAL skip set and try the
-//      next eligible one. Without this, an undraftable target (e.g. a
-//      product the web_search can't find comparables for) blocks the
-//      persona indefinitely — the failed target never enters the
-//      persistent cooldown because no issue was ever inserted.
+//  2. Run an in-Draft loop up to maxDraftAttempts (=3, defined per
+//     package). If the LLM returns no_proposal / empty draft for the
+//     first pick, add that target to a RUN-LOCAL skip set and try the
+//     next eligible one. Without this, an undraftable target (e.g. a
+//     product the web_search can't find comparables for) blocks the
+//     persona indefinitely — the failed target never enters the
+//     persistent cooldown because no issue was ever inserted.
 //
-//   3. Set Drafted.DedupKey to a stable string identifying the proposal's
-//      logical target so the system-wide insert-time guard refuses to
-//      emit a second in_review issue with the same identity. Marketing /
-//      Pricing use "product:<id>"; Sales Support uses "order:<id>";
-//      digest personas use "digest:<kind>" (add an ISO-week suffix for
-//      time-bucketed digests).
+//  3. Set Drafted.DedupKey to a stable string identifying the proposal's
+//     logical target so the system-wide insert-time guard refuses to
+//     emit a second in_review issue with the same identity. Marketing /
+//     Pricing use "product:<id>"; Sales Support uses "order:<id>";
+//     digest personas use "digest:<kind>" (add an ISO-week suffix for
+//     time-bucketed digests).
 //
 // See marketing.go / pricing.go / sales-support.go for canonical examples.
 type Persona interface {
@@ -101,10 +101,10 @@ type CooldownPolicy struct {
 // here is purely additive; personas only read what they need. Personas
 // MUST NOT touch process env directly — Env is the surfaced subset.
 type Deps struct {
-	Store    *store.Store
-	MCP      *mcp.Client
-	Skills   map[string]registry.Skill
-	Env      Env
+	Store  *store.Store
+	MCP    *mcp.Client
+	Skills map[string]registry.Skill
+	Env    Env
 	// Recorder persists the per-turn telemetry. May be nil in tests; the
 	// tracker helpers are nil-safe. DSGWOO-1236.
 	Recorder telemetry.Recorder
@@ -218,12 +218,12 @@ type Drafted struct {
 // full set in emission order. IssueID is empty when Skipped or when an
 // error was returned before any successful emit.
 type Result struct {
-	Persona  string
-	IssueID  string
-	BatchID  string
-	IssueIDs []string
-	BatchIDs []string
-	Skipped  bool
+	Persona    string
+	IssueID    string
+	BatchID    string
+	IssueIDs   []string
+	BatchIDs   []string
+	Skipped    bool
 	SkipReason string
 }
 
@@ -736,9 +736,10 @@ func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted
 	}
 
 	_, err := st.DB.ExecContext(ctx,
-		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, dedup_key) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, dedup_key, store_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, d.Title, d.Description, persona, "in_review", priority, now, now,
 		d.ProposalType, d.ProposalContent, targetJSON, dedupKey,
+		storeRef(store.CurrentStoreID(ctx, st.DB)),
 	)
 	if err != nil {
 		return "", err
@@ -756,6 +757,10 @@ func insertIssue(ctx context.Context, st *store.Store, persona string, d Drafted
 func insertBatch(ctx context.Context, st *store.Store, persona string, d Drafted) (string, error) {
 	batchID := uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Resolved before the transaction so every child in the batch is stamped
+	// with the same store, and the lookup happens once rather than per child.
+	storeID := store.CurrentStoreID(ctx, st.DB)
 
 	tx, err := st.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -780,7 +785,7 @@ func insertBatch(ctx context.Context, st *store.Store, persona string, d Drafted
 	children = append(children, d.BatchSiblings...)
 
 	for i, child := range children {
-		if err := insertChildIssue(ctx, tx, batchID, persona, child, now); err != nil {
+		if err := insertChildIssue(ctx, tx, batchID, persona, child, now, storeID); err != nil {
 			return "", fmt.Errorf("insert child %d/%d: %w", i+1, len(children), err)
 		}
 	}
@@ -791,12 +796,20 @@ func insertBatch(ctx context.Context, st *store.Store, persona string, d Drafted
 	return batchID, nil
 }
 
+// storeRef converts a store id into a nullable column value. An empty id
+// means nothing is paired, and that has to land as NULL — readers treat NULL
+// as "unknown provenance" and fall back to the paired_at floor, which an
+// empty string wouldn't match.
+func storeRef(id string) sql.NullString {
+	return sql.NullString{String: id, Valid: id != ""}
+}
+
 // insertChildIssue inserts a single issue row tagged with batch_id. Mirrors
 // insertIssue's column shape (priority defaults to "medium", target is
 // nil-safe via sql.NullString) so unbatched and batched children look
 // identical to downstream readers — the only difference is the batch_id
 // column.
-func insertChildIssue(ctx context.Context, tx *sql.Tx, batchID string, persona string, d Drafted, now string) error {
+func insertChildIssue(ctx context.Context, tx *sql.Tx, batchID string, persona string, d Drafted, now, storeID string) error {
 	id := uuid.NewString()
 	priority := d.Priority
 	if priority == "" {
@@ -813,9 +826,10 @@ func insertChildIssue(ctx context.Context, tx *sql.Tx, batchID string, persona s
 	}
 
 	_, err := tx.ExecContext(ctx,
-		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id, store_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, d.Title, d.Description, persona, "in_review", priority, now, now,
 		d.ProposalType, d.ProposalContent, targetJSON, batchID,
+		storeRef(storeID),
 	)
 	if err != nil {
 		return fmt.Errorf("exec insert: %w", err)
