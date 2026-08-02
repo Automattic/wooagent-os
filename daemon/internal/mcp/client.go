@@ -328,7 +328,42 @@ func (c *Client) Initialize(ctx context.Context) (ServerInfo, error) {
 
 // CallTool invokes a tool by name with the given arguments. The result is
 // the raw tools/call envelope; callers unwrap the content payload.
+//
+// Re-handshakes and retries once when the server reports the session is
+// gone. The daemon holds one Client — and therefore one MCP session — for
+// its whole lifetime, while the server expires sessions on its own
+// schedule. A persona calls Initialize once at the top of Draft and then
+// makes several tool calls, so without this the first call after an
+// expiry fails, handleEnvelopeError clears the cached id, and every
+// remaining call in that run goes out with no Mcp-Session-Id header at
+// all — surfacing to the operator as "Missing Mcp-Session-Id header"
+// (DSGWOO-1473).
+//
+// The recovery this performs is the one the package already assumed
+// happened: handleEnvelopeError's comment says a subsequent Initialize
+// re-handshakes, but nothing was performing that follow-up inside a run.
+//
+// Retries exactly once. If the fresh session is rejected too, that is a
+// real failure and the caller should see it rather than have the client
+// spin.
 func (c *Client) CallTool(ctx context.Context, name string, args any) (ToolCallResult, error) {
+	res, err := c.callToolOnce(ctx, name, args)
+	if err == nil || !errors.Is(err, ErrSessionLost) {
+		return res, err
+	}
+
+	// handleEnvelopeError has already cleared the cached id, so Initialize
+	// takes the handshake path rather than its fast path. Concurrent
+	// callers serialize on initMu; whichever loses the race sees the new
+	// session and fast-paths.
+	if _, initErr := c.Initialize(ctx); initErr != nil {
+		return ToolCallResult{}, fmt.Errorf("tools/call %s: re-initialize after session loss: %w", name, initErr)
+	}
+	return c.callToolOnce(ctx, name, args)
+}
+
+// callToolOnce is a single tools/call round-trip with no session recovery.
+func (c *Client) callToolOnce(ctx context.Context, name string, args any) (ToolCallResult, error) {
 	var result ToolCallResult
 	err := c.doRequest(ctx, "tools/call", map[string]any{
 		"name":      name,
