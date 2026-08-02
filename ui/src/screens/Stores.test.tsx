@@ -85,3 +85,80 @@ describe('Stores — MCP store mismatch notice', () => {
     expect(screen.queryByText('WOOAGENT_MCP_URL')).not.toBeInTheDocument();
   });
 });
+
+describe('Stores — capability gaps', () => {
+  it('names each missing ability and who needs it', async () => {
+    vi.spyOn(api.stores, 'list').mockResolvedValue({
+      stores: [
+        {
+          ...PAIRED_STORE,
+          capability_gaps: [
+            { ability: 'wooagent-products/update', used_by: 'Marketing', missing: true },
+            {
+              ability: 'wooagent-products/list',
+              used_by: 'Pricing',
+              unsupported_params: ['orderby', 'order'],
+            },
+          ],
+        },
+      ],
+      mcp_mismatch: null,
+    });
+
+    renderStores();
+
+    // The whole point is actionability: which ability, and which agent
+    // stops working without it.
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'wooagent-products/update is not available on this store (needed by Marketing)',
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        'wooagent-products/list does not accept orderby, order on this store (needed by Pricing)',
+      ),
+    ).toBeInTheDocument();
+    // And the fix, since "missing ability" isn't self-explanatory.
+    // getAllByText, not getByText: WPDS Notice mirrors its content into an
+    // aria-live region for screen readers, so a substring match legitimately
+    // hits both the visible copy and the announced one.
+    expect(
+      screen.getAllByText(/Update the WooAgent Companion Plugin/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('stays quiet for a store with no gaps', async () => {
+    vi.spyOn(api.stores, 'list').mockResolvedValue({
+      stores: [{ ...PAIRED_STORE, capability_gaps: [] }],
+      mcp_mismatch: null,
+    });
+
+    renderStores();
+
+    await waitFor(() => {
+      expect(api.stores.list).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryAllByText(/Update the WooAgent Companion Plugin/),
+    ).toHaveLength(0);
+  });
+
+  it('stays quiet when an older daemon omits capability_gaps', async () => {
+    // Same independent-shipping concern as mcp_mismatch: a UI build can meet
+    // a daemon that predates capability_gaps. Absent has to read as "no
+    // gaps" rather than throwing on `.length` of undefined.
+    vi.spyOn(api.stores, 'list').mockResolvedValue({ stores: [PAIRED_STORE] });
+
+    renderStores();
+
+    await waitFor(() => {
+      expect(api.stores.list).toHaveBeenCalled();
+    });
+    expect(
+      screen.queryAllByText(/Update the WooAgent Companion Plugin/),
+    ).toHaveLength(0);
+  });
+});
