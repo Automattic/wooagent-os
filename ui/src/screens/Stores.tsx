@@ -3,7 +3,7 @@ import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Button, Modal } from '@wordpress/components';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '@wordpress/admin-ui';
-import { api, type Connection, type Store } from '../api/client';
+import { api, type Connection, type McpMismatch, type Store } from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
 import { useAskAgentContext } from '../lib/askAgent';
 import { formatDateTime } from '../lib/boardItems';
@@ -24,6 +24,7 @@ export default function Stores({
 }: Props) {
   const [stores, setStores] = useState<Store[] | null>(null);
   const [storesError, setStoresError] = useState<string | null>(null);
+  const [mcpMismatch, setMcpMismatch] = useState<McpMismatch | null>(null);
   const [confirmStore, setConfirmStore] = useState<Store | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
@@ -42,7 +43,10 @@ export default function Stores({
     (async () => {
       try {
         const res = await api.stores.list(connection);
-        if (!cancelled) setStores(res.stores);
+        if (!cancelled) {
+          setStores(res.stores);
+          setMcpMismatch(res.mcp_mismatch ?? null);
+        }
       } catch (e) {
         if (!cancelled) {
           setStoresError(e instanceof Error ? e.message : String(e));
@@ -140,6 +144,28 @@ export default function Stores({
           <Notice.Root intent="error">
             <Notice.Description>
               Could not load the connected store. Refresh to retry.
+            </Notice.Description>
+          </Notice.Root>
+        )}
+
+        {/* `warning` rather than `info`: the daemon itself is fine — it
+            ignores the stale variable and uses the paired store — but any
+            script or CLI on this machine that reads WOOAGENT_MCP_URL will act
+            on a different store, which is worth more than a shrug. (WPDS
+            Notice has no `caution` intent; the scale is neutral / info /
+            warning / success / error.) It's here at all because the daemon's
+            equivalent message goes to stdout, which nobody running the app in
+            a window ever sees. */}
+        {mcpMismatch && (
+          <Notice.Root intent="warning">
+            <Notice.Description>
+              This machine has <code>WOOAGENT_MCP_URL</code> set to{' '}
+              <strong>{mcpMismatch.env_host}</strong>, which isn&rsquo;t the store
+              you have paired. WooAgent is using the paired store,{' '}
+              <strong>{mcpMismatch.paired_host}</strong> — but scripts and
+              command-line tools on this machine may still read that variable
+              and act on the wrong store. Unset it, or point it at the paired
+              store, to clear this.
             </Notice.Description>
           </Notice.Root>
         )}

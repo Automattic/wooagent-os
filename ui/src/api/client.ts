@@ -605,6 +605,17 @@ export interface Store {
   last_discovered_at?: string;
 }
 
+/** A WOOAGENT_MCP_URL on the daemon's host that names a different store
+ *  than the one that's paired. The daemon uses the paired store and
+ *  ignores the env var (DSGWOO-1470), so this is advisory — but it's the
+ *  difference between "my agents see the store I paired" and "some
+ *  script on this machine is pointed somewhere else", which is worth
+ *  saying out loud. Null when they agree or only one is configured. */
+export interface McpMismatch {
+  env_host: string;
+  paired_host: string;
+}
+
 export type ModelProviderKind = 'anthropic' | 'openai' | 'ollama';
 
 export interface ModelProvider {
@@ -837,7 +848,8 @@ export const api = {
       }),
   },
   stores: {
-    list: (c: Connection) => request<{ stores: Store[] }>(c, '/v1/stores'),
+    list: (c: Connection) =>
+      request<{ stores: Store[]; mcp_mismatch?: McpMismatch | null }>(c, '/v1/stores'),
     get: (c: Connection, id: string) => request<Store>(c, `/v1/stores/${id}`),
     create: (c: Connection, url: string) =>
       request<Store>(c, '/v1/stores', {
