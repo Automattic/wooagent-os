@@ -13,7 +13,7 @@ interface Props {
   onAskAgent: () => void;
 }
 
-const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
+const MUTED = { color: 'var(--wpds-color-foreground-content-neutral-weak)' } as const;
 
 function providerLabel(p: ModelProvider): string {
   if (p.name) return p.name;

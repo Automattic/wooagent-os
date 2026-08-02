@@ -23,7 +23,7 @@ type Mode =
   | { kind: 'manual' };
 
 const DEFAULT_URL = 'http://localhost:7777';
-const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
+const MUTED = { color: 'var(--wpds-color-foreground-content-neutral-weak)' } as const;
 
 export default function Step1Daemon({ onConnected }: Props) {
   const [mode, setMode] = useState<Mode>({ kind: 'detecting' });
@@ -123,7 +123,7 @@ export default function Step1Daemon({ onConnected }: Props) {
               gap="xs"
               style={{
                 padding: 'var(--wpds-dimension-padding-md)',
-                background: 'var(--wpds-color-bg-surface-info-weak)',
+                background: 'var(--wpds-color-background-surface-info-weak)',
                 borderRadius: 'var(--wpds-border-radius-md)',
               }}
             >

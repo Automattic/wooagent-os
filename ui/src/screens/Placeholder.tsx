@@ -41,7 +41,7 @@ export default function Placeholder({
       <Card.Root
         style={{
           background:
-            'radial-gradient(circle at 30% 20%, var(--wpds-color-bg-surface-info-weak) 0%, transparent 60%), var(--wpds-color-bg-surface-neutral)',
+            'radial-gradient(circle at 30% 20%, var(--wpds-color-background-surface-info-weak) 0%, transparent 60%), var(--wpds-color-background-surface-neutral)',
         }}
       >
         <Card.Content>
@@ -56,8 +56,8 @@ export default function Placeholder({
               style={{
                 color:
                   status === 'soon'
-                    ? 'var(--wpds-color-fg-content-info)'
-                    : 'var(--wpds-color-fg-interactive-brand)',
+                    ? 'var(--wpds-color-foreground-content-info)'
+                    : 'var(--wpds-color-foreground-interactive-brand)',
               }}
             >
               {status === 'soon' ? 'Out of scope · phase 1' : 'Reference area'}
@@ -67,7 +67,7 @@ export default function Placeholder({
             </Text>
             <Text
               variant="body-md"
-              style={{ maxWidth: 560, color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              style={{ maxWidth: 560, color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
             >
               {description}
             </Text>

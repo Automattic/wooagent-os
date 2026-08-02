@@ -171,7 +171,7 @@ function ArchivedBar(props: ArchivedProps) {
             </Text>
             <Text
               variant="body-sm"
-              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
             >
               {deletionDate
                 ? `This proposal will be deleted on ${deletionDate} unless restored.`
@@ -326,7 +326,7 @@ function ReviewBar(props: ReviewProps) {
                 <Text
                   variant="body-sm"
                   className="wa-mono"
-                  style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                  style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                 >
                   {props.priceSummary}
                 </Text>
@@ -334,7 +334,7 @@ function ReviewBar(props: ReviewProps) {
               {isMessage && props.messageRecipientName && !isInternal && (
                 <Text
                   variant="body-sm"
-                  style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                  style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                 >
                   {props.messageRecipientName}
                 </Text>
@@ -342,7 +342,7 @@ function ReviewBar(props: ReviewProps) {
             </Stack>
             <Text
               variant="body-sm"
-              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
             >
               {helperLine}
             </Text>

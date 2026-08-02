@@ -25,8 +25,8 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
   const proposedClamped = Math.max(0, Math.min(100, proposedPct));
   const proposedInBand = proposed >= low && proposed <= high;
   const markerColor = proposedInBand
-    ? 'var(--wpds-color-bg-interactive-brand-strong)'
-    : 'var(--wpds-color-fg-content-warning)';
+    ? 'var(--wpds-color-background-interactive-brand-strong)'
+    : 'var(--wpds-color-foreground-content-warning)';
 
   return (
     <Stack direction="column" gap="sm">
@@ -34,7 +34,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
         <Text
           variant="body-sm"
           className="wa-mono"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+          style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
         >
           low {formatPrice(low, currency)}
         </Text>
@@ -42,7 +42,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
           <Text
             variant="body-sm"
             className="wa-mono"
-            style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+            style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
           >
             median {formatPrice(median, currency)}
           </Text>
@@ -50,7 +50,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
         <Text
           variant="body-sm"
           className="wa-mono"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+          style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
         >
           high {formatPrice(high, currency)}
         </Text>
@@ -60,7 +60,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
           position: 'relative',
           height: 8,
           borderRadius: 'var(--wpds-border-radius-sm)',
-          background: 'var(--wpds-color-bg-surface-neutral-weak)',
+          background: 'var(--wpds-color-background-surface-neutral-weak)',
           overflow: 'visible',
         }}
         aria-hidden="true"
@@ -87,7 +87,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
             width: 16,
             borderRadius: '50%',
             background: markerColor,
-            border: 'var(--wpds-border-width-md) solid var(--wpds-color-bg-surface-neutral)',
+            border: 'var(--wpds-border-width-md) solid var(--wpds-color-background-surface-neutral)',
             boxShadow: 'var(--wpds-elevation-sm)',
             transform: 'translateX(-8px)',
           }}
@@ -95,7 +95,7 @@ export default function ObservedRange({ low, median, high, proposed, currency }:
       </div>
       <Text
         variant="body-sm"
-        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
       >
         {proposedInBand
           ? `Proposed ${formatPrice(proposed, currency)} sits inside the observed band.`

@@ -138,7 +138,7 @@ export default function OnboardingShell({
           />
           <Text
             variant="body-md"
-            style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+            style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
           >
             {currentStep?.subheading ?? ''}
           </Text>

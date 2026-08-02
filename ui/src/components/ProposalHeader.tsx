@@ -57,9 +57,9 @@ export default function ProposalHeader({
         <PersonaAvatar persona={personaKey} size="md" />
         <Text
           variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+          style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
         >
-          <strong style={{ color: 'var(--wpds-color-fg-content-neutral)' }}>
+          <strong style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}>
             {personaLabel}
           </strong>{' '}
           {verb} · {relativeTime(timestamp)} ·{' '}
@@ -86,7 +86,7 @@ export default function ProposalHeader({
           <Text
             variant="body-md"
             style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              color: 'var(--wpds-color-foreground-content-neutral-weak)',
               maxWidth: 760,
             }}
           >

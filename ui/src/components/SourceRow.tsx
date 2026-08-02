@@ -35,7 +35,7 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
       style={{
         padding: 'var(--wpds-dimension-padding-md)',
         borderRadius: 'var(--wpds-border-radius-sm)',
-        background: 'var(--wpds-color-bg-surface-neutral-weak)',
+        background: 'var(--wpds-color-background-surface-neutral-weak)',
       }}
     >
       <Stack direction="column" gap="xs" style={{ minWidth: 0, flex: 1 }}>
@@ -47,8 +47,8 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
                 fontWeight: 'var(--wpds-typography-font-weight-medium)',
                 padding: '2px 8px',
                 borderRadius: 'var(--wpds-border-radius-sm)',
-                background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                color: 'var(--wpds-color-fg-content-neutral)',
+                background: 'var(--wpds-color-background-surface-neutral-weak)',
+                color: 'var(--wpds-color-foreground-content-neutral)',
               }}
             >
               {source.retailer}
@@ -83,7 +83,7 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
           <Text
             variant="body-sm"
             style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
+              color: 'var(--wpds-color-foreground-content-neutral-weak)',
               fontSize: 'var(--wpds-typography-font-size-xs)',
             }}
           >
@@ -102,7 +102,7 @@ function SourceRow({ source, currency, proposed }: SourceRowProps) {
         <Text
           variant="body-sm"
           style={{
-            color: 'var(--wpds-color-fg-content-neutral-weak)',
+            color: 'var(--wpds-color-foreground-content-neutral-weak)',
             fontSize: 'var(--wpds-typography-font-size-xs)',
           }}
         >

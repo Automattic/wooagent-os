@@ -63,7 +63,7 @@ function TurnEventTrace({ event }: { event: unknown }) {
                   style={{
                     padding: 'var(--wpds-dimension-padding-sm)',
                     borderRadius: 'var(--wpds-border-radius-sm)',
-                    background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                    background: 'var(--wpds-color-background-surface-neutral-weak)',
                   }}
                 >
                   <Text
@@ -72,7 +72,7 @@ function TurnEventTrace({ event }: { event: unknown }) {
                       whiteSpace: 'pre-wrap',
                       fontFamily: 'var(--wpds-typography-font-family-body)',
                       fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral)',
+                      color: 'var(--wpds-color-foreground-content-neutral)',
                     }}
                   >
                     {JSON.stringify(call, null, 2)}
@@ -96,7 +96,7 @@ function TurnEventTrace({ event }: { event: unknown }) {
                   style={{
                     padding: 'var(--wpds-dimension-padding-sm)',
                     borderRadius: 'var(--wpds-border-radius-sm)',
-                    background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                    background: 'var(--wpds-color-background-surface-neutral-weak)',
                   }}
                 >
                   <Text
@@ -105,7 +105,7 @@ function TurnEventTrace({ event }: { event: unknown }) {
                       whiteSpace: 'pre-wrap',
                       fontFamily: 'var(--wpds-typography-font-family-body)',
                       fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral)',
+                      color: 'var(--wpds-color-foreground-content-neutral)',
                     }}
                   >
                     {JSON.stringify(call, null, 2)}
@@ -342,7 +342,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                       to={`/issues/${run.issue_id}`}
                       style={{
                         fontSize: 'var(--wpds-typography-font-size-sm)',
-                        color: 'var(--wpds-color-fg-content-neutral)',
+                        color: 'var(--wpds-color-foreground-content-neutral)',
                       }}
                     >
                       {run.issue_id.slice(0, 8).toUpperCase()}
@@ -359,7 +359,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                     className="wa-mono"
                     style={{
                       fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     }}
                   >
                     {formatDateTime(run.scheduled_at)} · {relativeTime(run.scheduled_at)}
@@ -373,7 +373,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                       className="wa-mono"
                       style={{
                         fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       {formatDateTime(run.claimed_at)}
@@ -388,7 +388,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                       className="wa-mono"
                       style={{
                         fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       {formatDateTime(run.completed_at)}
@@ -402,7 +402,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                   <span className="wa-eyebrow">Skip reason</span>
                   <Text
                     variant="body-sm"
-                    style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                    style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                   >
                     {run.skip_reason}
                   </Text>
@@ -414,7 +414,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                   <span className="wa-eyebrow">Failure reason</span>
                   <Text
                     variant="body-sm"
-                    style={{ color: 'var(--wpds-color-fg-content-warning)' }}
+                    style={{ color: 'var(--wpds-color-foreground-content-warning)' }}
                   >
                     {run.failure_reason}
                     {run.failure_class
@@ -452,7 +452,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                     <Text
                       variant="body-sm"
                       style={{
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                         fontSize: 'var(--wpds-typography-font-size-xs)',
                         minWidth: 20,
                       }}
@@ -464,7 +464,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                       variant="body-sm"
                       style={{
                         fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       {relativeTime(r.scheduled_at)}
@@ -474,7 +474,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                         to={`/runs/${r.id}`}
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
-                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          color: 'var(--wpds-color-foreground-content-neutral-weak)',
                         }}
                       >
                         {r.id.slice(0, 8).toUpperCase()}
@@ -484,7 +484,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                         className="wa-mono"
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
-                          color: 'var(--wpds-color-fg-content-neutral)',
+                          color: 'var(--wpds-color-foreground-content-neutral)',
                           fontWeight: 'var(--wpds-typography-font-weight-medium)',
                         }}
                       >
@@ -496,7 +496,7 @@ export default function RunDetail({ connection, onAskAgent, onRunTerminal }: Pro
                         variant="body-sm"
                         style={{
                           fontSize: 'var(--wpds-typography-font-size-xs)',
-                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          color: 'var(--wpds-color-foreground-content-neutral-weak)',
                         }}
                       >
                         {formatLatency(r.latency_ms)}

@@ -27,7 +27,7 @@ type Phase =
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_REGENS = 1; // brief §6 — auto-regen once, hard-fail on second timeout
-const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
+const MUTED = { color: 'var(--wpds-color-foreground-content-neutral-weak)' } as const;
 
 export default function Step2Store({ connection, onPaired, onBack }: Props) {
   const [storeUrl, setStoreUrl] = useState('');
@@ -374,7 +374,7 @@ export default function Step2Store({ connection, onPaired, onBack }: Props) {
             gap="sm"
             style={{
               padding: 'var(--wpds-dimension-padding-md)',
-              background: 'var(--wpds-color-bg-surface-neutral-weak)',
+              background: 'var(--wpds-color-background-surface-neutral-weak)',
               border:
                 'var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral)',
               borderRadius: 'var(--wpds-border-radius-lg)',

@@ -158,7 +158,7 @@ export default function Done({ issues, batches, error, onAskAgent }: Props) {
               className="wa-mono"
               style={{
                 fontSize: 'var(--wpds-typography-font-size-xs)',
-                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                color: 'var(--wpds-color-foreground-content-neutral-weak)',
               }}
             >
               {item.itemId}
@@ -187,7 +187,7 @@ export default function Done({ issues, batches, error, onAskAgent }: Props) {
         render: ({ item }) => (
           <Text
             variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
           >
             {relativeTime(item.completedAt)}
           </Text>
@@ -244,7 +244,7 @@ export default function Done({ issues, batches, error, onAskAgent }: Props) {
       <Text
         variant="body-sm"
         style={{
-          color: 'var(--wpds-color-fg-content-neutral-weak)',
+          color: 'var(--wpds-color-foreground-content-neutral-weak)',
           textAlign: 'center',
           maxWidth: '420px',
         }}
