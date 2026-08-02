@@ -172,7 +172,7 @@ function MandateCell({ persona }: { persona: Persona }) {
   return (
     <Text
       variant="body-sm"
-      style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+      style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
     >
       {metaFor(persona.persona).mandate}
     </Text>
@@ -226,7 +226,7 @@ function EmptyState() {
       <Text variant="body-md">No agents yet.</Text>
       <Text
         variant="body-sm"
-        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
       >
         They'll show up here as soon as WooAgent reports them.
       </Text>

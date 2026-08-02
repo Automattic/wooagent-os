@@ -315,7 +315,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               <span
                 style={{
                   fontSize: 'var(--wpds-typography-font-size-xs)',
-                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  color: 'var(--wpds-color-foreground-content-neutral-weak)',
                 }}
               >
                 Progress
@@ -324,7 +324,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                 className="wa-mono"
                 style={{
                   fontSize: 'var(--wpds-typography-font-size-xs)',
-                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  color: 'var(--wpds-color-foreground-content-neutral-weak)',
                 }}
               >
                 {totalProgress.settled} / {totalProgress.total}
@@ -435,7 +435,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                   className="wa-mono"
                   style={{
                     fontSize: 'var(--wpds-typography-font-size-xs)',
-                    color: 'var(--wpds-color-fg-content-neutral-weak)',
+                    color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     width: 32,
                     flex: 'none',
                   }}
@@ -462,7 +462,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     className="wa-mono"
                     style={{
                       fontSize: 'var(--wpds-typography-font-size-xs)',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     }}
                   >
                     {productSku}
@@ -500,7 +500,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                       <span className="wa-eyebrow">Current</span>
                       <Text
                         variant="body-sm"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                       >
                         Live on store
                       </Text>
@@ -513,8 +513,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                             variant="body-sm"
                             style={{
                               color: previousShort
-                                ? 'var(--wpds-color-fg-content-neutral)'
-                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                                ? 'var(--wpds-color-foreground-content-neutral)'
+                                : 'var(--wpds-color-foreground-content-neutral-weak)',
                               whiteSpace: 'pre-wrap',
                               lineHeight: 1.5,
                             }}
@@ -528,8 +528,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                             variant="body-sm"
                             style={{
                               color: previousLong
-                                ? 'var(--wpds-color-fg-content-neutral)'
-                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                                ? 'var(--wpds-color-foreground-content-neutral)'
+                                : 'var(--wpds-color-foreground-content-neutral-weak)',
                               whiteSpace: 'pre-wrap',
                               lineHeight: 1.5,
                             }}
@@ -546,8 +546,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                             variant="body-sm"
                             style={{
                               color: previousCopy
-                                ? 'var(--wpds-color-fg-content-neutral)'
-                                : 'var(--wpds-color-fg-content-neutral-weak)',
+                                ? 'var(--wpds-color-foreground-content-neutral)'
+                                : 'var(--wpds-color-foreground-content-neutral-weak)',
                               whiteSpace: 'pre-wrap',
                               lineHeight: 1.5,
                             }}
@@ -606,7 +606,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                     <Text
                                       variant="body-sm"
                                       style={{
-                                        color: 'var(--wpds-color-fg-interactive-brand)',
+                                        color: 'var(--wpds-color-foreground-interactive-brand)',
                                         fontWeight: 'var(--wpds-typography-font-weight-medium)',
                                       }}
                                     >
@@ -616,7 +616,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                     descriptor && (
                                       <Text
                                         variant="body-sm"
-                                        style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                                        style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                                       >
                                         {descriptor}
                                       </Text>
@@ -667,8 +667,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                 variant="body-sm"
                                 style={{
                                   color: v.body_short
-                                    ? 'var(--wpds-color-fg-content-neutral)'
-                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                    ? 'var(--wpds-color-foreground-content-neutral)'
+                                    : 'var(--wpds-color-foreground-content-neutral-weak)',
                                   whiteSpace: 'pre-wrap',
                                   lineHeight: 1.5,
                                   textAlign: 'left',
@@ -683,8 +683,8 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                                 variant="body-sm"
                                 style={{
                                   color: v.body_long
-                                    ? 'var(--wpds-color-fg-content-neutral)'
-                                    : 'var(--wpds-color-fg-content-neutral-weak)',
+                                    ? 'var(--wpds-color-foreground-content-neutral)'
+                                    : 'var(--wpds-color-foreground-content-neutral-weak)',
                                   whiteSpace: 'pre-wrap',
                                   lineHeight: 1.5,
                                   textAlign: 'left',
@@ -711,7 +711,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                               style={{
                                 marginTop: 'var(--wpds-dimension-gap-sm)',
                                 fontSize: 'var(--wpds-typography-font-size-xs)',
-                                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                                color: 'var(--wpds-color-foreground-content-neutral-weak)',
                                 fontStyle: 'italic',
                                 textAlign: 'left',
                               }}
@@ -729,7 +729,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     {!reviewable ? (
                       <Text
                         variant="body-sm"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                       >
                         {`Already ${issue.status === 'done' ? 'approved' : issue.status}`}
                       </Text>
@@ -740,7 +740,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                           {(selectedVariantID.split('_').pop() ?? '').toUpperCase()}{' '}
                           selected
                         </strong>
-                        <span style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}>
+                        <span style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}>
                           {' — '}
                           {isColdDraftBatch
                             ? 'Long and short descriptions will update on approve'
@@ -750,7 +750,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
                     ) : (
                       <Text
                         variant="body-sm"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                       >
                         No variant selected yet — click a column above to choose
                       </Text>
@@ -862,7 +862,7 @@ export default function BatchReview({ connection, onChanged, onAskAgent }: Props
               </Text>
               <Text
                 variant="body-sm"
-                style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
               >
                 Long and short descriptions will update on approve
               </Text>
@@ -969,12 +969,12 @@ function Counter({ label, value, tone }: CounterProps) {
   // non-zero — a green 0 / red 0 would over-signal.
   const color =
     value === 0
-      ? 'var(--wpds-color-fg-content-neutral)'
+      ? 'var(--wpds-color-foreground-content-neutral)'
       : tone === 'success'
-        ? 'var(--wpds-color-fg-content-success)'
+        ? 'var(--wpds-color-foreground-content-success)'
         : tone === 'error'
-          ? 'var(--wpds-color-fg-content-error)'
-          : 'var(--wpds-color-fg-content-neutral)';
+          ? 'var(--wpds-color-foreground-content-error)'
+          : 'var(--wpds-color-foreground-content-neutral)';
   return (
     <div className="wa-batch-counter__cell">
       <Text
@@ -990,7 +990,7 @@ function Counter({ label, value, tone }: CounterProps) {
       <span
         style={{
           fontSize: 'var(--wpds-typography-font-size-xs)',
-          color: 'var(--wpds-color-fg-content-neutral-weak)',
+          color: 'var(--wpds-color-foreground-content-neutral-weak)',
         }}
       >
         {label}
@@ -1144,7 +1144,7 @@ function renderPricingBody(
                 variant="body-sm"
                 style={{
                   marginLeft: 'auto',
-                  color: 'var(--wpds-color-fg-content-neutral-weak)',
+                  color: 'var(--wpds-color-foreground-content-neutral-weak)',
                 }}
               >
                 shared across all variations

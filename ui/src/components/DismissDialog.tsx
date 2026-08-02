@@ -111,70 +111,77 @@ export default function DismissDialog({
           <Dialog.Title>{title}</Dialog.Title>
         </Dialog.Header>
 
-        <Stack direction="column" gap="lg">
-          <Text
-            variant="body-sm"
-            style={{
-              color: 'var(--wpds-color-fg-content-neutral-weak)',
-              textWrap: 'pretty',
-            }}
-          >
-            {body}
-          </Text>
+        {/* Dialog.Content is required, not optional chrome: it owns the
+            popup's body padding and overflow. Without it the body renders
+            flush to the popup edges (Header and Footer bring their own
+            padding, so only the middle looks wrong) and long content clips
+            instead of scrolling. */}
+        <Dialog.Content>
+          <Stack direction="column" gap="lg">
+            <Text
+              variant="body-sm"
+              style={{
+                color: 'var(--wpds-color-foreground-content-neutral-weak)',
+                textWrap: 'pretty',
+              }}
+            >
+              {body}
+            </Text>
 
-          <Stack direction="column" gap="sm">
-            <Text variant="heading-sm">Tell the agent why</Text>
-            {/* CUSTOM: chip group of preset dismiss reasons. (a) WPDS has no
-                ToggleGroupControl in @wordpress/ui yet — DSGWOO follow-up.
-                (b) Inline wrapping flex of WPDS Buttons; selected reason gets
-                primary variant, others secondary. (c) Replace with
-                ToggleGroupControl once it ships. */}
-            <div className="wa-dismiss-dialog__chips">
-              {REASON_CHIPS.map((r) => (
-                <Button
-                  key={r.value}
-                  variant={reason === r.value ? 'primary' : 'secondary'}
-                  __next40pxDefaultSize
-                  aria-pressed={reason === r.value}
-                  // Re-clicking the selected chip clears it, so the operator
-                  // can back out of a reason without picking a different one.
-                  onClick={() =>
-                    setReason((cur) => (cur === r.value ? null : r.value))
-                  }
+            <Stack direction="column" gap="sm">
+              <Text variant="heading-sm">Tell the agent why</Text>
+              {/* CUSTOM: chip group of preset dismiss reasons. (a) WPDS has no
+                  ToggleGroupControl in @wordpress/ui yet — DSGWOO follow-up.
+                  (b) Inline wrapping flex of WPDS Buttons; selected reason gets
+                  primary variant, others secondary. (c) Replace with
+                  ToggleGroupControl once it ships. */}
+              <div className="wa-dismiss-dialog__chips">
+                {REASON_CHIPS.map((r) => (
+                  <Button
+                    key={r.value}
+                    variant={reason === r.value ? 'primary' : 'secondary'}
+                    __next40pxDefaultSize
+                    aria-pressed={reason === r.value}
+                    // Re-clicking the selected chip clears it, so the operator
+                    // can back out of a reason without picking a different one.
+                    onClick={() =>
+                      setReason((cur) => (cur === r.value ? null : r.value))
+                    }
+                  >
+                    {r.label}
+                  </Button>
+                ))}
+              </div>
+            </Stack>
+
+            <TextareaControl
+              label="Add more context"
+              hideLabelFromVision
+              placeholder="Optional — add more context for the agent…"
+              value={comment}
+              onChange={(v: string) => setComment(v)}
+              rows={3}
+              __nextHasNoMarginBottom
+            />
+
+            <div className="wa-dismiss-dialog__info">
+              <Stack direction="column" gap="xs">
+                <Text variant="body-sm">
+                  Archived for{' '}
+                  <strong>30 days</strong>
+                  {' · '}permanently deleted{' '}
+                  <strong>{deletionDate}</strong>
+                </Text>
+                <Text
+                  variant="body-sm"
+                  style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                 >
-                  {r.label}
-                </Button>
-              ))}
+                  You can restore or extend from the archive at any time.
+                </Text>
+              </Stack>
             </div>
           </Stack>
-
-          <TextareaControl
-            label="Add more context"
-            hideLabelFromVision
-            placeholder="Optional — add more context for the agent…"
-            value={comment}
-            onChange={(v: string) => setComment(v)}
-            rows={3}
-            __nextHasNoMarginBottom
-          />
-
-          <div className="wa-dismiss-dialog__info">
-            <Stack direction="column" gap="xs">
-              <Text variant="body-sm">
-                Archived for{' '}
-                <strong>30 days</strong>
-                {' · '}permanently deleted{' '}
-                <strong>{deletionDate}</strong>
-              </Text>
-              <Text
-                variant="body-sm"
-                style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
-              >
-                You can restore or extend from the archive at any time.
-              </Text>
-            </Stack>
-          </div>
-        </Stack>
+        </Dialog.Content>
 
         <Dialog.Footer>
           <Dialog.Action

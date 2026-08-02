@@ -126,7 +126,7 @@ function NameCell({ ability }: { ability: Ability }) {
       {ability.title && ability.title !== ability.name && (
         <Text
           variant="body-sm"
-          style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+          style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
         >
           {ability.name}
         </Text>
@@ -142,7 +142,7 @@ function StoreCell({ ability }: { ability: Ability }) {
   return (
     <Text
       variant="body-sm"
-      style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+      style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
     >
       {display || ability.store_id}
     </Text>
@@ -153,7 +153,7 @@ function VersionCell({ ability }: { ability: Ability }) {
   return (
     <Text
       variant="body-sm"
-      style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+      style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
     >
       {ability.version || '—'}
     </Text>
@@ -170,7 +170,7 @@ function LastSeenCell({ ability }: { ability: Ability }) {
     <span
       style={{
         fontSize: 'var(--wpds-typography-font-size-sm)',
-        color: 'var(--wpds-color-fg-content-neutral-weak)',
+        color: 'var(--wpds-color-foreground-content-neutral-weak)',
       }}
     >
       {relativeTime(ability.last_seen_at)}
@@ -202,7 +202,7 @@ function InspectorModal({
           )}
           <Text
             variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
           >
             Last seen {relativeTime(ability.last_seen_at)}
           </Text>
@@ -217,7 +217,7 @@ function InspectorModal({
             variant="body-sm"
             style={{
               fontWeight: 'var(--wpds-typography-font-weight-medium)',
-              color: 'var(--wpds-color-fg-content-neutral)',
+              color: 'var(--wpds-color-foreground-content-neutral)',
             }}
           >
             Identifier
@@ -231,7 +231,7 @@ function InspectorModal({
               variant="body-sm"
               style={{
                 fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                color: 'var(--wpds-color-fg-content-neutral)',
+                color: 'var(--wpds-color-foreground-content-neutral)',
               }}
             >
               Store
@@ -248,7 +248,7 @@ function InspectorModal({
               variant="body-sm"
               style={{
                 fontWeight: 'var(--wpds-typography-font-weight-medium)',
-                color: 'var(--wpds-color-fg-content-neutral)',
+                color: 'var(--wpds-color-foreground-content-neutral)',
               }}
             >
               Schema
@@ -266,9 +266,9 @@ function InspectorModal({
               style={{
                 margin: 0,
                 padding: 'var(--wpds-dimension-padding-sm)',
-                background: 'var(--wpds-color-bg-surface-neutral-subtle)',
+                background: 'var(--wpds-color-background-surface-neutral-weak)',
                 border:
-                  '1px solid var(--wpds-color-stroke-neutral-subtle)',
+                  '1px solid var(--wpds-color-stroke-surface-neutral-weak)',
                 borderRadius: 'var(--wpds-border-radius-sm)',
                 fontFamily: 'var(--wpds-typography-font-family-body)',
                 fontSize: 'var(--wpds-typography-font-size-sm)',
@@ -324,7 +324,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       </Text>
       <Text
         variant="body-sm"
-        style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+        style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
       >
         {filtered
           ? 'Try clearing the filter to see the full set.'

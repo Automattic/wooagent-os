@@ -48,7 +48,7 @@ When building or reviewing UI in this repo, invoke these skills:
 ### Tokens
 
 Use `--wpds-*` CSS variables only:
-- Color: `--wpds-color-bg-surface-*`, `--wpds-color-fg-content-*`, `--wpds-color-stroke-*`, `--wpds-color-bg-interactive-*`.
+- Color: `--wpds-color-background-surface-*`, `--wpds-color-foreground-content-*`, `--wpds-color-stroke-*`, `--wpds-color-background-interactive-*`.
 - Dimension: `--wpds-dimension-padding-*`, `--wpds-dimension-gap-*`, `--wpds-dimension-surface-width-*`.
 - Typography: `--wpds-typography-font-family-{body,heading}`, `--wpds-typography-font-size-*`, `--wpds-typography-line-height-*`, `--wpds-typography-font-weight-*`. **No `mono`** — body font for identifiers, hostnames, slugs, model names, everything. See `DESIGN.md` Typography section for rationale.
 - Elevation: `--wpds-elevation-{xs,sm,md,lg}`.
@@ -68,7 +68,7 @@ The seven agent identities (Marketing / Pricing / Inventory / Accounting / Repor
 - `--wa-persona-ss-bg` / `--wa-persona-ss-ink` — Sales Support (peach: `#F7CFAF` / `#0F766E`)
 - `--wa-persona-cs-bg` / `--wa-persona-cs-ink` — Chief of Staff (gray: `#E5E5E5` / `#FFFFFF`)
 
-Used in **one place only**: the agent avatar squares in the sidebar (`PersonaAvatar`). Two previous sites have been retired — the brand-header "W" tile in `LeftNav` moved to WPDS brand indigo (`--wpds-color-bg-interactive-brand-strong`) per the i3.2 Figma, and the persona-colored `KindBadge` "kind pill" on board cards was removed entirely when the queue moved to DataViews (agent identity via `PersonaAvatar` is the canonical visual signal). Everything else (status badges, KPI cards, action buttons, notices) uses native WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). **Don't expand this exception.** Any new color need is a WPDS need.
+Used in **one place only**: the agent avatar squares in the sidebar (`PersonaAvatar`). Two previous sites have been retired — the brand-header "W" tile in `LeftNav` moved to WPDS brand indigo (`--wpds-color-background-interactive-brand-strong`) per the i3.2 Figma, and the persona-colored `KindBadge` "kind pill" on board cards was removed entirely when the queue moved to DataViews (agent identity via `PersonaAvatar` is the canonical visual signal). Everything else (status badges, KPI cards, action buttons, notices) uses native WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). **Don't expand this exception.** Any new color need is a WPDS need.
 
 ### Layout
 

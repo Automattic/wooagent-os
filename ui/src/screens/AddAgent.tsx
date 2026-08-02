@@ -326,7 +326,7 @@ export default function AddAgent({ connection, onChanged }: Props) {
                       />
                       <Text
                         variant="body-sm"
-                        style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                        style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                       >
                         {selected.description}
                       </Text>

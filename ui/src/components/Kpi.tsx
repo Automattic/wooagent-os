@@ -14,21 +14,21 @@ interface Props {
 }
 
 const TONE_FG: Record<KpiTone, string> = {
-  neutral: 'var(--wpds-color-fg-content-neutral)',
-  brand: 'var(--wpds-color-fg-interactive-brand)',
-  success: 'var(--wpds-color-fg-content-success)',
-  warning: 'var(--wpds-color-fg-content-warning)',
-  caution: 'var(--wpds-color-fg-content-caution)',
+  neutral: 'var(--wpds-color-foreground-content-neutral)',
+  brand: 'var(--wpds-color-foreground-interactive-brand)',
+  success: 'var(--wpds-color-foreground-content-success)',
+  warning: 'var(--wpds-color-foreground-content-warning)',
+  caution: 'var(--wpds-color-foreground-content-caution)',
 };
 
 // success/warning/caution bars use normal-strength bg-surface-* tokens
 // because WPDS has no -strong variant for those tones.
 const TONE_BAR: Record<KpiTone, string | null> = {
   neutral: null,
-  brand: 'var(--wpds-color-bg-interactive-brand-strong)',
-  success: 'var(--wpds-color-bg-surface-success)',
-  warning: 'var(--wpds-color-bg-surface-warning)',
-  caution: 'var(--wpds-color-bg-surface-caution)',
+  brand: 'var(--wpds-color-background-interactive-brand-strong)',
+  success: 'var(--wpds-color-background-surface-success)',
+  warning: 'var(--wpds-color-background-surface-warning)',
+  caution: 'var(--wpds-color-background-surface-caution)',
 };
 
 // One KPI tile from the IssueDetail header row. Stays a thin wrapper around
@@ -77,7 +77,7 @@ export default function Kpi({ label, value, hint, score, tone = 'neutral' }: Pro
           {hint && (
             <Text
               variant="body-sm"
-              style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+              style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
             >
               {hint}
             </Text>
