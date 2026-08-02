@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
@@ -35,6 +37,22 @@ func classify(err error) (FailureClass, string) {
 	}
 	if errors.Is(err, mcp.ErrTransport) {
 		return FailureTransient, "MCP transport error; transient network issue"
+	}
+	// HTTP-level rejections from the store. These used to fall through to
+	// the unknown-error default, which meant an operator saw "unknown error"
+	// while the store's own response said something like "This site is
+	// disabled" (DSGWOO-1469). storeReason folds that sentence back in.
+	if errors.Is(err, mcp.ErrStoreAuth) {
+		return FailurePermanent, storeReason(err, "re-pair in Settings → Stores")
+	}
+	if errors.Is(err, mcp.ErrStoreGone) {
+		return FailurePermanent, storeReason(err, "check Settings → Stores")
+	}
+	if errors.Is(err, mcp.ErrStoreUnavailable) {
+		return FailureTransient, storeReason(err, "retrying")
+	}
+	if errors.Is(err, mcp.ErrStoreBadRequest) {
+		return FailurePermanent, storeReason(err, "not retrying")
 	}
 	// Per-run cost cap. Permanent: a looping persona would re-trip the gate
 	// on every retry. The wrapped error message carries the actual dollar
@@ -69,4 +87,38 @@ func classify(err error) (FailureClass, string) {
 	// transport error, an MCP error that isn't one of the sentinels above,
 	// a decode failure. Transient is right for all of them.
 	return FailureTransient, "unknown error: " + err.Error()
+}
+
+// storeReason composes an operator-facing reason for a store HTTP failure:
+// what the store returned, then what to do about it.
+//
+// The store's own words are the valuable part — "This site is disabled"
+// tells an operator more than any wording we could invent, which is why the
+// advice half stays terse.
+//
+// The excerpt is sized against the surrounding text so the finished sentence
+// fits mcp.ReasonBudget. That matters concretely: go over it and the
+// agent-roster notice condenses the reason to its leading clause, hiding the
+// cause all over again (DSGWOO-1472). Computing the budget rather than
+// picking a fixed excerpt cap keeps that true no matter how the advice
+// strings are reworded.
+func storeReason(err error, advice string) string {
+	var se *mcp.StatusError
+	if !errors.As(err, &se) {
+		return "Store error; " + advice
+	}
+	prefix := fmt.Sprintf("Store returned http %d", se.StatusCode)
+	suffix := "; " + advice
+	budget := mcp.ReasonBudget - len([]rune(prefix)) - len([]rune(suffix)) - len(" — ")
+	if budget < 16 {
+		// Advice alone nearly fills the line; the status is still useful.
+		return prefix + suffix
+	}
+	if d := se.Detail(budget); d != "" {
+		// Store bodies usually end in a full stop; the advice clause follows
+		// a semicolon, so keeping it would read "…disabled.; check Settings".
+		d = strings.TrimRight(d, ".")
+		return prefix + " — " + d + suffix
+	}
+	return prefix + suffix
 }
