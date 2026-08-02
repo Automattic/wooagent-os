@@ -414,7 +414,7 @@ func (c *Client) doRequest(ctx context.Context, method string, params any, out a
 		if jsonErr := json.Unmarshal(raw, &rpcResp); jsonErr == nil && rpcResp.Error != nil {
 			return c.handleEnvelopeError(method, rpcResp.Error.Message)
 		}
-		return fmt.Errorf("http %d: %s", resp.StatusCode, string(raw))
+		return NewStatusError(c.Endpoint(), resp.StatusCode, raw)
 	}
 	var rpcResp rpcResponse
 	if err := json.Unmarshal(raw, &rpcResp); err != nil {
