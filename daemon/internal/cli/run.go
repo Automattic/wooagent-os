@@ -120,14 +120,15 @@ func newRunCmd() *cobra.Command {
 			// MCP wiring is optional. The approve endpoint requires it; everything
 			// else (kanban, issue detail, list/create) runs without.
 			//
-			// TODO(plan #4 — Companion Plugin): cut MCP over to paired stores.
-			// Once the device-pair handshake lands and `stores` rows can reach
-			// status='paired', resolve mcp.Client config from the row +
-			// keychain (token_ref) here, with env-var fallback. The auth
-			// shape (bearer vs Basic vs WP App Password issued at pair time)
-			// is decided by the plugin work, so we stay env-var-only here
-			// until then to avoid locking in an assumption.
-			mcpClient := loadMCPClient(cmd.OutOrStdout())
+			// The paired store is the source of truth; env vars are the
+			// headless/CI fallback. A reconciler below keeps this client
+			// pointed at the current store, so re-pairing takes effect
+			// without a daemon restart (DSGWOO-1470).
+			var mcpClient *mcp.Client
+			if target, ok := resolveMCPTarget(ctx, st.DB, secretStore, cmd.OutOrStdout()); ok {
+				mcpClient = mcp.NewClient(target.Config)
+				fmt.Fprintf(cmd.OutOrStdout(), "→ mcp: using %s (%s)\n", target.Label, target.Source)
+			}
 
 			// Build the PEP. The manifest is the trust allowlist; the PEP wraps
 			// the MCP client so callers can never reach MCP directly. When the
@@ -175,6 +176,12 @@ func newRunCmd() *cobra.Command {
 			// finishes (a slow store shouldn't bench the daemon).
 			go srv.Abilities().RunAll(ctx)
 			srv.Abilities().SchedulePeriodic(ctx)
+
+			// Keep the shared MCP client pointed at the current paired
+			// store. Without this, re-pairing to a different store has
+			// no effect on personas or Approve until the daemon is
+			// restarted (DSGWOO-1470).
+			go startMCPReconciler(ctx, mcpClient, st.DB, secretStore, cmd.OutOrStdout())
 
 			// Background retention. Both sweeps run once at startup then
 			// every 24h until shutdown:
@@ -272,25 +279,6 @@ func newRunCmd() *cobra.Command {
 	c.Flags().BoolVar(&skipScheduler, "skip-personas", false, "DEPRECATED: alias for --skip-scheduler")
 	_ = c.Flags().MarkDeprecated("skip-personas", "use --skip-scheduler")
 	return c
-}
-
-// loadMCPClient assembles an MCP client from env vars if all three are set;
-// otherwise returns nil and writes a hint to out. The caller decides whether
-// nil is fatal (it isn't, for v0.1).
-func loadMCPClient(out interface{ Write([]byte) (int, error) }) *mcp.Client {
-	url := os.Getenv("WOOAGENT_MCP_URL")
-	user := os.Getenv("WOOAGENT_MCP_USER")
-	pass := os.Getenv("WOOAGENT_MCP_APP_PASSWORD")
-	if url == "" || user == "" || pass == "" {
-		return nil
-	}
-	return mcp.NewClient(mcp.Config{
-		Endpoint: url,
-		Username: user,
-		// WP shows app passwords with spaces for readability; strip them so
-		// pasted values from the admin UI work without preprocessing.
-		Password: strings.ReplaceAll(pass, " ", ""),
-	})
 }
 
 // loadSkillsForPersonas returns the embedded skill registry by default,
