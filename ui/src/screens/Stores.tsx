@@ -3,7 +3,13 @@ import { Badge, Card, Notice, Stack, Text } from '@wordpress/ui';
 import { Button, Modal } from '@wordpress/components';
 import { useNavigate } from 'react-router-dom';
 import { Page } from '@wordpress/admin-ui';
-import { api, type Connection, type Store } from '../api/client';
+import {
+  api,
+  capabilityGapSummary,
+  type Connection,
+  type McpMismatch,
+  type Store,
+} from '../api/client';
 import PageGlobalActions from '../components/PageGlobalActions';
 import { useAskAgentContext } from '../lib/askAgent';
 import { formatDateTime } from '../lib/boardItems';
@@ -24,6 +30,7 @@ export default function Stores({
 }: Props) {
   const [stores, setStores] = useState<Store[] | null>(null);
   const [storesError, setStoresError] = useState<string | null>(null);
+  const [mcpMismatch, setMcpMismatch] = useState<McpMismatch | null>(null);
   const [confirmStore, setConfirmStore] = useState<Store | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
@@ -37,12 +44,19 @@ export default function Stores({
   );
   const navigate = useNavigate();
 
+  const storesWithGaps = (stores ?? []).filter(
+    (s) => (s.capability_gaps?.length ?? 0) > 0,
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await api.stores.list(connection);
-        if (!cancelled) setStores(res.stores);
+        if (!cancelled) {
+          setStores(res.stores);
+          setMcpMismatch(res.mcp_mismatch ?? null);
+        }
       } catch (e) {
         if (!cancelled) {
           setStoresError(e instanceof Error ? e.message : String(e));
@@ -140,6 +154,56 @@ export default function Stores({
           <Notice.Root intent="error">
             <Notice.Description>
               Could not load the connected store. Refresh to retry.
+            </Notice.Description>
+          </Notice.Root>
+        )}
+
+        {/* `warning` rather than `info`: the daemon itself is fine — it
+            ignores the stale variable and uses the paired store — but any
+            script or CLI on this machine that reads WOOAGENT_MCP_URL will act
+            on a different store, which is worth more than a shrug. (WPDS
+            Notice has no `caution` intent; the scale is neutral / info /
+            warning / success / error.) It's here at all because the daemon's
+            equivalent message goes to stdout, which nobody running the app in
+            a window ever sees. */}
+        {/* Capability gaps are per-store, so they hang off the store card's
+            data rather than being a page-level advisory. The daemon has
+            computed these since DSGWOO-1471 but nothing rendered them, so a
+            store missing an ability looked healthy while the persona that
+            needs it silently skipped every run. */}
+        {storesWithGaps.map((store) => (
+          <Notice.Root key={store.id} intent="warning">
+            <Notice.Description>
+              <Stack direction="column" gap="xs">
+                <Text variant="body-md">
+                  {store.url} is missing{' '}
+                  {store.capability_gaps!.length === 1
+                    ? 'an ability'
+                    : `${store.capability_gaps!.length} abilities`}{' '}
+                  WooAgent needs. Update the WooAgent Companion Plugin on that
+                  store. Agents that depend on the missing abilities will skip
+                  their runs until it&rsquo;s updated; the rest keep working.
+                </Text>
+                {store.capability_gaps!.map((gap) => (
+                  <Text key={`${gap.ability}:${gap.used_by}`} variant="body-sm" style={MUTED}>
+                    {capabilityGapSummary(gap)}
+                  </Text>
+                ))}
+              </Stack>
+            </Notice.Description>
+          </Notice.Root>
+        ))}
+
+        {mcpMismatch && (
+          <Notice.Root intent="warning">
+            <Notice.Description>
+              This machine has <code>WOOAGENT_MCP_URL</code> set to{' '}
+              <strong>{mcpMismatch.env_host}</strong>, which isn&rsquo;t the store
+              you have paired. WooAgent is using the paired store,{' '}
+              <strong>{mcpMismatch.paired_host}</strong> — but scripts and
+              command-line tools on this machine may still read that variable
+              and act on the wrong store. Unset it, or point it at the paired
+              store, to clear this.
             </Notice.Description>
           </Notice.Root>
         )}

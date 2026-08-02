@@ -31,7 +31,7 @@ import (
 	"strings"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/config"
-	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/mcpresolve"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/registry"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
@@ -45,10 +45,6 @@ const personaSlug = "marketing"
 func main() {
 	ctx := context.Background()
 
-	mcpURL := mustEnv("WOOAGENT_MCP_URL")
-	mcpUser := mustEnv("WOOAGENT_MCP_USER")
-	mcpPass := strings.ReplaceAll(mustEnv("WOOAGENT_MCP_APP_PASSWORD"), " ", "")
-
 	paths, err := config.DefaultPaths()
 	if err != nil {
 		log.Fatalf("resolve paths: %v", err)
@@ -59,11 +55,18 @@ func main() {
 	}
 	defer st.Close()
 
-	mcpClient := mcp.NewClient(mcp.Config{
-		Endpoint: mcpURL,
-		Username: mcpUser,
-		Password: mcpPass,
-	})
+	// Resolve the same store the daemon would use: the paired store wins,
+	// env vars are the fallback. Building a client straight from
+	// WOOAGENT_MCP_URL here is how this binary could draft proposals about
+	// a store the daemon isn't paired to — and since it writes into the
+	// daemon's SQLite, approving one of those applies the wrong store's
+	// copy or prices. See mcpresolve.OpenClient.
+	mcpClient, mcpTarget, ok := mcpresolve.OpenClient(ctx, st.DB, os.Stderr)
+	if !ok {
+		log.Fatalf("no store to talk to: pair a store through the UI, or set " +
+			"WOOAGENT_MCP_URL, WOOAGENT_MCP_USER and WOOAGENT_MCP_APP_PASSWORD")
+	}
+	fmt.Printf("=== store: %s (%s) ===\n", mcpTarget.Label, mcpTarget.Source)
 
 	productID := 0
 	if v := strings.TrimSpace(os.Getenv("PERSONA_PRODUCT_ID")); v != "" {

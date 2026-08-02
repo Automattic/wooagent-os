@@ -27,9 +27,10 @@ const cache = new Map<string, CacheEntry>();
  *  Hook semantics:
  *  - Fires the request on mount and whenever (agent, page) changes.
  *  - Returns the cached list immediately if fresh.
- *  - Daemon returns an empty list for specialists in v1 — the hook
- *    detects that and falls through to the static UI defaults so
- *    specialists still get their own suggestion set. */
+ *  - An empty list from the daemon falls through to the static UI
+ *    defaults. The daemon now answers for specialists too (DSGWOO-1371,
+ *    grounded in their recent proposals), so this branch covers an
+ *    unrecognized agent slug rather than the normal specialist path. */
 export function useAskAgentSuggestions(
   connection: Connection,
   agent: AskAgent,

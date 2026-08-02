@@ -1,4 +1,4 @@
-package cli
+package mcpresolve
 
 import (
 	"bytes"
@@ -72,12 +72,12 @@ func TestResolveMCPTarget_PairedStoreBeatsStaleEnv(t *testing.T) {
 	sec := &fakeSecrets{vals: map[string]string{"ref-new": "device-token"}}
 
 	var buf bytes.Buffer
-	got, ok := resolveMCPTarget(context.Background(), db, sec, &buf)
+	got, ok := Resolve(context.Background(), db, sec, &buf)
 	if !ok {
 		t.Fatal("expected a resolved target")
 	}
-	if got.Source != sourcePairedStore {
-		t.Errorf("Source = %q, want %q", got.Source, sourcePairedStore)
+	if got.Source != SourcePairedStore {
+		t.Errorf("Source = %q, want %q", got.Source, SourcePairedStore)
 	}
 	if !strings.Contains(got.Config.Endpoint, "new-store.example.com") {
 		t.Errorf("Endpoint = %q, want the paired store", got.Config.Endpoint)
@@ -103,8 +103,8 @@ func TestResolveMCPTarget_NoWarningWhenHostsAgree(t *testing.T) {
 	sec := &fakeSecrets{vals: map[string]string{"ref-a": "tok"}}
 
 	var buf bytes.Buffer
-	got, ok := resolveMCPTarget(context.Background(), db, sec, &buf)
-	if !ok || got.Source != sourcePairedStore {
+	got, ok := Resolve(context.Background(), db, sec, &buf)
+	if !ok || got.Source != SourcePairedStore {
 		t.Fatalf("got %+v ok=%v, want paired store", got, ok)
 	}
 	if buf.Len() != 0 {
@@ -117,12 +117,12 @@ func TestResolveMCPTarget_EnvFallback(t *testing.T) {
 	db := openTestDB(t)
 	setEnvStore(t, "headless.example.com")
 
-	got, ok := resolveMCPTarget(context.Background(), db, &fakeSecrets{vals: map[string]string{}}, io.Discard)
+	got, ok := Resolve(context.Background(), db, &fakeSecrets{vals: map[string]string{}}, io.Discard)
 	if !ok {
 		t.Fatal("expected env fallback to resolve")
 	}
-	if got.Source != sourceEnv {
-		t.Errorf("Source = %q, want %q", got.Source, sourceEnv)
+	if got.Source != SourceEnv {
+		t.Errorf("Source = %q, want %q", got.Source, SourceEnv)
 	}
 	if got.Config.Username != "op@example.com" {
 		t.Errorf("Username = %q", got.Config.Username)
@@ -138,7 +138,7 @@ func TestResolveMCPTarget_NeitherConfigured(t *testing.T) {
 	t.Setenv("WOOAGENT_MCP_USER", "")
 	t.Setenv("WOOAGENT_MCP_APP_PASSWORD", "")
 
-	if _, ok := resolveMCPTarget(context.Background(), openTestDB(t), &fakeSecrets{vals: map[string]string{}}, io.Discard); ok {
+	if _, ok := Resolve(context.Background(), openTestDB(t), &fakeSecrets{vals: map[string]string{}}, io.Discard); ok {
 		t.Error("expected ok=false when nothing is configured")
 	}
 }
@@ -152,12 +152,12 @@ func TestResolveMCPTarget_UnreadableTokenFallsBackToEnv(t *testing.T) {
 	sec := &fakeSecrets{vals: map[string]string{}} // ref-missing absent
 
 	var buf bytes.Buffer
-	got, ok := resolveMCPTarget(context.Background(), db, sec, &buf)
+	got, ok := Resolve(context.Background(), db, sec, &buf)
 	if !ok {
 		t.Fatal("expected env fallback")
 	}
-	if got.Source != sourceEnv {
-		t.Errorf("Source = %q, want %q", got.Source, sourceEnv)
+	if got.Source != SourceEnv {
+		t.Errorf("Source = %q, want %q", got.Source, SourceEnv)
 	}
 	if !strings.Contains(buf.String(), "token unreadable") {
 		t.Errorf("expected an explanatory warning, got: %q", buf.String())
@@ -175,7 +175,7 @@ func TestResolveMCPTarget_IgnoresUnpairedStore(t *testing.T) {
 	t.Setenv("WOOAGENT_MCP_USER", "")
 	t.Setenv("WOOAGENT_MCP_APP_PASSWORD", "")
 
-	if _, ok := resolveMCPTarget(context.Background(), db, &fakeSecrets{vals: map[string]string{"ref-u": "t"}}, io.Discard); ok {
+	if _, ok := Resolve(context.Background(), db, &fakeSecrets{vals: map[string]string{"ref-u": "t"}}, io.Discard); ok {
 		t.Error("an unpaired store should not resolve")
 	}
 }
@@ -191,7 +191,7 @@ func TestReconcileMCPOnce_FollowsRepair(t *testing.T) {
 	t.Setenv("WOOAGENT_MCP_APP_PASSWORD", "")
 	sec := &fakeSecrets{vals: map[string]string{"ref-1": "tok-1", "ref-2": "tok-2"}}
 
-	target, ok := resolveMCPTarget(context.Background(), db, sec, io.Discard)
+	target, ok := Resolve(context.Background(), db, sec, io.Discard)
 	if !ok {
 		t.Fatal("initial resolve failed")
 	}
@@ -199,7 +199,7 @@ func TestReconcileMCPOnce_FollowsRepair(t *testing.T) {
 
 	// Nothing changed yet — reconciling must be a quiet no-op.
 	var buf bytes.Buffer
-	reconcileMCPOnce(context.Background(), c, db, sec, &buf)
+	ReconcileOnce(context.Background(), c, db, sec, &buf)
 	if buf.Len() != 0 {
 		t.Errorf("no-op reconcile should be silent, got: %q", buf.String())
 	}
@@ -210,7 +210,7 @@ func TestReconcileMCPOnce_FollowsRepair(t *testing.T) {
 	}
 	seedPairedStore(t, db, "store_2", "second.example.com", "ref-2")
 
-	reconcileMCPOnce(context.Background(), c, db, sec, &buf)
+	ReconcileOnce(context.Background(), c, db, sec, &buf)
 
 	if !strings.Contains(c.Endpoint(), "second.example.com") {
 		t.Errorf("client endpoint = %q, want the newly paired store", c.Endpoint())
@@ -230,7 +230,7 @@ func TestReconcileMCPOnce_KeepsClientWhenNothingResolves(t *testing.T) {
 	t.Setenv("WOOAGENT_MCP_APP_PASSWORD", "")
 
 	c := mcp.NewClient(mcp.Config{Endpoint: "https://still.example.com/mcp", BearerToken: "t"})
-	reconcileMCPOnce(context.Background(), c, db, &fakeSecrets{vals: map[string]string{}}, io.Discard)
+	ReconcileOnce(context.Background(), c, db, &fakeSecrets{vals: map[string]string{}}, io.Discard)
 
 	if c.Endpoint() != "https://still.example.com/mcp" {
 		t.Errorf("endpoint = %q, want the previous target preserved", c.Endpoint())
@@ -244,8 +244,8 @@ func TestHostOf(t *testing.T) {
 		"":                                    "",
 		"not a url":                           "not a url",
 	} {
-		if got := hostOf(in); got != want {
-			t.Errorf("hostOf(%q) = %q, want %q", in, got, want)
+		if got := HostOf(in); got != want {
+			t.Errorf("HostOf(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

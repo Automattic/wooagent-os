@@ -26,6 +26,7 @@ import (
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/manifest"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/mcpresolve"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pep"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas/lessons"
@@ -125,7 +126,7 @@ func newRunCmd() *cobra.Command {
 			// pointed at the current store, so re-pairing takes effect
 			// without a daemon restart (DSGWOO-1470).
 			var mcpClient *mcp.Client
-			if target, ok := resolveMCPTarget(ctx, st.DB, secretStore, cmd.OutOrStdout()); ok {
+			if target, ok := mcpresolve.Resolve(ctx, st.DB, secretStore, cmd.OutOrStdout()); ok {
 				mcpClient = mcp.NewClient(target.Config)
 				fmt.Fprintf(cmd.OutOrStdout(), "→ mcp: using %s (%s)\n", target.Label, target.Source)
 			}
@@ -181,7 +182,7 @@ func newRunCmd() *cobra.Command {
 			// store. Without this, re-pairing to a different store has
 			// no effect on personas or Approve until the daemon is
 			// restarted (DSGWOO-1470).
-			go startMCPReconciler(ctx, mcpClient, st.DB, secretStore, cmd.OutOrStdout())
+			go mcpresolve.StartReconciler(ctx, mcpClient, st.DB, secretStore, cmd.OutOrStdout())
 
 			// Background retention. Both sweeps run once at startup then
 			// every 24h until shutdown:

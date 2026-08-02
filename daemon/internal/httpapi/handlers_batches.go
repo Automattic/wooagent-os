@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/store"
 )
 
 // Batch is the v0.1 batch wire shape. Counters (Total / Pending / Approved /
@@ -92,6 +93,10 @@ func (s *Server) handleCreateBatch(w http.ResponseWriter, r *http.Request) {
 	children := make([]IssueWithProposal, 0, len(req.Issues))
 	ts, _ := time.Parse(time.RFC3339, now)
 
+	// Resolved once so every child in the batch records the same store
+	// provenance (DSGWOO-1371).
+	storeID := store.CurrentStoreID(ctx, s.store.DB)
+
 	pending, approved, rejected := 0, 0, 0
 	for _, child := range req.Issues {
 		priority := child.Priority
@@ -135,9 +140,10 @@ func (s *Server) handleCreateBatch(w http.ResponseWriter, r *http.Request) {
 
 		childID := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO issues(id, title, description, persona, status, priority, created_at, updated_at, proposal_type, proposal_content, proposal_target, batch_id, store_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			childID, child.Title, child.Description, nullIfEmpty(persona), status, priority, now, now,
 			proposalType, proposalContent, proposalTarget, batchID,
+			nullIfEmpty(storeID),
 		); err != nil {
 			writeError(w, http.StatusInternalServerError, "db_error", err.Error())
 			return

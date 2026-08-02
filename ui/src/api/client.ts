@@ -603,6 +603,49 @@ export interface Store {
   paired_at?: string;
   ability_count?: number;
   last_discovered_at?: string;
+  /** What the daemon needs that this store can't do. Almost always means
+   *  the WooAgent Companion Plugin is out of date. Advisory — a store with
+   *  gaps still works for the personas whose abilities are present
+   *  (DSGWOO-1471). Omitted when the store satisfies the daemon. */
+  capability_gaps?: CapabilityGap[];
+}
+
+/** One unmet requirement between the daemon and a paired store: either an
+ *  ability the store doesn't register at all, or one whose input schema
+ *  rejects a parameter a persona sends. Mirrors abilities.Gap in
+ *  daemon/internal/abilities/requirements.go. */
+export interface CapabilityGap {
+  ability: string;
+  /** Which persona or subsystem needs it, for "why do I care". */
+  used_by: string;
+  /** True when the store doesn't register the ability at all. */
+  missing?: boolean;
+  /** Parameters the daemon sends that the store's schema rejects. Only
+   *  populated when the ability exists but is too old. */
+  unsupported_params?: string[];
+}
+
+/** Operator-facing one-liner for a gap. Mirrors abilities.Gap.Summary() in
+ *  Go — the daemon composes the same sentence for its CLI output, and the
+ *  two should read identically so a support conversation that starts in
+ *  the terminal and moves to the UI doesn't change vocabulary. */
+export function capabilityGapSummary(gap: CapabilityGap): string {
+  if (gap.missing) {
+    return `${gap.ability} is not available on this store (needed by ${gap.used_by})`;
+  }
+  const params = (gap.unsupported_params ?? []).join(', ');
+  return `${gap.ability} does not accept ${params} on this store (needed by ${gap.used_by})`;
+}
+
+/** A WOOAGENT_MCP_URL on the daemon's host that names a different store
+ *  than the one that's paired. The daemon uses the paired store and
+ *  ignores the env var (DSGWOO-1470), so this is advisory — but it's the
+ *  difference between "my agents see the store I paired" and "some
+ *  script on this machine is pointed somewhere else", which is worth
+ *  saying out loud. Null when they agree or only one is configured. */
+export interface McpMismatch {
+  env_host: string;
+  paired_host: string;
 }
 
 export type ModelProviderKind = 'anthropic' | 'openai' | 'ollama';
@@ -837,7 +880,8 @@ export const api = {
       }),
   },
   stores: {
-    list: (c: Connection) => request<{ stores: Store[] }>(c, '/v1/stores'),
+    list: (c: Connection) =>
+      request<{ stores: Store[]; mcp_mismatch?: McpMismatch | null }>(c, '/v1/stores'),
     get: (c: Connection, id: string) => request<Store>(c, `/v1/stores/${id}`),
     create: (c: Connection, url: string) =>
       request<Store>(c, '/v1/stores', {
