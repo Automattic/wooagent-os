@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 )
 
 // DefaultCallTimeout caps one single /v1/messages round-trip. The
@@ -63,6 +65,19 @@ func (c *Client) WithHTTPClient(h *http.Client) *Client {
 	return c
 }
 
+// WithTimeout overrides the per-call transport timeout, which New sets to
+// DefaultCallTimeout.
+//
+// A caller's context deadline does not lift this: the effective budget is
+// the shorter of the two, so a call that legitimately needs longer than
+// DefaultCallTimeout has to raise it here or get cut off mid-flight. The
+// Pricing persona's web_search calls are the live example — they run to
+// ~180s.
+func (c *Client) WithTimeout(d time.Duration) *Client {
+	c.http = &http.Client{Timeout: d}
+	return c
+}
+
 // Call sends one /v1/messages request and parses the response. It does
 // NOT loop on tool_use blocks; for that, use RunToolLoop. Use Call
 // directly when you don't need local tools (e.g. plain text or
@@ -100,7 +115,7 @@ func (c *Client) Call(ctx context.Context, req Request) (*Response, error) {
 		return nil, fmt.Errorf("anthropic: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("anthropic: http %d: %s", resp.StatusCode, string(raw))
+		return nil, llm.NewAPIStatusError(Provider, resp.StatusCode, raw)
 	}
 
 	var parsed Response
@@ -108,7 +123,7 @@ func (c *Client) Call(ctx context.Context, req Request) (*Response, error) {
 		return nil, fmt.Errorf("anthropic: decode response: %w; body=%s", err, string(raw))
 	}
 	if parsed.Error.Type != "" {
-		return nil, fmt.Errorf("anthropic: api error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+		return nil, llm.NewAPIError(Provider, parsed.Error.Type, parsed.Error.Message)
 	}
 	return &parsed, nil
 }

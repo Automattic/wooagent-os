@@ -25,7 +25,7 @@ import { issueToVisible } from '../lib/visibleItems';
 import { personaLabel as personaLabelFor } from '../lib/personaLabel';
 import { useActionBarHeightVar } from '../lib/useActionBarHeight';
 import Kpi from '../components/Kpi';
-import type { KpiTone } from '../components/Kpi';
+import { scoreTone, scoreValueClass } from '../lib/score';
 import ActionBar from '../components/ActionBar';
 import ActionSnackbar, { type SnackbarAction } from '../components/ActionSnackbar';
 import DismissDialog from '../components/DismissDialog';
@@ -47,36 +47,6 @@ interface Props {
   connection: Connection;
   onChanged?: () => void;
   onAskAgent: () => void;
-}
-
-// Choose the score-value color class based on the score band. SEO and Voice
-// use slightly different bands (SEO 80+, Voice 80+ for "good") to match the
-// Yoast/voice-model conventions and the corpus-based voice scoring design.
-function seoColorClass(score: number): string {
-  if (score >= 80) return 'wa-score-label__value--good';
-  if (score >= 70) return 'wa-score-label__value--caution';
-  return 'wa-score-label__value--warning';
-}
-function voiceColorClass(score: number): string {
-  if (score >= 80) return 'wa-score-label__value--good';
-  if (score >= 65) return 'wa-score-label__value--caution';
-  return 'wa-score-label__value--warning';
-}
-
-// Score → Kpi tone. SEO uses success/caution/warning.
-function seoToneBand(score: number): KpiTone {
-  if (score >= 80) return 'success';
-  if (score >= 70) return 'caution';
-  return 'warning';
-}
-
-// Voice tone band — brand (matches the Figma frame's blue for high-match
-// voice) / caution / warning. Thresholds relaxed from 90/75 → 80/65 — 90%
-// against a small sample is unrealistic.
-function voiceToneBand(score: number): KpiTone {
-  if (score >= 80) return 'brand';
-  if (score >= 65) return 'caution';
-  return 'warning';
 }
 
 const CURRENCY_SYMBOL: Record<string, string> = {
@@ -491,7 +461,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             }
             tone={
               typeof activeVariant?.voice === 'number'
-                ? voiceToneBand(activeVariant.voice)
+                ? scoreTone('voice', activeVariant.voice)
                 : 'neutral'
             }
             hint={
@@ -509,7 +479,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
             }
             tone={
               typeof activeVariant?.seo === 'number'
-                ? seoToneBand(activeVariant.seo)
+                ? scoreTone('seo', activeVariant.seo)
                 : 'neutral'
             }
             hint={
@@ -696,7 +666,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                               {typeof v.seo === 'number' && (
                                 <span className="wa-score-label">
                                   SEO{' '}
-                                  <span className={`wa-score-label__value ${seoColorClass(v.seo)}`}>
+                                  <span className={`wa-score-label__value ${scoreValueClass('seo', v.seo)}`}>
                                     {v.seo}
                                   </span>
                                 </span>
@@ -705,7 +675,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                 <span className="wa-score-label">
                                   Voice{' '}
                                   <span
-                                    className={`wa-score-label__value ${voiceColorClass(v.voice)}`}
+                                    className={`wa-score-label__value ${scoreValueClass('voice', v.voice)}`}
                                   >
                                     {v.voice}%
                                   </span>

@@ -1,9 +1,16 @@
 // Package llm centralizes shared infrastructure for LLM-provider calls.
-// Today its only responsibility is mapping a (provider, model, tokens) tuple
-// into a USD cost so the per-persona daily budget gate and the per-run
-// budget gate can do their jobs. As the personas converge on a single LLM
-// client (DSGWOO-1296 follow-ups), more of the shared HTTP / retry / typed-
-// error scaffolding will land here.
+//
+// Two responsibilities today:
+//
+//   - Cost: mapping a (provider, model, tokens) tuple into a USD figure so
+//     the per-persona daily budget gate and the per-run budget gate can do
+//     their jobs. See pricing.go.
+//   - Typed errors: provider-neutral failure classes (ErrRateLimited,
+//     ErrAuth, ErrInvalidRequest, ErrServer) that callers match with
+//     errors.Is instead of pattern-matching message text. See errors.go.
+//
+// The Anthropic wire client lives in the llm/anthropic subpackage and
+// returns these errors.
 package llm
 
 import (

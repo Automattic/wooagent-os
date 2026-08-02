@@ -10,6 +10,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
 )
 
 // scriptedServer replays a sequence of canned Anthropic /v1/messages
@@ -131,6 +134,113 @@ func TestCall_HTTPError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "http 500") {
 		t.Fatalf("expected http 500 error, got: %v", err)
+	}
+}
+
+// DSGWOO-1292: the scheduler classifies retryability with errors.Is, so
+// every failure path out of Call has to carry a class rather than just a
+// message.
+func TestCall_ReturnsTypedErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   error
+	}{
+		{"rate limited", 429, llm.ErrRateLimited},
+		{"unauthorized", 401, llm.ErrAuth},
+		{"forbidden", 403, llm.ErrAuth},
+		{"bad request", 400, llm.ErrInvalidRequest},
+		{"server error", 500, llm.ErrServer},
+		{"overloaded", 529, llm.ErrServer},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, `{"error":{"message":"nope"}}`)
+			}))
+			t.Cleanup(srv.Close)
+			c := New("test-key", "test-model").WithAPIURL(srv.URL + "/v1/messages")
+
+			_, err := c.Call(context.Background(), Request{Messages: []Message{UserMessage("hi")}})
+			if !errors.Is(err, tc.want) {
+				t.Errorf("status %d: want errors.Is(_, %v), got %v", tc.status, tc.want, err)
+			}
+			var se *llm.APIStatusError
+			if !errors.As(err, &se) {
+				t.Fatalf("expected an *llm.APIStatusError, got %T", err)
+			}
+			if se.Provider != Provider {
+				t.Errorf("Provider = %q, want %q", se.Provider, Provider)
+			}
+			if se.StatusCode != tc.status {
+				t.Errorf("StatusCode = %d, want %d", se.StatusCode, tc.status)
+			}
+		})
+	}
+}
+
+// The rarer shape: HTTP 200 with the failure described in the body.
+func TestCall_TypedErrorFromEmbeddedAPIError(t *testing.T) {
+	c := newTestClient(t, newScripted(t, `{
+		"content": [],
+		"error": {"type":"rate_limit_error","message":"slow down"}
+	}`))
+	_, err := c.Call(context.Background(), Request{Messages: []Message{UserMessage("hi")}})
+	if !errors.Is(err, llm.ErrRateLimited) {
+		t.Errorf("embedded rate_limit_error should classify as ErrRateLimited, got %v", err)
+	}
+}
+
+// Pins the wire format for a server-managed tool. The Pricing persona
+// moved off its own anthropicReq struct onto Request (DSGWOO-1292); if the
+// tools array stops serializing as {type, name, max_uses}, web_search
+// silently stops running and every benchmark degrades to "no comps found".
+func TestRequest_ServerManagedToolWireFormat(t *testing.T) {
+	body, err := json.Marshal(Request{
+		Model:     "claude-haiku-4-5-20251001",
+		MaxTokens: 2048,
+		System:    "sys",
+		Messages:  []Message{UserMessage("hi")},
+		Tools:     []ToolDef{{Type: "web_search_20250305", Name: "web_search", MaxUses: 4}},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var got struct {
+		Tools []struct {
+			Type        string          `json:"type"`
+			Name        string          `json:"name"`
+			MaxUses     int             `json:"max_uses"`
+			InputSchema json.RawMessage `json:"input_schema"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Tools) != 1 {
+		t.Fatalf("tools length = %d, want 1", len(got.Tools))
+	}
+	tool := got.Tools[0]
+	if tool.Type != "web_search_20250305" || tool.Name != "web_search" || tool.MaxUses != 4 {
+		t.Errorf("tool = %+v, want web_search_20250305/web_search/4", tool)
+	}
+	// A server-managed tool must NOT carry input_schema — Anthropic rejects
+	// the request if it does.
+	if tool.InputSchema != nil {
+		t.Errorf("input_schema should be omitted for a server tool, got %s", tool.InputSchema)
+	}
+}
+
+func TestWithTimeout(t *testing.T) {
+	// Pricing's web_search calls exceed DefaultCallTimeout, so this seam
+	// has to actually replace the transport budget.
+	c := New("k", "m").WithTimeout(180 * time.Second)
+	if c.http.Timeout != 180*time.Second {
+		t.Errorf("timeout = %v, want 180s", c.http.Timeout)
+	}
+	if New("k", "m").http.Timeout != DefaultCallTimeout {
+		t.Errorf("default should remain DefaultCallTimeout")
 	}
 }
 

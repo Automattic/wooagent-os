@@ -20,16 +20,14 @@
 package salessupport
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/llm"
+	"github.com/wooagent-os/wooagent-os/daemon/internal/llm/anthropic"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/telemetry"
@@ -37,7 +35,9 @@ import (
 
 const (
 	defaultAnthropicModel = "claude-haiku-4-5-20251001"
-	anthropicVersion      = "2023-06-01"
+	// callTimeout bounds one draft. Short — this is a plain text-in /
+	// JSON-out call with no tool use.
+	callTimeout = 60 * time.Second
 )
 
 // anthropicAPIURL is a var (not a const) so the rule-lock test can
@@ -399,35 +399,6 @@ type messageOut struct {
 	Message          string `json:"message,omitempty"`
 }
 
-type anthropicMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type anthropicReq struct {
-	Model     string         `json:"model"`
-	MaxTokens int            `json:"max_tokens"`
-	System    string         `json:"system"`
-	Messages  []anthropicMsg `json:"messages"`
-}
-
-type anthropicContentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
-type anthropicResp struct {
-	Content []anthropicContentBlock `json:"content"`
-	Usage   struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage,omitempty"`
-	Error struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
-}
-
 func draftMessage(ctx context.Context, apiKey, model string, pc promptContext) (messageOut, string, error) {
 	itemsText := formatLineItemsForPrompt(pc.LineItems)
 	user := fmt.Sprintf(
@@ -447,51 +418,34 @@ Write a customer-facing note matching the tone in the system prompt. Output the 
 		pc.FirstName, itemsText,
 	)
 
-	body, _ := json.Marshal(anthropicReq{
-		Model:     model,
-		MaxTokens: 1024,
-		System:    systemPrompt,
-		Messages:  []anthropicMsg{{Role: "user", Content: user}},
-	})
-
-	cctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(cctx, "POST", anthropicAPIURL, bytes.NewReader(body))
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", anthropicVersion)
-	req.Header.Set("content-type", "application/json")
-
-	res, err := http.DefaultClient.Do(req)
+	resp, err := anthropic.New(apiKey, model).
+		WithAPIURL(anthropicAPIURL).
+		WithTimeout(callTimeout).
+		Call(ctx, anthropic.Request{
+			MaxTokens: 1024,
+			System:    systemPrompt,
+			Messages:  []anthropic.Message{anthropic.UserMessage(user)},
+		})
 	if err != nil {
-		return messageOut{}, "", fmt.Errorf("anthropic http: %w", err)
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(res.Body)
-	if res.StatusCode != 200 {
-		return messageOut{}, string(raw), fmt.Errorf("anthropic http %d", res.StatusCode)
-	}
-	var parsed anthropicResp
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return messageOut{}, string(raw), fmt.Errorf("anthropic decode: %w", err)
-	}
-	if parsed.Error.Type != "" {
-		return messageOut{}, string(raw), fmt.Errorf("anthropic error: %s · %s", parsed.Error.Type, parsed.Error.Message)
+		// llm.ErrorBody surfaces the provider's raw response for the run
+		// log; the error itself carries the typed failure class.
+		return messageOut{}, llm.ErrorBody(err), err
 	}
 
 	if t := telemetry.TrackerFromContext(ctx); t != nil {
 		if err := t.RecordModelCall(telemetry.ModelCall{
-			Provider:     "anthropic",
+			Provider:     anthropic.Provider,
 			Model:        model,
-			InputTokens:  parsed.Usage.InputTokens,
-			OutputTokens: parsed.Usage.OutputTokens,
-			CostUSD:      llm.CostUSD("anthropic", model, parsed.Usage.InputTokens, parsed.Usage.OutputTokens),
+			InputTokens:  resp.Usage.InputTokens,
+			OutputTokens: resp.Usage.OutputTokens,
+			CostUSD:      llm.CostUSD(anthropic.Provider, model, resp.Usage.InputTokens, resp.Usage.OutputTokens),
 		}); err != nil {
 			return messageOut{}, "", err
 		}
 	}
 
 	var sb strings.Builder
-	for _, b := range parsed.Content {
+	for _, b := range resp.Content {
 		if b.Type == "text" {
 			sb.WriteString(b.Text)
 		}
