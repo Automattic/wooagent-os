@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wooagent-os/wooagent-os/daemon/internal/mcp"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/personas"
@@ -474,6 +475,16 @@ func TestComputeDrafting(t *testing.T) {
 	}
 }
 
+func TestCooldown_IncludesSkippedWindow(t *testing.T) {
+	c := Marketing{}.Cooldown()
+	if c.TargetKey != "product_id" {
+		t.Errorf("TargetKey: got %q want product_id", c.TargetKey)
+	}
+	if c.Skipped != 7*24*time.Hour {
+		t.Errorf("Skipped: got %v want 168h", c.Skipped)
+	}
+}
+
 func TestBuildPromptUserMessage_ColdDraftMode(t *testing.T) {
 	p := product{
 		Name: "Wool Slippers", SKU: "wool-slippers",
@@ -539,7 +550,7 @@ func TestDraftColdDraftBatch_PacksAsSiblings(t *testing.T) {
 			Target:       map[string]any{"product_id": p.ID},
 		}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill desc", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill desc", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}
@@ -565,7 +576,7 @@ func TestDraftColdDraftBatch_DropsErrors(t *testing.T) {
 		}
 		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}
@@ -587,7 +598,7 @@ func TestDraftColdDraftBatch_DropsSkippedDrafts(t *testing.T) {
 		}
 		return personas.Drafted{Title: fmt.Sprintf("d%d", p.ID), ProposalType: "product_cold_draft"}, nil
 	}
-	got, _ := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, _ := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	total := 1 + len(got.BatchSiblings)
 	if total != 3 {
 		t.Errorf("expected 3 children, got %d", total)
@@ -603,7 +614,7 @@ func TestDraftColdDraftBatch_BelowThresholdReturnsSkipped(t *testing.T) {
 		}
 		return personas.Drafted{Title: "d1", ProposalType: "product_cold_draft"}, nil
 	}
-	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn)
+	got, err := draftColdDraftBatch(context.Background(), personas.Deps{}, cands, "skill", drafterFn, func(int, string) {})
 	if err != nil {
 		t.Fatalf("batch: %v", err)
 	}

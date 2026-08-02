@@ -56,6 +56,20 @@ func seedAgent(t *testing.T, st *store.Store, slug string, enabled int) {
 	}
 }
 
+func TestMigration_LLMSkipsTableExists(t *testing.T) {
+	st := newStore(t) // store.Open applies all embedded migrations
+	var name string
+	err := st.DB.QueryRowContext(context.Background(),
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='llm_skips'`,
+	).Scan(&name)
+	if err != nil {
+		t.Fatalf("llm_skips table not found after migrations: %v", err)
+	}
+	if name != "llm_skips" {
+		t.Fatalf("got table %q, want llm_skips", name)
+	}
+}
+
 func TestRunAndPersist_DisabledPersonaIsSkipped(t *testing.T) {
 	st := newStore(t)
 	seedAgent(t, st, "fake-disabled", 0)
@@ -570,6 +584,112 @@ func TestInsertIssue_EmptyDedupKeyStoresNull(t *testing.T) {
 	}
 }
 
+// ---- RecentlySkippedTargets ----
+
+func seedSkip(t *testing.T, st *store.Store, persona string, targetID int, reason, attemptedAt string) {
+	t.Helper()
+	if _, err := st.DB.ExecContext(context.Background(),
+		`INSERT INTO llm_skips(persona, target_id, skip_reason, attempted_at) VALUES(?, ?, ?, ?)`,
+		persona, targetID, reason, attemptedAt,
+	); err != nil {
+		t.Fatalf("seed skip: %v", err)
+	}
+}
+
+func TestRecentlySkippedTargets(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	seedAgent(t, st, "other", 1)
+	now := time.Now().UTC()
+	rfc := func(d time.Duration) string { return now.Add(-d).Format(time.RFC3339) }
+
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	seedSkip(t, st, "pricing", 11, "price optimal", rfc(1*time.Hour)) // inside window
+	seedSkip(t, st, "pricing", 12, "no comps", rfc(6*24*time.Hour))   // inside window
+	seedSkip(t, st, "pricing", 21, "stale", rfc(8*24*time.Hour))      // outside window
+	seedSkip(t, st, "other", 31, "price optimal", rfc(1*time.Hour))   // other persona
+
+	got, err := RecentlySkippedTargets(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	want := map[int]struct{}{11: {}, 12: {}}
+	if len(got) != len(want) {
+		t.Errorf("got %d ids, want %d; got=%v", len(got), len(want), got)
+	}
+	for id := range want {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected product_id %d in skip set, missing", id)
+		}
+	}
+	for id := range got {
+		if _, ok := want[id]; !ok {
+			t.Errorf("unexpected product_id %d in skip set", id)
+		}
+	}
+}
+
+func TestRecentlySkippedTargets_ZeroDurationReturnsEmpty(t *testing.T) {
+	st := newStore(t)
+	seedAgent(t, st, "pricing", 1)
+	seedSkip(t, st, "pricing", 11, "price optimal", time.Now().UTC().Format(time.RFC3339))
+
+	got, err := RecentlySkippedTargets(context.Background(), st, "pricing",
+		CooldownPolicy{TargetKey: "product_id", Skipped: 0})
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty set when Skipped==0, got %v", got)
+	}
+}
+
+func TestRecordLLMSkip_InsertsAndUpserts(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	t0 := time.Now().UTC().Add(-time.Hour)
+	if err := RecordLLMSkip(ctx, st, "pricing", 42, "price optimal", t0); err != nil {
+		t.Fatalf("first RecordLLMSkip: %v", err)
+	}
+	got, err := RecentlySkippedTargets(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("RecentlySkippedTargets: %v", err)
+	}
+	if _, ok := got[42]; !ok || len(got) != 1 {
+		t.Fatalf("after insert want {42}, got %v", got)
+	}
+
+	t1 := time.Now().UTC()
+	if err := RecordLLMSkip(ctx, st, "pricing", 42, "no comps now", t1); err != nil {
+		t.Fatalf("second RecordLLMSkip (upsert): %v", err)
+	}
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing' AND target_id=42`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("want exactly 1 row after upsert, got %d", count)
+	}
+	var reason, attemptedAt string
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT skip_reason, attempted_at FROM llm_skips WHERE persona='pricing' AND target_id=42`,
+	).Scan(&reason, &attemptedAt); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if reason != "no comps now" {
+		t.Errorf("upsert did not refresh skip_reason: got %q", reason)
+	}
+	if attemptedAt != t1.Format(time.RFC3339) {
+		t.Errorf("upsert did not refresh attempted_at: got %q want %q", attemptedAt, t1.Format(time.RFC3339))
+	}
+}
+
 // ---- IterateDraft ----
 
 // pickFromSequence returns a PickerFunc that yields ids from `seq` in
@@ -597,6 +717,7 @@ func TestIterateDraft_SuccessFirstAttempt(t *testing.T) {
 			draftCalls++
 			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -629,6 +750,7 @@ func TestIterateDraft_SkipThenSucceed(t *testing.T) {
 			}
 			return Drafted{Title: fmt.Sprintf("ok %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -663,6 +785,7 @@ func TestIterateDraft_AllAttemptsSkipped(t *testing.T) {
 			draftCalls++
 			return Drafted{Skipped: true, SkipReason: fmt.Sprintf("no_proposal for %d", id)}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -691,6 +814,7 @@ func TestIterateDraft_PickerExhaustsAfterSomeSkips(t *testing.T) {
 		func(id int) (Drafted, error) {
 			return Drafted{Skipped: true, SkipReason: "no_proposal"}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -716,6 +840,7 @@ func TestIterateDraft_PickerEmptyOnFirstCall(t *testing.T) {
 			t.Fatalf("draftFn should not be called when picker errs on first attempt; got id=%d", id)
 			return Drafted{}, nil
 		},
+		nil, // onSkip
 	)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -735,9 +860,50 @@ func TestIterateDraft_HardErrorFromDraftFnPropagates(t *testing.T) {
 		3, "product", skip,
 		pickFromSequence([]int{1}, errors.New("exhausted")),
 		func(id int) (Drafted, error) { return Drafted{}, hardErr },
+		nil, // onSkip
 	)
 	if !errors.Is(err, hardErr) {
 		t.Errorf("expected hardErr propagated, got %v", err)
+	}
+}
+
+func TestIterateDraft_OnSkipFiresPerSkippedAttempt(t *testing.T) {
+	ids := []int{10, 11, 12}
+	var i int
+	pickFn := func(skip map[int]struct{}) (int, error) {
+		id := ids[i]
+		i++
+		return id, nil
+	}
+	draftFn := func(id int) (Drafted, error) {
+		if id == 12 {
+			return Drafted{Title: "ok"}, nil
+		}
+		return Drafted{Skipped: true, SkipReason: fmt.Sprintf("declined %d", id)}, nil
+	}
+
+	type rec struct {
+		id     int
+		reason string
+	}
+	var got []rec
+	onSkip := func(id int, reason string) { got = append(got, rec{id, reason}) }
+
+	drafted, err := IterateDraft(3, "product", map[int]struct{}{}, pickFn, draftFn, onSkip)
+	if err != nil {
+		t.Fatalf("IterateDraft: %v", err)
+	}
+	if drafted.Skipped {
+		t.Fatalf("expected a successful draft, got skipped: %s", drafted.SkipReason)
+	}
+	want := []rec{{10, "declined 10"}, {11, "declined 11"}}
+	if len(got) != len(want) {
+		t.Fatalf("onSkip fired %d times, want %d: %v", len(got), len(want), got)
+	}
+	for j := range want {
+		if got[j] != want[j] {
+			t.Errorf("onSkip[%d] = %+v, want %+v", j, got[j], want[j])
+		}
 	}
 }
 
@@ -1017,5 +1183,100 @@ func TestRunAndPersist_DraftSkipPropagated(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("expected 0 issues after skipped Draft; got %d", n)
+	}
+}
+
+// ---- CooldownSkipSet + SkipRecorder ----
+
+func TestCooldownSkipSet_UnionsTouchedAndSkipped(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	now := time.Now().UTC()
+	policy := CooldownPolicy{
+		TargetKey: "product_id",
+		Approved:  7 * 24 * time.Hour,
+		Dismissed: 30 * 24 * time.Hour,
+		Skipped:   7 * 24 * time.Hour,
+	}
+	seedIssue(t, st, "pricing", "in_review", "product_id", 11, now.Add(-time.Hour).Format(time.RFC3339), "")
+	seedSkip(t, st, "pricing", 12, "price optimal", now.Add(-time.Hour).Format(time.RFC3339))
+
+	got, err := CooldownSkipSet(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("CooldownSkipSet: %v", err)
+	}
+	for _, id := range []int{11, 12} {
+		if _, ok := got[id]; !ok {
+			t.Errorf("expected id %d in union, missing; got=%v", id, got)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("want 2 ids, got %d: %v", len(got), got)
+	}
+}
+
+func TestCooldownSkipSet_SkippedZeroOmitsSkips(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	now := time.Now().UTC()
+	policy := CooldownPolicy{TargetKey: "product_id", Approved: 7 * 24 * time.Hour, Dismissed: 30 * 24 * time.Hour, Skipped: 0}
+	seedIssue(t, st, "pricing", "in_review", "product_id", 11, now.Add(-time.Hour).Format(time.RFC3339), "")
+	seedSkip(t, st, "pricing", 12, "price optimal", now.Add(-time.Hour).Format(time.RFC3339))
+
+	got, err := CooldownSkipSet(ctx, st, "pricing", policy)
+	if err != nil {
+		t.Fatalf("CooldownSkipSet: %v", err)
+	}
+	if _, ok := got[12]; ok {
+		t.Errorf("skip id 12 must be omitted when Skipped==0; got=%v", got)
+	}
+	if _, ok := got[11]; !ok {
+		t.Errorf("touched id 11 must still be present; got=%v", got)
+	}
+}
+
+func TestSkipRecorder_RecordsWhenEnabled(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 7 * 24 * time.Hour}
+
+	rec := SkipRecorder(ctx, st, "pricing", policy)
+	if rec == nil {
+		t.Fatal("SkipRecorder returned nil; must always return a callable")
+	}
+	rec(55, "price optimal")
+
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing' AND target_id=55`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("recorder did not write a row: count=%d", count)
+	}
+}
+
+func TestSkipRecorder_NoOpWhenDisabled(t *testing.T) {
+	st := newStore(t)
+	ctx := context.Background()
+	seedAgent(t, st, "pricing", 1)
+	policy := CooldownPolicy{TargetKey: "product_id", Skipped: 0}
+
+	rec := SkipRecorder(ctx, st, "pricing", policy)
+	if rec == nil {
+		t.Fatal("SkipRecorder must return a callable even when disabled")
+	}
+	rec(55, "price optimal") // must be a no-op
+
+	var count int
+	if err := st.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM llm_skips WHERE persona='pricing'`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("disabled recorder wrote %d rows, want 0", count)
 	}
 }
