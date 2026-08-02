@@ -542,7 +542,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                     variant="body-sm"
                     style={{
                       marginLeft: 'auto',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     }}
                   >
                     {previous ? `${previous.length} chars` : '0 chars · sample'}
@@ -554,8 +554,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                   variant="body-sm"
                   style={{
                     color: previous
-                      ? 'var(--wpds-color-fg-content-neutral)'
-                      : 'var(--wpds-color-fg-content-neutral-weak)',
+                      ? 'var(--wpds-color-foreground-content-neutral)'
+                      : 'var(--wpds-color-foreground-content-neutral-weak)',
                     whiteSpace: 'pre-wrap',
                     minHeight: 60,
                   }}
@@ -672,7 +672,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                       <Text
                                         variant="body-sm"
                                         style={{
-                                          color: 'var(--wpds-color-fg-interactive-brand)',
+                                          color: 'var(--wpds-color-foreground-interactive-brand)',
                                           fontWeight: 'var(--wpds-typography-font-weight-medium)',
                                         }}
                                       >
@@ -682,7 +682,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                       descriptor && (
                                         <Text
                                           variant="body-sm"
-                                          style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                                          style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                                         >
                                           {descriptor}
                                         </Text>
@@ -738,7 +738,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                                 borderTop:
                                   'var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak)',
                                 fontSize: 'var(--wpds-typography-font-size-xs)',
-                                color: 'var(--wpds-color-fg-content-neutral-weak)',
+                                color: 'var(--wpds-color-foreground-content-neutral-weak)',
                               }}
                             >
                               {v.note}
@@ -764,8 +764,8 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: 'var(--wpds-border-radius-sm)',
-                          background: 'var(--wpds-color-bg-interactive-brand-strong)',
-                          color: 'var(--wpds-color-fg-interactive-brand-strong)',
+                          background: 'var(--wpds-color-background-interactive-brand-strong)',
+                          color: 'var(--wpds-color-foreground-interactive-brand-strong)',
                         }}
                       >
                         A
@@ -781,7 +781,7 @@ export default function IssueDetail({ connection, onChanged, onAskAgent }: Props
                       className="wa-mono"
                       style={{
                         fontSize: 'var(--wpds-typography-font-size-xs)',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       {proposal.content.length} chars
@@ -893,17 +893,17 @@ function PriceIssueView(props: PriceViewProps) {
   const directionTone =
     proposal.direction === 'increase'
       ? {
-          fg: 'var(--wpds-color-fg-content-warning)',
-          bg: 'var(--wpds-color-bg-surface-warning-weak)',
+          fg: 'var(--wpds-color-foreground-content-warning)',
+          bg: 'var(--wpds-color-background-surface-warning-weak)',
         }
       : proposal.direction === 'decrease'
         ? {
-            fg: 'var(--wpds-color-fg-content-success)',
-            bg: 'var(--wpds-color-bg-surface-success-weak)',
+            fg: 'var(--wpds-color-foreground-content-success)',
+            bg: 'var(--wpds-color-background-surface-success-weak)',
           }
         : {
-            fg: 'var(--wpds-color-fg-content-neutral)',
-            bg: 'var(--wpds-color-bg-surface-neutral-weak)',
+            fg: 'var(--wpds-color-foreground-content-neutral)',
+            bg: 'var(--wpds-color-background-surface-neutral-weak)',
           };
 
   const arrow = proposal.direction === 'decrease' ? '↓' : proposal.direction === 'increase' ? '↑' : '·';
@@ -994,7 +994,7 @@ function PriceIssueView(props: PriceViewProps) {
                   <Stack direction="column" gap="xs">
                     <Text
                       variant="body-sm"
-                      style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                      style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                     >
                       Current
                     </Text>
@@ -1002,7 +1002,7 @@ function PriceIssueView(props: PriceViewProps) {
                       variant="heading-xl"
                       style={{
                         textDecoration: 'line-through',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       {formatPrice(proposal.previousPrice, currency)}
@@ -1010,14 +1010,14 @@ function PriceIssueView(props: PriceViewProps) {
                   </Stack>
                   <Text
                     variant="heading-lg"
-                    style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                    style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                   >
                     →
                   </Text>
                   <Stack direction="column" gap="xs">
                     <Text
                       variant="body-sm"
-                      style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                      style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                     >
                       Proposed
                     </Text>
@@ -1060,7 +1060,7 @@ function PriceIssueView(props: PriceViewProps) {
                       className="wa-tabular"
                       style={{
                         marginLeft: 'auto',
-                        color: 'var(--wpds-color-fg-content-neutral-weak)',
+                        color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       }}
                     >
                       from {proposal.sources.length} comparables
@@ -1098,7 +1098,7 @@ function PriceIssueView(props: PriceViewProps) {
                     variant="body-sm"
                     style={{
                       marginLeft: 'auto',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     }}
                   >
                     every numeric claim cited below
@@ -1371,7 +1371,7 @@ function MessageIssueView(props: MessageViewProps) {
                           <Text
                             variant="body-sm"
                             style={{
-                              color: 'var(--wpds-color-fg-content-neutral-weak)',
+                              color: 'var(--wpds-color-foreground-content-neutral-weak)',
                             }}
                           >
                             × {li.quantity}
@@ -1425,7 +1425,7 @@ function MessageIssueView(props: MessageViewProps) {
                     variant="body-sm"
                     style={{
                       marginLeft: 'auto',
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                     }}
                   >
                     {charCount} chars

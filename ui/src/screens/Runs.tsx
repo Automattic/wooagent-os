@@ -36,7 +36,7 @@ function RunReasonCard({
   isFailure: boolean;
 }) {
   const personaKey = personaKeyFrom(run.persona);
-  const metaColor = 'var(--wpds-color-fg-content-neutral-weak)';
+  const metaColor = 'var(--wpds-color-foreground-content-neutral-weak)';
   const xs = 'var(--wpds-typography-font-size-xs)';
   return (
     <CollapsibleCard.Root>
@@ -72,7 +72,7 @@ function RunReasonCard({
               style={{
                 fontSize: xs,
                 color: isFailure
-                  ? 'var(--wpds-color-fg-content-warning)'
+                  ? 'var(--wpds-color-foreground-content-warning)'
                   : metaColor,
               }}
             >
@@ -89,8 +89,8 @@ function RunReasonCard({
               whiteSpace: 'pre-wrap',
               fontSize: xs,
               color: isFailure
-                ? 'var(--wpds-color-fg-content-warning)'
-                : 'var(--wpds-color-fg-content-neutral)',
+                ? 'var(--wpds-color-foreground-content-warning)'
+                : 'var(--wpds-color-foreground-content-neutral)',
             }}
           >
             {output}
@@ -245,7 +245,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
           <Text variant="body-md">No runs yet.</Text>
           <Text
             variant="body-sm"
-            style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+            style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
           >
             Runs appear here when agents are triggered by the scheduler or
             manually via the Agents page.
@@ -304,7 +304,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                           <Text
                             variant="body-sm"
                             style={{
-                              color: 'var(--wpds-color-fg-content-neutral-weak)',
+                              color: 'var(--wpds-color-foreground-content-neutral-weak)',
                               fontSize: 'var(--wpds-typography-font-size-xs)',
                             }}
                           >
@@ -318,7 +318,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                                 fontSize:
                                   'var(--wpds-typography-font-size-xs)',
                                 color:
-                                  'var(--wpds-color-fg-content-neutral-weak)',
+                                  'var(--wpds-color-foreground-content-neutral-weak)',
                               }}
                             >
                               Issue {run.issue_id.slice(0, 8).toUpperCase()}
@@ -332,7 +332,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                               fontSize:
                                 'var(--wpds-typography-font-size-xs)',
                               color:
-                                'var(--wpds-color-fg-content-neutral-weak)',
+                                'var(--wpds-color-foreground-content-neutral-weak)',
                             }}
                           >
                             {run.id.slice(0, 8).toUpperCase()}
@@ -344,7 +344,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                                 fontSize:
                                   'var(--wpds-typography-font-size-xs)',
                                 color:
-                                  'var(--wpds-color-fg-content-neutral-weak)',
+                                  'var(--wpds-color-foreground-content-neutral-weak)',
                               }}
                             >
                               {formatLatency(run.latency_ms)}
@@ -357,7 +357,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                                 fontSize:
                                   'var(--wpds-typography-font-size-xs)',
                                 color:
-                                  'var(--wpds-color-fg-content-neutral-weak)',
+                                  'var(--wpds-color-foreground-content-neutral-weak)',
                               }}
                             >
                               {run.skip_reason}
@@ -370,7 +370,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                                 fontSize:
                                   'var(--wpds-typography-font-size-xs)',
                                 color:
-                                  'var(--wpds-color-fg-content-warning)',
+                                  'var(--wpds-color-foreground-content-warning)',
                               }}
                             >
                               {run.failure_reason}
@@ -381,7 +381,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                       <Text
                         variant="body-sm"
                         style={{
-                          color: 'var(--wpds-color-fg-content-neutral-weak)',
+                          color: 'var(--wpds-color-foreground-content-neutral-weak)',
                           fontSize: 'var(--wpds-typography-font-size-xs)',
                           flexShrink: 0,
                         }}
@@ -417,7 +417,7 @@ export default function Runs({ connection, onAskAgent }: Props) {
                   <Text
                     variant="body-sm"
                     style={{
-                      color: 'var(--wpds-color-fg-content-neutral-weak)',
+                      color: 'var(--wpds-color-foreground-content-neutral-weak)',
                       fontSize: 'var(--wpds-typography-font-size-xs)',
                     }}
                   >

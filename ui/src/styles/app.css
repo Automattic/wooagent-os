@@ -88,8 +88,8 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: var(--wpds-color-bg-surface-neutral-weak);
-  color: var(--wpds-color-fg-content-neutral);
+  background: var(--wpds-color-background-surface-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral);
   font-family: var(--wpds-typography-font-family-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -112,27 +112,27 @@ a {
   border-radius: var(--wpds-border-radius-md);
   font-family: var(--wpds-typography-font-family-body);
   font-size: var(--wpds-typography-font-size-md);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
   cursor: var(--wpds-cursor-control);
   transition: background-color 0.1s;
 }
 .wa-navlink:hover {
-  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+  background: var(--wpds-color-background-interactive-neutral-weak-active);
 }
 .wa-navlink--active {
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-interactive-brand);
+  background: var(--wpds-color-background-surface-info-weak);
+  color: var(--wpds-color-foreground-interactive-brand);
   font-weight: var(--wpds-typography-font-weight-medium);
 }
 .wa-navlink--paused {
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 
 .wa-eyebrow {
   font-size: var(--wpds-typography-font-size-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 
 .wa-tabular {
@@ -229,7 +229,7 @@ a {
    layout. */
 .wa-action-bar {
   flex: none;
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border-top: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral);
   box-shadow: var(--wpds-elevation-md);
   /* Horizontal padding matches WPDS Page's `.content.has-padding` rule
@@ -243,13 +243,13 @@ a {
 .wa-score-bar {
   height: 3px;
   border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-bg-surface-neutral-strong);
+  background: var(--wpds-color-background-surface-neutral-strong);
   overflow: hidden;
 }
 .wa-score-bar > div {
   height: 100%;
   border-radius: var(--wpds-border-radius-sm);
-  background: var(--bar-fill, var(--wpds-color-bg-interactive-brand-strong));
+  background: var(--bar-fill, var(--wpds-color-background-interactive-brand-strong));
 }
 /* Invisible spacer that reserves the bar's slot on KPI tiles that have no
    score — keeps every tile's hint text on the same baseline regardless of
@@ -265,7 +265,7 @@ a {
 }
 .wa-variant-card--selected {
   border-color: var(--wpds-color-stroke-interactive-brand) !important;
-  box-shadow: 0 0 0 3px var(--wpds-color-bg-surface-info-weak);
+  box-shadow: 0 0 0 3px var(--wpds-color-background-surface-info-weak);
 }
 
 /* Pricing-batch product card — expandable row inside the batch review. The
@@ -286,7 +286,7 @@ a {
   cursor: var(--wpds-cursor-control);
 }
 .wa-batch-product-card__header:focus-visible {
-  outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus-brand);
+  outline: var(--wpds-border-width-focus) solid var(--wpds-color-stroke-focus);
   outline-offset: 2px;
 }
 .wa-batch-product-card--expanded {
@@ -301,7 +301,7 @@ a {
   letter-spacing: 0.08em;
   padding: 3px 8px;
   background: var(--wa-persona-mk-ink);
-  color: var(--wpds-color-fg-interactive-brand-strong);
+  color: var(--wpds-color-foreground-interactive-brand-strong);
   border-radius: var(--wpds-border-radius-sm);
   text-transform: uppercase;
   font-weight: var(--wpds-typography-font-weight-medium);
@@ -318,7 +318,7 @@ a {
 }
 .wa-check-row > .wa-check-mark {
   flex: none;
-  color: var(--wpds-color-fg-content-success);
+  color: var(--wpds-color-foreground-content-success);
   font-weight: var(--wpds-typography-font-weight-medium);
 }
 
@@ -331,7 +331,7 @@ a {
    class names instead. */
 
 /* Dark sidebar. WPDS doesn't ship a true inverse-surface token, so the
-   sidebar borrows --wpds-color-bg-interactive-neutral-strong (the dark color
+   sidebar borrows --wpds-color-background-interactive-neutral-strong (the dark color
    WPDS uses for its primary-button background). Mild semantic stretch (a
    button bg used as a surface), but it keeps everything inside WPDS — swap
    to a proper inverse token if WPDS adds one. See CLAUDE.md. */
@@ -358,7 +358,7 @@ a {
 }
 /* Hover/active read as translucent indigo on the near-black surface,
    matching the i3.2 Figma's nav-link treatment (rgba(56,88,233,0.12) is
-   12%-opacity --wpds-color-fg-interactive-brand on the sidebar bg). */
+   12%-opacity --wpds-color-foreground-interactive-brand on the sidebar bg). */
 .wa-sidebar .wa-navlink:hover {
   background: rgba(56, 88, 233, 0.12);
 }
@@ -445,7 +445,7 @@ a {
   align-items: center;
   gap: var(--wpds-dimension-gap-sm);
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border-bottom:
     var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
 }
@@ -460,10 +460,10 @@ a {
   background: transparent;
   border-radius: var(--wpds-border-radius-md);
   cursor: var(--wpds-cursor-control);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 .wa-icon-btn:hover {
-  background: var(--wpds-color-bg-interactive-neutral-weak-active);
+  background: var(--wpds-color-background-interactive-neutral-weak-active);
 }
 
 .wa-sidebar-backdrop {
@@ -514,7 +514,7 @@ a {
   justify-content: flex-end;
   gap: var(--wpds-dimension-gap-md);
   padding: var(--wpds-dimension-padding-md) var(--wa-page-pad-x);
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border-bottom:
     var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
 }
@@ -526,10 +526,10 @@ a {
   width: 360px;
   max-width: 100%;
   padding: 6px var(--wpds-dimension-padding-sm);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   border-radius: var(--wpds-border-radius-md);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   font-size: var(--wpds-typography-font-size-sm);
 }
 .wa-topbar__search input {
@@ -538,10 +538,10 @@ a {
   background: transparent;
   outline: none;
   font: inherit;
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 .wa-topbar__search input::placeholder {
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 
 /* Ask Agent drawer — right-anchored panel, command-palette flavored. */
@@ -565,7 +565,7 @@ a {
   bottom: 0;
   width: 420px;
   max-width: 100vw;
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   box-shadow: var(--wpds-elevation-lg);
   z-index: 61;
   display: flex;
@@ -599,7 +599,7 @@ a {
   justify-content: center;
   gap: var(--wpds-dimension-gap-md);
   font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 
 .wa-kbd {
@@ -610,10 +610,10 @@ a {
   height: 22px;
   padding: 0 6px;
   border-radius: var(--wpds-border-radius-sm);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 
 .wa-suggestion-row {
@@ -623,7 +623,7 @@ a {
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   border-bottom: none;
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   cursor: var(--wpds-cursor-control);
   font-size: var(--wpds-typography-font-size-sm);
 }
@@ -634,13 +634,13 @@ a {
   border-bottom-right-radius: var(--wpds-border-radius-md);
 }
 .wa-suggestion-row--highlight {
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-interactive-brand);
+  background: var(--wpds-color-background-surface-info-weak);
+  color: var(--wpds-color-foreground-interactive-brand);
 }
 .wa-suggestion-row__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wa-suggestion-row__time {
   font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   flex: none;
 }
 
@@ -653,7 +653,7 @@ a {
   align-items: center;
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
   border-bottom: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
 }
 .wa-chat-picker__toggle {
   display: inline-flex;
@@ -664,14 +664,14 @@ a {
   border: var(--wpds-border-width-sm) solid transparent;
   border-radius: var(--wpds-border-radius-sm);
   cursor: pointer;
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
   font-family: var(--wpds-typography-font-family-body);
 }
 .wa-chat-picker__toggle:hover {
-  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+  background: var(--wpds-color-background-interactive-neutral-weak-active);
 }
 .wa-chat-picker__toggle:focus-visible {
-  outline: 2px solid var(--wpds-color-stroke-interactive-focus);
+  outline: 2px solid var(--wpds-color-stroke-focus);
   outline-offset: 2px;
 }
 .wa-chat-picker__name {
@@ -696,19 +696,19 @@ a {
   text-align: left;
   font-family: var(--wpds-typography-font-family-body);
   font-size: var(--wpds-typography-font-size-sm);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 .wa-chat-picker__option:hover:not(:disabled) {
-  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+  background: var(--wpds-color-background-interactive-neutral-weak-active);
 }
 .wa-chat-picker__option.is-active {
-  background: var(--wpds-color-bg-interactive-neutral-weak-hover);
+  background: var(--wpds-color-background-interactive-neutral-weak-active);
   font-weight: var(--wpds-typography-font-weight-medium);
 }
 .wa-chat-picker__option.is-disabled,
 .wa-chat-picker__option:disabled {
   cursor: not-allowed;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 .wa-chat-picker__option.is-disabled .wa-persona-avatar,
 .wa-chat-picker__option:disabled .wa-persona-avatar {
@@ -725,15 +725,15 @@ a {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--wpds-color-bg-interactive-brand-strong);
-  border: 2px solid var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-interactive-brand-strong);
+  border: 2px solid var(--wpds-color-background-surface-neutral-weak);
 }
 .wa-chat-picker__option-label {
   flex: 1 1 auto;
 }
 .wa-chat-picker__option-hint {
   font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 
 /* Inner chat (Messages + ChatInput) is composed from
@@ -743,20 +743,25 @@ a {
    .wa-chat-stack shim makes the embedded container claim the remaining
    drawer height so Messages scrolls and Input pins to the bottom. */
 .wa-drawer .agenttic {
-  --color-background: var(--wpds-color-bg-surface-neutral);
-  --color-foreground: var(--wpds-color-fg-content-neutral);
-  --color-popover: var(--wpds-color-bg-surface-neutral);
-  --color-popover-muted: var(--wpds-color-bg-surface-neutral-weak);
-  --color-primary: var(--wpds-color-bg-interactive-brand-strong);
-  --color-primary-foreground: var(--wpds-color-fg-content-on-interactive-brand-strong, #ffffff);
-  --color-muted: var(--wpds-color-bg-surface-info-weak);
-  --color-muted-foreground: var(--wpds-color-fg-content-neutral-weak);
-  --color-ring: var(--wpds-color-bg-interactive-brand-strong);
-  --color-success-background: var(--wpds-color-bg-surface-success-weak);
-  --color-warning-background: var(--wpds-color-bg-surface-warning-weak);
-  --color-error-background: var(--wpds-color-bg-surface-error-weak);
-  --color-error: var(--wpds-color-fg-content-error);
-  --color-link: var(--wpds-color-fg-interactive-brand, var(--wpds-color-bg-interactive-brand-strong));
+  --color-background: var(--wpds-color-background-surface-neutral);
+  --color-foreground: var(--wpds-color-foreground-content-neutral);
+  --color-popover: var(--wpds-color-background-surface-neutral);
+  --color-popover-muted: var(--wpds-color-background-surface-neutral-weak);
+  --color-primary: var(--wpds-color-background-interactive-brand-strong);
+  /* CUSTOM: hardcoded #ffffff. (a) WPDS has no "foreground on brand-strong
+     background" token — the foreground-interactive-brand-* family is for text
+     that *is* brand-colored, not text sitting on top of it. (b) Agenttic needs
+     a concrete color for label text inside its primary button. (c) Revisit if
+     WPDS adds an on-* foreground role; see DESIGN.md Tokens. */
+  --color-primary-foreground: #ffffff;
+  --color-muted: var(--wpds-color-background-surface-info-weak);
+  --color-muted-foreground: var(--wpds-color-foreground-content-neutral-weak);
+  --color-ring: var(--wpds-color-background-interactive-brand-strong);
+  --color-success-background: var(--wpds-color-background-surface-success-weak);
+  --color-warning-background: var(--wpds-color-background-surface-warning-weak);
+  --color-error-background: var(--wpds-color-background-surface-error-weak);
+  --color-error: var(--wpds-color-foreground-content-error);
+  --color-link: var(--wpds-color-foreground-interactive-brand, var(--wpds-color-background-interactive-brand-strong));
   --font-sans: var(--wpds-typography-font-family-body);
   /* Re-point Agenttic's type scale at WPDS typography tokens so the chat
      reads in the app's voice, not Big Sky's. Mapped by semantic role:
@@ -816,22 +821,25 @@ a {
   align-items: center;
   gap: var(--wpds-dimension-gap-xs);
   padding: 4px var(--wpds-dimension-padding-sm);
-  border-radius: var(--wpds-border-radius-pill, 9999px);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  /* CUSTOM: hardcoded 9999px. (a) The WPDS radius scale tops out at `xl`
+     (app-shell surfaces) — there's no pill/full token. (b) A fully-rounded
+     pill is the chip shape from Figma. (c) See DESIGN.md Tokens. */
+  border-radius: 9999px;
+  background: var(--wpds-color-background-surface-neutral-weak);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
   font-size: var(--wpds-typography-font-size-xs);
   cursor: var(--wpds-cursor-control, pointer);
   max-width: 100%;
 }
 .wa-ref-chip:hover {
-  background: var(--wpds-color-bg-surface-info-weak);
-  border-color: var(--wpds-color-stroke-interactive-brand-weak, var(--wpds-color-stroke-surface-neutral-weak));
+  background: var(--wpds-color-background-surface-info-weak);
+  border-color: var(--wpds-color-stroke-interactive-brand);
 }
 .wa-ref-chip__kind {
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   font-size: 10px;
 }
 .wa-ref-chip__label {
@@ -841,11 +849,11 @@ a {
   max-width: 240px;
 }
 .wa-ref-chip--working {
-  background: var(--wpds-color-bg-surface-info-weak);
+  background: var(--wpds-color-background-surface-info-weak);
 }
 .wa-ref-chip--failed {
-  background: var(--wpds-color-bg-surface-error-weak);
-  color: var(--wpds-color-fg-content-error);
+  background: var(--wpds-color-background-surface-error-weak);
+  color: var(--wpds-color-foreground-content-error);
 }
 .wa-ref-chip__spinner {
   display: inline-flex;
@@ -871,10 +879,10 @@ a {
   display: flex;
   gap: var(--wpds-dimension-gap-sm);
   padding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   border-radius: var(--wpds-border-radius-md);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   font-size: var(--wpds-typography-font-size-sm);
   font-style: italic;
   max-width: 90%;
@@ -943,16 +951,16 @@ a {
   align-items: baseline;
   gap: 4px;
   font-size: var(--wpds-typography-font-size-xs);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
 }
 .wa-score-label__value {
   font-weight: var(--wpds-typography-font-weight-medium);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
-.wa-score-label__value--good { color: var(--wpds-color-fg-content-success); }
-.wa-score-label__value--info { color: var(--wpds-color-fg-interactive-brand); }
-.wa-score-label__value--caution { color: var(--wpds-color-fg-content-caution); }
-.wa-score-label__value--warning { color: var(--wpds-color-fg-content-warning); }
+.wa-score-label__value--good { color: var(--wpds-color-foreground-content-success); }
+.wa-score-label__value--info { color: var(--wpds-color-foreground-interactive-brand); }
+.wa-score-label__value--caution { color: var(--wpds-color-foreground-content-caution); }
+.wa-score-label__value--warning { color: var(--wpds-color-foreground-content-warning); }
 
 /* Radio mark on the right of each variant card. Standard WPDS-style radio
    button: outline ring when unselected, brand-colored ring with a filled
@@ -965,12 +973,12 @@ a {
   width: 18px;
   border-radius: 50%;
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-interactive-neutral);
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   flex: none;
 }
 .wa-radio-mark--selected {
-  background: var(--wpds-color-bg-interactive-brand-strong);
-  border-color: var(--wpds-color-bg-interactive-brand-strong);
+  background: var(--wpds-color-background-interactive-brand-strong);
+  border-color: var(--wpds-color-background-interactive-brand-strong);
 }
 .wa-radio-mark--selected::after {
   content: '';
@@ -998,8 +1006,8 @@ a {
   width: 24px;
   border-radius: 50%;
   flex: none;
-  background: var(--wpds-color-bg-interactive-brand-strong);
-  color: var(--wpds-color-fg-interactive-brand-strong);
+  background: var(--wpds-color-background-interactive-brand-strong);
+  color: var(--wpds-color-foreground-interactive-brand-strong);
   font-weight: var(--wpds-typography-font-weight-medium);
   font-size: var(--wpds-typography-font-size-sm);
   text-transform: uppercase;
@@ -1035,7 +1043,7 @@ a {
   justify-content: center;
   height: 24px;
   width: 24px;
-  color: var(--wpds-color-fg-content-success);
+  color: var(--wpds-color-foreground-content-success);
   flex: none;
 }
 
@@ -1044,7 +1052,7 @@ a {
 .wa-undo-arrow {
   display: inline-flex;
   align-items: center;
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 
 /* ---------- Batch review ---------- */
@@ -1089,7 +1097,7 @@ a {
   width: 100%;
   height: 5px;
   border-radius: 9999px;
-  background: var(--wpds-color-bg-track-neutral);
+  background: var(--wpds-color-background-track-neutral);
   overflow: hidden;
 }
 .wa-batch-progress__bar {
@@ -1121,7 +1129,7 @@ a {
   color: inherit;
 }
 .wa-batch-row__header:hover {
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
 }
 .wa-batch-row__header[aria-expanded="true"] {
   border-bottom-color: var(--wpds-color-stroke-surface-neutral-weak);
@@ -1151,7 +1159,7 @@ a {
   flex-direction: column;
   gap: var(--wpds-dimension-gap-xs);
   padding: var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border: var(--wpds-border-width-sm) solid var(--wpds-color-stroke-surface-neutral-weak);
   border-radius: var(--wpds-border-radius-md);
   text-align: left;
@@ -1164,7 +1172,7 @@ a {
   cursor: default;
 }
 .wa-batch-col--current {
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   cursor: default;
 }
 .wa-batch-col--variant:hover:not(:disabled) {
@@ -1172,7 +1180,7 @@ a {
 }
 .wa-batch-col--selected {
   border-color: var(--wpds-color-stroke-interactive-brand) !important;
-  box-shadow: 0 0 0 2px var(--wpds-color-bg-surface-info-weak);
+  box-shadow: 0 0 0 2px var(--wpds-color-background-surface-info-weak);
 }
 .wa-batch-col__head {
   display: flex;
@@ -1322,8 +1330,8 @@ a {
   font-weight: var(--wpds-typography-font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: var(--wpds-color-bg-surface-info-weak);
-  color: var(--wpds-color-fg-interactive-brand);
+  background: var(--wpds-color-background-surface-info-weak);
+  color: var(--wpds-color-foreground-interactive-brand);
 }
 
 /* ---------- Onboarding (first-run setup) ---------- */
@@ -1333,7 +1341,7 @@ a {
 .wa-onboarding-shell {
   min-height: 100vh;
   width: 100%;
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1441,7 +1449,7 @@ a {
   line-height: 1;
   font-weight: var(--wpds-typography-font-weight-medium);
   background: transparent;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   border:
     var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral);
@@ -1451,28 +1459,28 @@ a {
   font-size: var(--wpds-typography-font-size-sm);
   font-weight: var(--wpds-typography-font-weight-medium);
   line-height: var(--wpds-typography-line-height-sm, 20px);
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   white-space: nowrap;
 }
 /* Active = filled dark circle with white number. */
 .wa-stepper__step--current .wa-stepper__marker {
-  background: var(--wpds-color-bg-interactive-neutral-strong);
-  border-color: var(--wpds-color-bg-interactive-neutral-strong);
-  color: var(--wpds-color-fg-interactive-neutral-strong);
+  background: var(--wpds-color-background-interactive-neutral-strong);
+  border-color: var(--wpds-color-background-interactive-neutral-strong);
+  color: var(--wpds-color-foreground-interactive-neutral-strong);
 }
 /* Done = outlined circle with a dark check (no fill). The label still
    reads "completed" via dark text — only the marker treatment changes. */
 .wa-stepper__step--done .wa-stepper__marker {
   background: transparent;
   border-color: var(--wpds-color-stroke-surface-neutral-strong);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 .wa-stepper__step--current .wa-stepper__label,
 .wa-stepper__step--done .wa-stepper__label {
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
 }
 .wa-stepper__step--done:not(:disabled):hover .wa-stepper__label {
-  color: var(--wpds-color-fg-interactive-brand);
+  color: var(--wpds-color-foreground-interactive-brand);
 }
 
 /* Inline +/− disclosure used in Step 2 (plugin install) and Step 4 (custom
@@ -1487,7 +1495,7 @@ a {
   color: inherit;
 }
 .wa-onboarding-disclosure:hover {
-  color: var(--wpds-color-fg-interactive-brand);
+  color: var(--wpds-color-foreground-interactive-brand);
 }
 
 /* Big, copy-on-click pairing-code block. Documented mono-font exception (see
@@ -1513,18 +1521,18 @@ a {
   padding:
     var(--wpds-dimension-padding-md)
     var(--wpds-dimension-padding-lg);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   border:
     var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral);
   border-radius: var(--wpds-border-radius-lg);
-  color: var(--wpds-color-fg-content-neutral);
+  color: var(--wpds-color-foreground-content-neutral);
   cursor: pointer;
   user-select: all;
   transition: background-color 0.1s, border-color 0.1s;
 }
 .wa-onboarding-pairing-code:hover {
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border-color: var(--wpds-color-stroke-interactive-brand);
 }
 /* Copy icon revealed on hover — sits in the top-right corner of the code
@@ -1539,7 +1547,7 @@ a {
   justify-content: center;
   opacity: 0;
   transition: opacity 0.1s;
-  color: var(--wpds-color-fg-content-neutral-weak);
+  color: var(--wpds-color-foreground-content-neutral-weak);
   pointer-events: none;
 }
 .wa-onboarding-pairing-code:hover .wa-onboarding-pairing-code__hover-icon {
@@ -1563,7 +1571,7 @@ a {
   align-items: flex-start;
   text-align: left;
   padding: var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral);
+  background: var(--wpds-color-background-surface-neutral);
   border:
     var(--wpds-border-width-sm)
     solid var(--wpds-color-stroke-surface-neutral);
@@ -1578,7 +1586,7 @@ a {
 }
 .wa-onboarding-provider--selected {
   border-color: var(--wpds-color-stroke-interactive-brand) !important;
-  box-shadow: 0 0 0 2px var(--wpds-color-bg-surface-info-weak);
+  box-shadow: 0 0 0 2px var(--wpds-color-background-surface-info-weak);
 }
 .wa-onboarding-provider__check {
   position: absolute;
@@ -1591,7 +1599,7 @@ a {
   width: 18px;
   border-radius: 50%;
   background: transparent;
-  color: var(--wpds-color-fg-interactive-brand);
+  color: var(--wpds-color-foreground-interactive-brand);
   border:
     var(--wpds-border-width-sm)
     solid var(--wpds-color-stroke-interactive-brand);
@@ -1680,7 +1688,7 @@ a {
   display: flex;
   gap: var(--wpds-dimension-gap-md);
   padding: var(--wpds-dimension-padding-md);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   border:
     var(--wpds-border-width-xs)
     solid var(--wpds-color-stroke-surface-neutral-weak);
@@ -1695,7 +1703,7 @@ a {
   display: block;
   object-fit: cover;
   border-radius: var(--wpds-border-radius-md);
-  background: var(--wpds-color-bg-surface-neutral-weak);
+  background: var(--wpds-color-background-surface-neutral-weak);
   /* DataViews table rows are flex containers and stretch their cells'
      children unless we lock the box down. Use min/max + flex:none so the
      illustration tile (a flex div) lands at the exact same dimensions as
@@ -1726,7 +1734,7 @@ a {
   justify-content: center;
   /* CUSTOM: warm-gray icon color from the i3 Figma icon-alternates board
      (node 797:32604). No WPDS neutral-weak token matches this exact value
-     (#CECBC6 is warmer than --wpds-color-fg-content-neutral-weak), and
+     (#CECBC6 is warmer than --wpds-color-foreground-content-neutral-weak), and
      the designer specified the hex directly for the placeholder treatment.
      Used by the fallback @wordpress/icons glyph path (un-mapped personas).
      Documented in docs/specs/2026-05-16-product-images-design.md. */

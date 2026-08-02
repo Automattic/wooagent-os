@@ -15,7 +15,7 @@ interface Props {
   onAskAgent: () => void;
 }
 
-const MUTED = { color: 'var(--wpds-color-fg-content-neutral-weak)' } as const;
+const MUTED = { color: 'var(--wpds-color-foreground-content-neutral-weak)' } as const;
 
 export default function Stores({
   connection,

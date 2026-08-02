@@ -249,7 +249,7 @@ export default function EditAgent({ connection, onChanged }: Props) {
                     />
                     <Text
                       variant="body-sm"
-                      style={{ color: 'var(--wpds-color-fg-content-neutral)' }}
+                      style={{ color: 'var(--wpds-color-foreground-content-neutral)' }}
                     >
                       {PERSONA_DESCRIPTION[persona.persona] ??
                         "Drafts proposals on a cadence you set, lands them in your review queue."}

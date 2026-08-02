@@ -88,10 +88,10 @@ export default function BatchProductCard({
   const deltaLabel = `${deltaSign}${sym}${deltaAbs.toFixed(2)}`;
   const directionColor =
     product.direction === 'increase'
-      ? 'var(--wpds-color-fg-content-warning)'
+      ? 'var(--wpds-color-foreground-content-warning)'
       : product.direction === 'decrease'
-        ? 'var(--wpds-color-fg-content-success)'
-        : 'var(--wpds-color-fg-content-neutral)';
+        ? 'var(--wpds-color-foreground-content-success)'
+        : 'var(--wpds-color-foreground-content-neutral)';
 
   return (
     <Card.Root
@@ -130,8 +130,8 @@ export default function BatchProductCard({
                   fontSize: 'var(--wpds-typography-font-size-xs)',
                   padding: '2px 8px',
                   borderRadius: 'var(--wpds-border-radius-sm)',
-                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
-                  color: 'var(--wpds-color-fg-content-neutral)',
+                  background: 'var(--wpds-color-background-surface-neutral-weak)',
+                  color: 'var(--wpds-color-foreground-content-neutral)',
                 }}
               >
                 {product.categoryPath}
@@ -142,7 +142,7 @@ export default function BatchProductCard({
             <Stack direction="row" gap="sm" align="center">
               <Text
                 variant="body-sm"
-                style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
               >
                 {sym}
                 {product.previousPrice.toFixed(2)} → {sym}
@@ -154,7 +154,7 @@ export default function BatchProductCard({
                   fontWeight: 'var(--wpds-typography-font-weight-medium)',
                   padding: '2px 8px',
                   borderRadius: 'var(--wpds-border-radius-sm)',
-                  background: 'var(--wpds-color-bg-surface-neutral-weak)',
+                  background: 'var(--wpds-color-background-surface-neutral-weak)',
                   color: directionColor,
                 }}
               >
@@ -232,7 +232,7 @@ export default function BatchProductCard({
                 {product.status !== 'in_review' ? (
                   <Text
                     variant="body-sm"
-                    style={{ color: 'var(--wpds-color-fg-content-neutral-weak)' }}
+                    style={{ color: 'var(--wpds-color-foreground-content-neutral-weak)' }}
                   >
                     {`Already ${product.status === 'done' ? 'approved' : product.status}`}
                   </Text>

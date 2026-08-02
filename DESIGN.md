@@ -97,11 +97,13 @@ Don't block on review, but tell the user the change is worth a designer's eye be
 
 ### WPDS tokens (everything except persona)
 
-- Surfaces — `--wpds-color-bg-surface-*`
-- Foreground (text, icons) — `--wpds-color-fg-content-*`
+- Surfaces — `--wpds-color-background-surface-*`
+- Foreground (text, icons) — `--wpds-color-foreground-content-*`
 - Strokes — `--wpds-color-stroke-*`
-- Interactive — `--wpds-color-bg-interactive-*`
+- Interactive — `--wpds-color-background-interactive-*`
 - Status / intent — WPDS intents (`high`, `medium`, `low`, `stable`, `informational`, `draft`, `none`). Never custom red / yellow / green hex values.
+
+**Note the full words `background` / `foreground`.** WPDS renamed these segments from `bg` / `fg` in `@wordpress/ui` 0.17. A `var()` naming a token that no longer exists doesn't warn — it silently resolves to `unset`, which for `background` means *transparent*. That's how the Ask Agent drawer and the selected-radio fill disappeared after the 0.11 → 0.17 bump. `ui/src/styles/tokens.test.ts` now asserts every `--wpds-*` reference in `ui/src` is defined by the installed `@wordpress/theme`; if it fails after a package bump, the token was renamed — look it up in `design-tokens.css` rather than reinstating the old name.
 
 ### Persona palette (WooAgent-owned)
 
@@ -120,11 +122,11 @@ Two previous sites have been retired:
 
 ### Brand logo (WooAgent-owned)
 
-The brand mark in the `LeftNav` header is a **"W" tile** — a 24×24 brand-indigo square with a centered white "W" — matching the i3.2 Figma (node `I2:9719;838:8826`), marked `// CUSTOM:` in `LeftNav.tsx`. WPDS has no product-logo component, so the lockup itself is a deliberate off-system element, but it's built from WPDS tokens: the fill is `--wpds-color-bg-interactive-brand-strong` (`#3858e9`, brand indigo), the radius is `--wpds-border-radius-sm`, and the white "W" inherits `color: #ffffff` from `.wa-sidebar`. The "WooAgent" wordmark beside it uses `Text variant="heading-md"` (white, inherited) with an off-token `fontWeight: 700` inline style; the tile's "W" matches that 700 weight. WPDS exposes no `bold` weight — only `regular` and `medium` — so matching the approved 700-weight brand lockup requires going off-token. This is a brand-header-only exception; everywhere else, text stays on the WPDS weight tokens. (The earlier raster horse-head asset at `ui/src/assets/wooagent-logo.png` is no longer used.)
+The brand mark in the `LeftNav` header is a **"W" tile** — a 24×24 brand-indigo square with a centered white "W" — matching the i3.2 Figma (node `I2:9719;838:8826`), marked `// CUSTOM:` in `LeftNav.tsx`. WPDS has no product-logo component, so the lockup itself is a deliberate off-system element, but it's built from WPDS tokens: the fill is `--wpds-color-background-interactive-brand-strong` (`#3858e9`, brand indigo), the radius is `--wpds-border-radius-sm`, and the white "W" inherits `color: #ffffff` from `.wa-sidebar`. The "WooAgent" wordmark beside it uses `Text variant="heading-md"` (white, inherited) with an off-token `fontWeight: 700` inline style; the tile's "W" matches that 700 weight. WPDS exposes no `bold` weight — only `regular` and `medium` — so matching the approved 700-weight brand lockup requires going off-token. This is a brand-header-only exception; everywhere else, text stays on the WPDS weight tokens. (The earlier raster horse-head asset at `ui/src/assets/wooagent-logo.png` is no longer used.)
 
 ### Sidebar surface color (WooAgent-owned)
 
-The left nav uses two values that have no direct WPDS equivalent: `#1e1e1e` for the sidebar surface (matches the i3.2 Figma and is the same value WPDS uses internally for `--wpds-color-bg-interactive-neutral-strong` / its primary-button background — borrowed here for the inverse surface), and `rgba(56, 88, 233, 0.12)` for nav-link hover and active states (12%-opacity indigo on the near-black bg, also from the Figma). Both values live **only** in `.wa-sidebar` rules in `app.css` — nowhere else in the app. If WPDS adds a true dark-brand surface token + an inverse-interactive token later, swap to them.
+The left nav uses two values that have no direct WPDS equivalent: `#1e1e1e` for the sidebar surface (matches the i3.2 Figma and is the same value WPDS uses internally for `--wpds-color-background-interactive-neutral-strong` / its primary-button background — borrowed here for the inverse surface), and `rgba(56, 88, 233, 0.12)` for nav-link hover and active states (12%-opacity indigo on the near-black bg, also from the Figma). Both values live **only** in `.wa-sidebar` rules in `app.css` — nowhere else in the app. If WPDS adds a true dark-brand surface token + an inverse-interactive token later, swap to them.
 
 The nav count badge (e.g. the "Needs review" tally) is the WPDS `Badge` component re-skinned to an **outline-only** treatment on this dark surface, per the CIAB WooPayments Figma (node `778-19640`): transparent fill, a hairline `rgba(255, 255, 255, 0.24)` stroke, and white (`#ffffff`) count text. WPDS ships only filled `intent` variants, none of which read correctly on the near-black bg, so we pass `intent="none"` (for its border + sizing) plus a `.wa-nav-badge` class that overrides those three properties. Like the surface values above, the translucent-white stroke lives **only** in `.wa-sidebar` rules in `app.css`. Badges on light surfaces elsewhere still use native WPDS intents.
 
@@ -290,7 +292,7 @@ Project-specific composites that wrap or extend the above. See the **Components*
 
 ### Don't expand the persona-color exception
 
-Persona color appears in `PersonaAvatar` only. **That's it.** Three previous sites have been retired: the `LeftNav` brand "W" tile (moved to WPDS brand indigo `--wpds-color-bg-interactive-brand-strong` per the i3.2 Figma); the `.wa-eyebrow--persona` modifier (pink eyebrows on "Proposed", "Rationale", "Price change", "Customer-facing message" — removed 2026-05-15 when aligning the Marketing detail to the 2.0/Single Product Figma frame); and the persona-colored `KindBadge` "kind pill" on board cards (removed 2026-05-16 when the queue moved to DataViews and agent identity via `PersonaAvatar` became the canonical visual signal). A future need for a second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
+Persona color appears in `PersonaAvatar` only. **That's it.** Three previous sites have been retired: the `LeftNav` brand "W" tile (moved to WPDS brand indigo `--wpds-color-background-interactive-brand-strong` per the i3.2 Figma); the `.wa-eyebrow--persona` modifier (pink eyebrows on "Proposed", "Rationale", "Price change", "Customer-facing message" — removed 2026-05-15 when aligning the Marketing detail to the 2.0/Single Product Figma frame); and the persona-colored `KindBadge` "kind pill" on board cards (removed 2026-05-16 when the queue moved to DataViews and agent identity via `PersonaAvatar` became the canonical visual signal). A future need for a second persona-colored surface should be redirected to a WPDS intent variant or a neutral surface. Broadening this makes the UI feel costumed.
 
 ### No monospace fonts (one exception)
 

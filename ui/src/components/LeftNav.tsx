@@ -64,7 +64,7 @@ interface Props {
 }
 
 const FOOTER_MUTED = {
-  color: 'var(--wpds-color-fg-content-neutral-weak)',
+  color: 'var(--wpds-color-foreground-content-neutral-weak)',
 } as const;
 
 export default function LeftNav({
@@ -171,7 +171,7 @@ export default function LeftNav({
               is no design-system component for a product logo. Matches the i3.2
               Figma (node I2:9719;838:8826): a 24×24 brand-indigo square with a
               centered white "W". The fill is the WPDS brand token
-              (--wpds-color-bg-interactive-brand-strong, #3858e9) and the radius
+              (--wpds-color-background-interactive-brand-strong, #3858e9) and the radius
               is --wpds-border-radius-sm, so only the lockup itself is off-system.
               Documented in DESIGN.md under "Brand logo". */}
           <div
@@ -184,7 +184,7 @@ export default function LeftNav({
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 'var(--wpds-border-radius-sm)',
-              background: 'var(--wpds-color-bg-interactive-brand-strong)',
+              background: 'var(--wpds-color-background-interactive-brand-strong)',
             }}
           >
             {/* White "W" inherits `color: #ffffff` from .wa-sidebar (see app.css).
@@ -273,7 +273,7 @@ export default function LeftNav({
                 {daemonHostname}
               </div>
               <Stack direction="row" gap="xs" align="center" style={{ marginTop: 4 }}>
-                {/* Lighter sage green than --wpds-color-fg-content-success — that
+                {/* Lighter sage green than --wpds-color-foreground-content-success — that
                     token is #002900 (designed for text on light surfaces) and is
                     effectively invisible against the dark sidebar bg. Non-paired
                     states (pairing/expired/failed) read as a muted amber so the
