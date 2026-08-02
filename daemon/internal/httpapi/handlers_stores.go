@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/wooagent-os/wooagent-os/daemon/internal/abilities"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/pairing"
 	"github.com/wooagent-os/wooagent-os/daemon/internal/secrets"
 )
@@ -29,17 +30,24 @@ import (
 //   - PairedAt: set when status flips to paired
 //   - DeviceName/AbilityCount/LastDiscoveredAt: populated post-pairing
 type Store struct {
-	ID                string  `json:"id"`
-	URL               string  `json:"url"`
-	MCPEndpoint       string  `json:"mcp_endpoint,omitempty"`
-	DeviceName        string  `json:"device_name,omitempty"`
-	Status            string  `json:"status"`
-	PairingCode       string  `json:"pairing_code,omitempty"`
-	PairURL           string  `json:"pair_url,omitempty"`
-	ExpiresAt         string  `json:"expires_at,omitempty"`
-	PairedAt          string  `json:"paired_at,omitempty"`
-	AbilityCount      *int    `json:"ability_count,omitempty"`
-	LastDiscoveredAt  string  `json:"last_discovered_at,omitempty"`
+	ID               string `json:"id"`
+	URL              string `json:"url"`
+	MCPEndpoint      string `json:"mcp_endpoint,omitempty"`
+	DeviceName       string `json:"device_name,omitempty"`
+	Status           string `json:"status"`
+	PairingCode      string `json:"pairing_code,omitempty"`
+	PairURL          string `json:"pair_url,omitempty"`
+	ExpiresAt        string `json:"expires_at,omitempty"`
+	PairedAt         string `json:"paired_at,omitempty"`
+	AbilityCount     *int   `json:"ability_count,omitempty"`
+	LastDiscoveredAt string `json:"last_discovered_at,omitempty"`
+	// CapabilityGaps lists what the daemon needs that this store can't do —
+	// an ability it doesn't register, or one whose input schema rejects a
+	// parameter a persona sends. Almost always means the WooAgent Companion
+	// Plugin is out of date. Empty/omitted when the store satisfies the
+	// daemon. Advisory: a store with gaps still works for the personas whose
+	// abilities are present (DSGWOO-1471).
+	CapabilityGaps []abilities.Gap `json:"capability_gaps,omitempty"`
 }
 
 // composeDeviceName returns the human-readable device label sent to the
@@ -303,9 +311,30 @@ func (s *Server) handleListStores(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "db_scan", err.Error())
 			return
 		}
+		row.CapabilityGaps = s.capabilityGaps(ctx, row)
 		stores = append(stores, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"stores": stores})
+}
+
+// capabilityGaps attaches the compatibility report for a paired store.
+//
+// Read straight from the abilities already cached by discovery, so this
+// costs one indexed SELECT and never touches the network. Unpaired stores
+// have nothing discovered yet, so there is nothing meaningful to report.
+//
+// A failure here is not worth failing the request over — the store list is
+// how an operator reaches the rest of the product, and a missing advisory
+// is better than a 500.
+func (s *Server) capabilityGaps(ctx context.Context, row Store) []abilities.Gap {
+	if row.Status != "paired" {
+		return nil
+	}
+	gaps, err := abilities.CheckStore(ctx, s.store.DB, row.ID)
+	if err != nil {
+		return nil
+	}
+	return gaps
 }
 
 // verifyAllPaired runs the staleness probe over every status='paired'
@@ -343,11 +372,11 @@ func (s *Server) verifyAllPaired(ctx context.Context) {
 // is a side-band check on a read-path handler:
 //   - nil:                     bump last_verified_at, keep paired
 //   - pairing.ErrTokenRevoked: drop the secret, flip row to 'unpaired',
-//                              clear token_ref so a future re-pair
-//                              starts fresh
+//     clear token_ref so a future re-pair
+//     starts fresh
 //   - any other error:         no-op (network blip, plugin uninstalled,
-//                              etc.) — the next probe outside the
-//                              throttle window will retry
+//     etc.) — the next probe outside the
+//     throttle window will retry
 func (s *Server) verifyPaired(ctx context.Context, id, storeURL, tokenRef, lastVerifiedAt string) {
 	if tokenRef == "" {
 		return
@@ -576,10 +605,11 @@ func (s *Server) handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 // button on the Abilities screen.
 //
 // Responses:
-//   200 — { "ability_count": N, "last_discovered_at": "..." } on success
-//   404 — store_not_found
-//   409 — store_not_paired (still pairing / expired / failed)
-//   502 — discovery_failed (MCP roundtrip or reconcile error)
+//
+//	200 — { "ability_count": N, "last_discovered_at": "..." } on success
+//	404 — store_not_found
+//	409 — store_not_paired (still pairing / expired / failed)
+//	502 — discovery_failed (MCP roundtrip or reconcile error)
 func (s *Server) handleRefreshStoreAbilities(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()

@@ -12,12 +12,13 @@
 //     without operator action.
 //
 // Trust state:
-//   new             — first sighting, no operator approval recorded.
-//   trusted         — operator approved at trusted_hash; matches current
-//                     schema_hash.
-//   schema_changed  — operator-approved row whose schema_hash diverges
-//                     from trusted_hash. Trust expires automatically;
-//                     re-approval bumps trusted_hash.
+//
+//	new             — first sighting, no operator approval recorded.
+//	trusted         — operator approved at trusted_hash; matches current
+//	                  schema_hash.
+//	schema_changed  — operator-approved row whose schema_hash diverges
+//	                  from trusted_hash. Trust expires automatically;
+//	                  re-approval bumps trusted_hash.
 //
 // The MCP client is created per discovery (it owns a session id), not held
 // long-term, because sessions are per-store and not shared.
@@ -31,6 +32,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -167,7 +169,43 @@ func (r *Runner) RunForStore(ctx context.Context, storeID string) (int, error) {
 		return count, fmt.Errorf("update stores summary for %s: %w", storeID, err)
 	}
 	r.Logger.Info("abilities: discovery complete", "store_id", storeID, "count", count)
+	r.reportCapabilityGaps(ctx, storeID)
 	return count, nil
+}
+
+// reportCapabilityGaps logs anything the daemon needs that this store can't
+// do. Runs after every discovery sweep, on freshly written schemas.
+//
+// Discovery is the right moment: it is the first point at which the daemon
+// knows what the store actually offers, and it happens at pairing — long
+// before an operator clicks Run and gets an opaque adapter error instead
+// (DSGWOO-1471).
+//
+// Advisory only. A gap does not block discovery or pairing: the store may
+// still be perfectly usable for the personas whose abilities are present,
+// which is exactly what happened on the store that prompted this — Sales
+// Support worked while Marketing and Pricing could not list products.
+func (r *Runner) reportCapabilityGaps(ctx context.Context, storeID string) {
+	gaps, err := CheckStore(ctx, r.DB, storeID)
+	if err != nil {
+		r.Logger.Warn("abilities: capability check failed", "store_id", storeID, "err", err)
+		return
+	}
+	if len(gaps) == 0 {
+		return
+	}
+	for _, g := range gaps {
+		r.Logger.Warn("abilities: store capability gap",
+			"store_id", storeID,
+			"ability", g.Ability,
+			"missing", g.Missing,
+			"unsupported_params", strings.Join(g.UnsupportedParams, ","),
+			"used_by", g.UsedBy,
+			"detail", g.Summary(),
+		)
+	}
+	r.Logger.Warn("abilities: store is missing capabilities the daemon needs; update the WooAgent Companion Plugin",
+		"store_id", storeID, "gaps", len(gaps))
 }
 
 // reconcile inserts/updates abilities rows for the given store and
