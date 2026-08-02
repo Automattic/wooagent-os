@@ -176,19 +176,23 @@ func newRunCmd() *cobra.Command {
 			go srv.Abilities().RunAll(ctx)
 			srv.Abilities().SchedulePeriodic(ctx)
 
-			// 30-day TTL purge for dismissed issues (DSGWOO-1277). Runs
-			// once at startup then every 24h until shutdown. Override the
-			// window via WOOAGENT_DISMISS_TTL_DAYS (e.g., 0 for immediate
-			// during demos).
+			// Background retention. Both sweeps run once at startup then
+			// every 24h until shutdown:
+			//   - dismissed-issue purge (DSGWOO-1277), WOOAGENT_DISMISS_TTL_DAYS
+			//   - terminal runs + orphaned turn_events (DSGWOO-1294),
+			//     WOOAGENT_RUNS_TTL_DAYS
 			ttlDays := dismissTTLDays(cmd.OutOrStdout())
+			runsDays := runsTTLDays(cmd.OutOrStdout())
 			sw := &sweeper.Sweeper{
-				DB:    st.DB,
-				TTL:   time.Duration(ttlDays) * 24 * time.Hour,
-				Every: 24 * time.Hour,
-				Out:   cmd.OutOrStdout(),
+				DB:      st.DB,
+				TTL:     ttlDuration(ttlDays),
+				RunsTTL: ttlDuration(runsDays),
+				Every:   24 * time.Hour,
+				Out:     cmd.OutOrStdout(),
 			}
 			go sw.Start(ctx)
 			fmt.Fprintf(cmd.OutOrStdout(), "→ sweeper: dismiss-TTL active (%d days; override via WOOAGENT_DISMISS_TTL_DAYS)\n", ttlDays)
+			fmt.Fprintf(cmd.OutOrStdout(), "→ sweeper: runs-retention active (%d days; override via WOOAGENT_RUNS_TTL_DAYS)\n", runsDays)
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "→ Daemon running on http://%s (headless)\n", cfg.BindAddr)
@@ -342,6 +346,37 @@ func dismissTTLDays(out io.Writer) int {
 		return defaultDays
 	}
 	return n
+}
+
+// runsTTLDays reads WOOAGENT_RUNS_TTL_DAYS, the retention window for
+// terminal runs rows (DSGWOO-1294). Same contract as dismissTTLDays: a
+// positive day count, zero allowed as the demo / dogfood escape hatch.
+func runsTTLDays(out io.Writer) int {
+	const defaultDays = 30
+	raw := os.Getenv("WOOAGENT_RUNS_TTL_DAYS")
+	if raw == "" {
+		return defaultDays
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		fmt.Fprintf(out, "→ sweeper: ignoring invalid WOOAGENT_RUNS_TTL_DAYS=%q; using default %d\n", raw, defaultDays)
+		return defaultDays
+	}
+	return n
+}
+
+// ttlDuration converts a day count to the duration the Sweeper expects.
+//
+// Zero days means "purge everything eligible right now" — the documented
+// escape hatch for demos and dogfooding. The Sweeper reads a zero duration
+// as "field unset, use my default" (the idiomatic Go zero-value contract),
+// so zero has to become the smallest positive duration instead: every
+// candidate row's timestamp is then below the cutoff.
+func ttlDuration(days int) time.Duration {
+	if days <= 0 {
+		return time.Nanosecond
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // lessonsThreshold reads WOOAGENT_LESSONS_THRESHOLD (new-dismissals trigger; default 5).
