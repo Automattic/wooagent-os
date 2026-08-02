@@ -63,12 +63,15 @@ func (Pricing) Addable() bool       { return false }
 
 // Cooldown: product-centric (proposal_target.product_id). 7d after an
 // approve so the new price has time to settle; 30d after a dismiss so we
-// don't oscillate against the operator's "no".
+// don't oscillate against the operator's "no"; 7d after an LLM-level skip so
+// a declined product drops out of contention and the run advances through the
+// catalog, then returns for re-evaluation as the market moves.
 func (Pricing) Cooldown() personas.CooldownPolicy {
 	return personas.CooldownPolicy{
 		TargetKey: "product_id",
 		Approved:  7 * 24 * time.Hour,
 		Dismissed: 30 * 24 * time.Hour,
+		Skipped:   7 * 24 * time.Hour,
 	}
 }
 
@@ -120,15 +123,17 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 		return draftForProduct(ctx, deps, deps.Env.ProductIDOverride, skill.Description, model, currency)
 	}
 
-	// Persistent cooldown set (see Pricing.Cooldown).
+	// Persistent cooldown set (touched ∪ recently-skipped; see Pricing.Cooldown).
 	pr := Pricing{}
-	skip, err := personas.RecentlyTouchedTargets(ctx, deps.Store, pr.Slug(), pr.Cooldown())
+	policy := pr.Cooldown()
+	skip, err := personas.CooldownSkipSet(ctx, deps.Store, pr.Slug(), policy)
 	if err != nil {
 		return personas.Drafted{
 			Skipped:    true,
 			SkipReason: fmt.Sprintf("look up recently-touched products: %v", err),
 		}, nil
 	}
+	rec := personas.SkipRecorder(ctx, deps.Store, pr.Slug(), policy)
 
 	// Batch pre-check: do we have a category with >= batchThreshold
 	// eligible products? If yes, run the expensive web_search loop on
@@ -158,6 +163,7 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 				continue
 			}
 			if d.Skipped {
+				rec(prod.ID, d.SkipReason)
 				continue
 			}
 			drafts = append(drafts, d)
@@ -180,6 +186,7 @@ func (Pricing) Draft(ctx context.Context, deps personas.Deps) (personas.Drafted,
 		func(id int) (personas.Drafted, error) {
 			return draftForProduct(ctx, deps, id, skill.Description, model, currency)
 		},
+		rec,
 	)
 }
 
