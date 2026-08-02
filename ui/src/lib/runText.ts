@@ -22,13 +22,35 @@ export function isLongReason(reason: string | null | undefined): boolean {
  * colon that introduces structured detail (': '), whichever comes first, with a
  * trailing period added when the clause ends on a word.
  *
+ * Reasons at or under LONG_REASON_THRESHOLD are returned whole. Condensing
+ * exists to stop a multi-line trace from swamping a notice; a reason that
+ * already fits doesn't need it, and trimming one loses information for free.
+ *
+ * That mattered in practice. The clause-first heuristic assumes the leading
+ * clause is the human summary, which holds for Pricing's per-product traces
+ * but inverts for error-shaped reasons, where the lead is a machine-y
+ * operation label and the cause is at the tail:
+ *
+ *   "mcp call wooagent-products/list: tool "…" returned error: An error
+ *    occurred while executing the tool."   (127 chars)
+ *
+ * That used to render as "mcp call wooagent-products/list." — the operation
+ * name and nothing about what went wrong — even though it was comfortably
+ * under the threshold. An operator had to query the database to find out that
+ * their store's products ability was broken.
+ *
  * Examples:
  *   "tried 3 products, none drafted: product 3908: no_proposal: Ran 5 …"
- *     → "tried 3 products, none drafted."
+ *     → "tried 3 products, none drafted."          (long; condensed)
  *   "persona already has 2 or more open proposals; not enqueuing"
  *     → "persona already has 2 or more open proposals; not enqueuing."
  *   'no implementation registered for persona "reporting"'
  *     → 'no implementation registered for persona "reporting"'
+ *
+ * Known gap: a long error-shaped reason still condenses to its operation
+ * label. Fixing that needs a way to tell "leading clause is a summary" from
+ * "leading clause is a label", which is a guess we don't have to make yet —
+ * the reasons that hit this are short.
  *
  * The full reason stays available on the Runs page / run detail — this only
  * trims the summary shown in the transient notice.
@@ -36,6 +58,10 @@ export function isLongReason(reason: string | null | undefined): boolean {
 export function summarizeReason(reason: string): string {
   const text = reason.trim();
   if (!text) return text;
+  // Short enough to read at a glance — show all of it. Uses the same
+  // threshold as isLongReason so the two helpers can't disagree about what
+  // "too long to show inline" means.
+  if (!isLongReason(text)) return ensureTerminal(text);
   // Earliest sentence end OR structured-detail colon. Scanning left to right,
   // `.match` returns the first index where either alternative hits.
   const match = text.match(/[.!?](?=\s|$)|:\s/);
