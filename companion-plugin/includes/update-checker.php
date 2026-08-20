@@ -7,9 +7,11 @@
  * asset (not the GitHub-generated source zipball, which has the wrong
  * directory structure for a WordPress plugin install).
  *
- * Version comparison uses the Version: header inside the zip's main
- * plugin file — so daemon-only releases (where the companion bytes
- * didn't change) don't surface as plugin updates on customer stores.
+ * PUC derives the available version from the GitHub release tag because the
+ * main plugin file lives in a repository subdirectory. Release tags and the
+ * Companion Version/Stable tag must therefore stay aligned. The exact asset
+ * filter below prevents daemon archives or GitHub's source zip from being
+ * offered to WordPress as the plugin package.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
