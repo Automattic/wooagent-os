@@ -34,7 +34,6 @@ function wooagent_companion_register_categories(): void {
 		return;
 	}
 
-	$results = array();
 	$cats = array(
 		'wooagent-products'     => array( 'label' => __( 'WooAgent · Products', 'wooagent-companion' ),    'description' => __( 'Read and update WooCommerce products.', 'wooagent-companion' ) ),
 		'wooagent-orders'       => array( 'label' => __( 'WooAgent · Orders', 'wooagent-companion' ),      'description' => __( 'Inspect WooCommerce orders and attach notes.', 'wooagent-companion' ) ),
@@ -42,187 +41,14 @@ function wooagent_companion_register_categories(): void {
 	);
 
 	foreach ( $cats as $slug => $args ) {
-		$return = wp_register_ability_category( $slug, $args );
-		$exists = wp_has_ability_category( $slug );
-		$results[ $slug ] = array(
-			'return_type' => is_null( $return ) ? 'null' : ( is_wp_error( $return ) ? 'WP_Error' : get_class( $return ) ),
-			'exists_after' => $exists,
-		);
+		wp_register_ability_category( $slug, $args );
 	}
-
-	update_option( 'wooagent_companion_category_results', $results );
 }
 
 function wooagent_companion_register_abilities(): void {
-	$results = array();
-	$names = array(
-		'wooagent-products/list',
-		'wooagent-products/get',
-		'wooagent-products/update',
-		'wooagent-orders/list',
-		'wooagent-orders/get',
-		'wooagent-orders/add-note',
-		'wooagent-customers/get',
-	);
-
-	// Verify categories exist before we register abilities referencing them.
-	// Device pairing moved to dedicated REST endpoints (see pair-rest.php) —
-	// it doesn't ride the Abilities API anymore, so no category needed.
-	$category_check = array(
-		'wooagent-products'    => wp_has_ability_category( 'wooagent-products' ),
-		'wooagent-orders'      => wp_has_ability_category( 'wooagent-orders' ),
-		'wooagent-customers'   => wp_has_ability_category( 'wooagent-customers' ),
-	);
-	update_option( 'wooagent_companion_category_check_at_register', $category_check );
-
-	// Capture PHP errors/notices fired during registration.
-	$captured_errors = array();
-	$prev_handler = set_error_handler( static function ( $errno, $errstr, $errfile = '', $errline = 0 ) use ( &$captured_errors ) {
-		$captured_errors[] = array(
-			'errno'   => $errno,
-			'message' => $errstr,
-			'file'    => basename( (string) $errfile ),
-			'line'    => $errline,
-		);
-		return false; // let PHP default handling continue
-	} );
-
 	wooagent_companion_register_product_abilities();
 	wooagent_companion_register_order_abilities();
 	wooagent_companion_register_customer_abilities();
-
-	set_error_handler( $prev_handler );
-
-	foreach ( $names as $name ) {
-		$ability           = wp_get_ability( $name );
-		$results[ $name ] = $ability ? 'ok' : 'missing';
-	}
-
-	update_option( 'wooagent_companion_last_register', time() );
-	update_option( 'wooagent_companion_register_results', $results );
-	update_option( 'wooagent_companion_register_errors', $captured_errors );
-}
-
-function wooagent_companion_describe_value( $value ): string {
-	if ( is_wp_error( $value ) ) {
-		$data = $value->get_error_data();
-		return sprintf( 'WP_Error(code=%s, message=%s, data=%s)', $value->get_error_code(), $value->get_error_message(), wp_json_encode( $data ) );
-	}
-	if ( is_bool( $value ) ) {
-		return $value ? 'true' : 'false';
-	}
-	if ( is_null( $value ) ) {
-		return 'null';
-	}
-	if ( is_object( $value ) ) {
-		return 'object(' . get_class( $value ) . ')';
-	}
-	if ( is_array( $value ) ) {
-		return 'array(' . count( $value ) . ')';
-	}
-	return gettype( $value ) . ':' . (string) $value;
-}
-
-add_action( 'rest_api_init', 'wooagent_companion_register_debug_route' );
-
-function wooagent_companion_register_debug_route(): void {
-	register_rest_route(
-		'wooagent-companion/v1',
-		'/source',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => static function () {
-				return current_user_can( 'manage_options' );
-			},
-			'callback'            => static function ( $request ) {
-				$target = $request->get_param( 'class' ) ?: 'wp_register_ability';
-				if ( $target === 'wp_register_ability' || $target === 'wp_register_ability_category' ) {
-					if ( ! function_exists( $target ) ) {
-						return new WP_Error( 'no_function', $target . ' does not exist' );
-					}
-					$reflect = new ReflectionFunction( $target );
-				} else {
-					if ( ! class_exists( $target ) ) {
-						return new WP_Error( 'no_class', $target . ' does not exist' );
-					}
-					$reflect = new ReflectionClass( $target );
-				}
-				$file = $reflect->getFileName();
-				if ( ! $file || ! is_readable( $file ) ) {
-					return new WP_Error( 'unreadable', 'Source not readable', array( 'file' => $file ) );
-				}
-				$source = file_get_contents( $file );
-				return array(
-					'file'   => $file,
-					'length' => strlen( $source ),
-					'source' => $source,
-				);
-			},
-		)
-	);
-
-	register_rest_route(
-		'wooagent-companion/v1',
-		'/selftest',
-		array(
-			'methods'             => 'GET',
-			'permission_callback' => static function () {
-				return current_user_can( 'manage_options' );
-			},
-			'callback'            => static function () {
-				$all_abilities = array();
-				if ( function_exists( 'wp_get_abilities' ) ) {
-					foreach ( wp_get_abilities() as $a ) {
-						if ( is_object( $a ) && method_exists( $a, 'get_name' ) ) {
-							$all_abilities[] = $a->get_name();
-						} elseif ( is_array( $a ) && isset( $a['name'] ) ) {
-							$all_abilities[] = $a['name'];
-						}
-					}
-				}
-
-				// Reflect on wp_register_ability to understand its signature.
-				$signature = null;
-				if ( function_exists( 'wp_register_ability' ) ) {
-					$reflect = new ReflectionFunction( 'wp_register_ability' );
-					$params = array();
-					foreach ( $reflect->getParameters() as $p ) {
-						$type = $p->getType();
-						$params[] = array(
-							'name' => $p->getName(),
-							'type' => $type ? (string) $type : null,
-							'optional' => $p->isOptional(),
-						);
-					}
-					$signature = array(
-						'file'   => $reflect->getFileName(),
-						'line'   => $reflect->getStartLine(),
-						'params' => $params,
-					);
-				}
-
-				return array(
-					'plugin_loaded'              => true,
-					'version'                    => defined( 'WOOAGENT_COMPANION_VERSION' ) ? WOOAGENT_COMPANION_VERSION : null,
-					'wp_register_ability_exists' => function_exists( 'wp_register_ability' ),
-					'wp_get_ability_exists'      => function_exists( 'wp_get_ability' ),
-					'wp_get_abilities_exists'    => function_exists( 'wp_get_abilities' ),
-					'woocommerce_active'         => class_exists( 'WooCommerce' ),
-					'abilities_api_init_did'     => did_action( 'abilities_api_init' ),
-					'init_did'                   => did_action( 'init' ),
-					'registered_marker'          => get_option( 'wooagent_companion_last_register', 0 ),
-					'register_results'           => get_option( 'wooagent_companion_register_results', array() ),
-					'register_errors'            => get_option( 'wooagent_companion_register_errors', array() ),
-					'category_results'           => get_option( 'wooagent_companion_category_results', array() ),
-					'category_check_at_register' => get_option( 'wooagent_companion_category_check_at_register', array() ),
-					'categories_init_did'        => did_action( 'wp_abilities_api_categories_init' ),
-					'abilities_init_did'         => did_action( 'wp_abilities_api_init' ),
-					'runtime_all_abilities'      => $all_abilities,
-					'runtime_all_abilities_count' => count( $all_abilities ),
-				);
-			},
-		)
-	);
 }
 
 add_action( 'admin_notices', 'wooagent_companion_dependency_notice' );
