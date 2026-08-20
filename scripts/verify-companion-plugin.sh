@@ -34,6 +34,15 @@ require_text() {
 	fi
 }
 
+sha256_file() {
+	local file="$1"
+	if command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$file" | awk '{print $1}'
+	else
+		sha256sum "$file" | awk '{print $1}'
+	fi
+}
+
 echo "Linting first-party Companion PHP..."
 while IFS= read -r file; do
 	php -l "$file"
@@ -113,6 +122,14 @@ for entry in "${required_entries[@]}"; do
 	fi
 done
 
+FIRST_ZIP_SHA256="$(sha256_file "$ZIP_FILE")"
+sleep 2
+bash "$REPO_ROOT/scripts/build-companion-plugin-zip.sh"
+SECOND_ZIP_SHA256="$(sha256_file "$ZIP_FILE")"
+if [ "$FIRST_ZIP_SHA256" != "$SECOND_ZIP_SHA256" ]; then
+	fail "identical source produced different Companion zip hashes"
+fi
+
 if $INTEGRATION_MODE; then
 	if [ -z "${WOOAGENT_TEST_SITE_URL:-}" ]; then
 		fail "--integration requires WOOAGENT_TEST_SITE_URL"
@@ -155,11 +172,7 @@ if $INTEGRATION_MODE; then
 	echo "Read-only integration checks passed."
 fi
 
-if command -v shasum >/dev/null 2>&1; then
-	ZIP_SHA256="$(shasum -a 256 "$ZIP_FILE" | awk '{print $1}')"
-else
-	ZIP_SHA256="$(sha256sum "$ZIP_FILE" | awk '{print $1}')"
-fi
+ZIP_SHA256="$SECOND_ZIP_SHA256"
 ZIP_BYTES="$(wc -c < "$ZIP_FILE" | tr -d ' ')"
 
 echo "Verified $ZIP_FILE"

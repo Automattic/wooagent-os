@@ -38,6 +38,12 @@ cp -R "$SRC_DIR/vendor" "$STAGE_DIR/wooagent-companion/"
 # Strip Mac/editor cruft so the zip is lean and reproducible.
 find "$STAGE_DIR" \( -name ".DS_Store" -o -name "*.swp" \) -delete
 
-( cd "$STAGE_DIR" && zip -rq "$OUTPUT" wooagent-companion )
+# Normalize timestamps and entry ordering, and omit host-specific extra
+# attributes so identical source trees produce byte-identical archives.
+find "$STAGE_DIR" -exec touch -t 198001010000 {} +
+(
+	cd "$STAGE_DIR"
+	find wooagent-companion -print | LC_ALL=C sort | zip -q -X "$OUTPUT" -@
+)
 
 echo "Built $OUTPUT ($(du -h "$OUTPUT" | cut -f1))"
