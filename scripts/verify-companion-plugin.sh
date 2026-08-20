@@ -57,7 +57,8 @@ require_text "$README_FILE" "Stable tag: 0.4.1" "plugin readme stable tag is not
 require_text "$ROOT_README" 'WOOAGENT_VERSION=v0.4.1' "root README version pin is not v0.4.1"
 require_text "$UPDATE_FILE" "https://github.com/Automattic/wooagent-os/" "updater repository changed"
 require_text "$UPDATE_FILE" "'wooagent-companion'" "updater slug changed"
-require_text "$UPDATE_FILE" "enableReleaseAssets()" "release-asset updater support is disabled"
+require_text "$UPDATE_FILE" "'/^wooagent-companion\.zip$/'" "updater does not select the exact Companion zip"
+require_text "$UPDATE_FILE" "Api::REQUIRE_RELEASE_ASSETS" "updater can fall back to the wrong-layout source zip"
 
 echo "Building and inspecting Companion archive..."
 bash "$REPO_ROOT/scripts/build-companion-plugin-zip.sh"

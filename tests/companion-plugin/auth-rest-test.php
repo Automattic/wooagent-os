@@ -93,4 +93,32 @@ wooagent_test_run(
 	}
 );
 
+wooagent_test_run(
+	'ignores malformed stored token hashes without emitting warnings',
+	static function (): void {
+		wooagent_test_reset();
+		$GLOBALS['wooagent_test_options'][ WOOAGENT_DEVICES_OPTION ] = array(
+			array(
+				'id'                => 'dev_malformed',
+				'token_hash'        => array( 'unexpected' ),
+				'paired_by_user_id' => 42,
+			),
+		);
+		wooagent_test_set_server_bearer( 'fixture-malformed-hash-token' );
+
+		set_error_handler(
+			static function ( $severity, $message ): void {
+				throw new ErrorException( $message, 0, $severity );
+			}
+		);
+		try {
+			$result = wooagent_companion_resolve_bearer_user( false );
+		} finally {
+			restore_error_handler();
+		}
+
+		wooagent_test_expect_false( $result, 'Malformed token hashes must be ignored.' );
+	}
+);
+
 wooagent_test_finish();

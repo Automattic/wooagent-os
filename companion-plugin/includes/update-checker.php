@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 require_once WOOAGENT_COMPANION_PATH . 'vendor/plugin-update-checker/plugin-update-checker.php';
 
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+use YahnisElsts\PluginUpdateChecker\v5p6\Vcs\Api;
 
 $wooagent_companion_update_checker = PucFactory::buildUpdateChecker(
 	'https://github.com/Automattic/wooagent-os/',
@@ -26,4 +27,7 @@ $wooagent_companion_update_checker = PucFactory::buildUpdateChecker(
 	'wooagent-companion'
 );
 
-$wooagent_companion_update_checker->getVcsApi()->enableReleaseAssets();
+$wooagent_companion_update_checker->getVcsApi()->enableReleaseAssets(
+	'/^wooagent-companion\.zip$/',
+	Api::REQUIRE_RELEASE_ASSETS
+);

@@ -4,9 +4,10 @@ require_once __DIR__ . '/bootstrap.php';
 
 $plugin_file = WOOAGENT_TEST_ROOT . '/companion-plugin/wooagent-companion.php';
 $source      = file_get_contents( $plugin_file );
+$updater     = file_get_contents( WOOAGENT_TEST_ROOT . '/companion-plugin/includes/update-checker.php' );
 
-if ( $source === false ) {
-	throw new RuntimeException( 'Unable to read the main plugin file.' );
+if ( $source === false || $updater === false ) {
+	throw new RuntimeException( 'Unable to read the production plugin files.' );
 }
 
 wooagent_test_run(
@@ -44,6 +45,22 @@ wooagent_test_run(
 		foreach ( $required as $marker ) {
 			if ( strpos( $source, $marker ) === false ) {
 				throw new RuntimeException( 'Required production registration call is missing: ' . $marker );
+			}
+		}
+	}
+);
+
+wooagent_test_run(
+	'requires the exact Companion release asset without source-zip fallback',
+	static function () use ( $updater ): void {
+		$required = array(
+			"'/^wooagent-companion\\.zip$/'",
+			'Api::REQUIRE_RELEASE_ASSETS',
+		);
+
+		foreach ( $required as $marker ) {
+			if ( strpos( $updater, $marker ) === false ) {
+				throw new RuntimeException( 'Required updater constraint is missing: ' . $marker );
 			}
 		}
 	}

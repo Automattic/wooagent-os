@@ -44,7 +44,7 @@ Until pairing ships, authenticate with a WordPress Application Password (Users â
 * Removes internal diagnostic REST endpoints, including the source-inspection endpoint.
 * Restricts device bearer authentication to REST requests and valid approving WordPress users. Legacy pairings without an approver identity must pair again.
 * Adds pairing input bounds, fixed-window rate limits, and non-destructive retry behavior.
-* Hardens plugin packaging and adds repeatable security/release verification.
+* Hardens updater asset selection and plugin packaging, and adds repeatable security/release verification.
 
 = 0.4.0 =
 * Adds self-update via plugin-update-checker pointed at github.com/Automattic/wooagent-os releases. Installed copies will now check for new releases automatically and surface them in WP Admin â†’ Plugins.

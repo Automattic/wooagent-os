@@ -90,7 +90,7 @@ function wooagent_companion_resolve_bearer_user( $user_id ) {
 		if ( ! is_array( $device ) ) {
 			continue;
 		}
-		if ( empty( $device['token_hash'] ) ) {
+		if ( empty( $device['token_hash'] ) || ! is_scalar( $device['token_hash'] ) ) {
 			continue;
 		}
 		if ( ! hash_equals( (string) $device['token_hash'], $hash ) ) {
