@@ -9,7 +9,8 @@
  * return 401 rest_forbidden, because WordPress doesn't recognize the
  * bearer token as a known user identity.
  *
- * This file registers a `determine_current_user` filter that:
+ * This file registers a `determine_current_user` filter for REST requests
+ * that:
  *
  *   1. Reads the incoming Authorization header.
  *   2. Hashes the bearer with SHA-256.
@@ -21,12 +22,12 @@
  *   5. If unmatched, returns the existing $user_id unchanged so other auth
  *      mechanisms (cookies, Application Passwords, JWT) still apply.
  *
- * Security model: the bearer is identity-equivalent to a session for the
- * paired admin. The pairing UI requires `manage_options` to approve, so
- * the device acts as that operator — same trust level as an Application
- * Password they would have created manually. The pair-revoke route lets
- * the operator drop the device at any time, ending its access. See
- * PRD §8.4.
+ * Security model: the bearer is identity-equivalent to a REST session for
+ * the user who approved it. The pairing UI requires `manage_options` to
+ * approve, and the user's current capabilities continue to govern each
+ * ability. Legacy records without an approver and records whose approver
+ * was deleted fail closed and must pair again. The pair-revoke route lets
+ * the operator drop the device at any time, ending its access. See PRD §8.4.
  *
  * DSGWOO-1236 (related: 1275, 1276).
  */
@@ -50,6 +51,9 @@ function wooagent_companion_resolve_bearer_user( $user_id ) {
 	// covers the "no auth yet" path so cookie / app-password / etc. wins
 	// when present.
 	if ( ! empty( $user_id ) ) {
+		return $user_id;
+	}
+	if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
 		return $user_id;
 	}
 
@@ -86,49 +90,16 @@ function wooagent_companion_resolve_bearer_user( $user_id ) {
 		if ( ! is_array( $device ) ) {
 			continue;
 		}
-		if ( empty( $device['token_hash'] ) ) {
+		if ( empty( $device['token_hash'] ) || ! is_scalar( $device['token_hash'] ) ) {
 			continue;
 		}
 		if ( ! hash_equals( (string) $device['token_hash'], $hash ) ) {
 			continue;
 		}
 
-		// Match. Prefer the user_id the operator was signed in as when they
-		// approved the pairing. Older device records pre-date that capture
-		// and fall back to the first administrator on the site (PRD §8.4
-		// "device acts with operator capabilities" — the first-admin
-		// fallback keeps existing pairings working while the device
-		// surfaces continue to evolve).
-		if ( ! empty( $device['paired_by_user_id'] ) ) {
-			$candidate = (int) $device['paired_by_user_id'];
-			if ( $candidate > 0 ) {
-				return $candidate;
-			}
-		}
-		return wooagent_companion_default_admin_user_id();
+		$candidate = wooagent_companion_device_user_id( $device );
+		return $candidate > 0 ? $candidate : $user_id;
 	}
 
 	return $user_id;
-}
-
-/**
- * Returns the first administrator's user_id, or 0 if none can be found.
- * Used as a fallback for device records that pre-date the
- * paired_by_user_id capture. Cached per request because the underlying
- * query is order-by-ID and stable within one request.
- */
-function wooagent_companion_default_admin_user_id(): int {
-	static $cached = null;
-	if ( $cached !== null ) {
-		return $cached;
-	}
-	$admins = get_users( array(
-		'role'    => 'administrator',
-		'number'  => 1,
-		'orderby' => 'ID',
-		'order'   => 'ASC',
-		'fields'  => 'ID',
-	) );
-	$cached = empty( $admins ) ? 0 : (int) $admins[0];
-	return $cached;
 }

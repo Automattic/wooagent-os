@@ -28,7 +28,7 @@ wooagent run       # serves http://localhost:7777
 
 The React UI is baked into the binary — open <http://localhost:7777> in a browser.
 
-Pin a version with `WOOAGENT_VERSION=v0.4.0`. Windows: download the `.zip` from the [Releases page](https://github.com/Automattic/wooagent-os/releases) directly or use WSL.
+Pin a version with `WOOAGENT_VERSION=v0.4.1`. Windows: download the `.zip` from the [Releases page](https://github.com/Automattic/wooagent-os/releases) directly or use WSL.
 
 ## Connecting a WooCommerce store
 

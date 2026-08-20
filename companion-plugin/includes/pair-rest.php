@@ -20,9 +20,10 @@
  * State:
  *   - Pending pairs: WP transients keyed `wooagent_pair_<code>`, 10 min TTL.
  *   - Approved devices: wp_option `wooagent_devices`, JSON array of
- *     {id, name, token_hash (sha256), created_at}. We never store the
- *     plaintext token outside the transient; the daemon picks it up on the
- *     first /poll after approval and the transient expires shortly after.
+ *     {id, name, token_hash (sha256), paired_by_user_id, created_at}. We
+ *     never store the plaintext token outside the transient; the daemon
+ *     picks it up on the first /poll after approval and the transient
+ *     expires shortly after.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -31,6 +32,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const WOOAGENT_PAIR_TTL_SECONDS = 600;
 const WOOAGENT_DEVICES_OPTION   = 'wooagent_devices';
+const WOOAGENT_PAIR_DEVICE_NAME_MAX_BYTES = 100;
+const WOOAGENT_PAIR_RATE_WINDOW_SECONDS   = 60;
+const WOOAGENT_PAIR_REQUEST_RATE_LIMIT    = 10;
+const WOOAGENT_PAIR_POLL_RATE_LIMIT       = 90;
 
 add_action( 'rest_api_init', 'wooagent_companion_register_pair_routes' );
 
@@ -40,8 +45,22 @@ function wooagent_companion_register_pair_routes(): void {
 		'/pair/request',
 		array(
 			'methods'             => 'POST',
-			'permission_callback' => '__return_true',
+			'permission_callback' => 'wooagent_companion_pair_request_permission',
 			'callback'            => 'wooagent_companion_pair_request',
+			'args'                => array(
+				'code'        => array(
+					'type'              => 'string',
+					'required'          => true,
+					'pattern'           => '^WOOA-[A-Z0-9]{4}-[A-Z0-9]{4}$',
+					'sanitize_callback' => 'wooagent_companion_pair_sanitize_code',
+				),
+				'device_name' => array(
+					'type'              => 'string',
+					'required'          => false,
+					'maxLength'         => WOOAGENT_PAIR_DEVICE_NAME_MAX_BYTES,
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+			),
 		)
 	);
 
@@ -50,8 +69,16 @@ function wooagent_companion_register_pair_routes(): void {
 		'/pair/poll',
 		array(
 			'methods'             => 'GET',
-			'permission_callback' => '__return_true',
+			'permission_callback' => 'wooagent_companion_pair_poll_permission',
 			'callback'            => 'wooagent_companion_pair_poll',
+			'args'                => array(
+				'code' => array(
+					'type'              => 'string',
+					'required'          => true,
+					'pattern'           => '^WOOA-[A-Z0-9]{4}-[A-Z0-9]{4}$',
+					'sanitize_callback' => 'wooagent_companion_pair_sanitize_code',
+				),
+			),
 		)
 	);
 
@@ -77,13 +104,61 @@ function wooagent_companion_register_pair_routes(): void {
 }
 
 /**
- * Records a pending pairing under the daemon-supplied code. Idempotent
- * within the TTL window: re-posting the same code overwrites the
- * transient (the daemon's POST /v1/stores rotates codes the same way).
+ * Fixed-window rate gate for public pairing registration.
+ */
+function wooagent_companion_pair_request_permission() {
+	return wooagent_companion_pair_rate_limit( 'request', WOOAGENT_PAIR_REQUEST_RATE_LIMIT );
+}
+
+/**
+ * Fixed-window rate gate for public pairing polling. The higher threshold
+ * leaves headroom above the daemon UI's normal two-second poll cadence.
+ */
+function wooagent_companion_pair_poll_permission() {
+	return wooagent_companion_pair_rate_limit( 'poll', WOOAGENT_PAIR_POLL_RATE_LIMIT );
+}
+
+/**
+ * Limits a public pairing action per remote address without persisting the
+ * raw address. Keeping reset_at fixed avoids turning steady polling into a
+ * sliding-window lockout.
+ */
+function wooagent_companion_pair_rate_limit( string $action, int $limit ) {
+	$remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) && is_scalar( $_SERVER['REMOTE_ADDR'] )
+		? (string) $_SERVER['REMOTE_ADDR']
+		: 'unknown';
+	$key = 'wooagent_pair_rate_' . $action . '_' . substr( hash( 'sha256', $remote_addr ), 0, 32 );
+
+	$now    = time();
+	$bucket = get_transient( $key );
+	if ( ! is_array( $bucket ) || (int) ( $bucket['reset_at'] ?? 0 ) <= $now ) {
+		$bucket = array(
+			'count'    => 0,
+			'reset_at' => $now + WOOAGENT_PAIR_RATE_WINDOW_SECONDS,
+		);
+	}
+
+	if ( (int) ( $bucket['count'] ?? 0 ) >= $limit ) {
+		return new WP_Error(
+			'pairing_rate_limited',
+			__( 'too many pairing requests; try again shortly', 'wooagent-companion' ),
+			array( 'status' => 429 )
+		);
+	}
+
+	$bucket['count'] = (int) $bucket['count'] + 1;
+	$remaining_ttl   = max( 1, (int) $bucket['reset_at'] - $now );
+	set_transient( $key, $bucket, $remaining_ttl );
+	return true;
+}
+
+/**
+ * Records a pending pairing under the daemon-supplied code. Re-posting an
+ * existing pending code is idempotent without extending or changing it;
+ * terminal states can never be reset through the public endpoint.
  */
 function wooagent_companion_pair_request( WP_REST_Request $request ) {
-	$code        = (string) $request->get_param( 'code' );
-	$device_name = (string) $request->get_param( 'device_name' );
+	$code = wooagent_companion_pair_sanitize_code( $request->get_param( 'code' ) );
 
 	if ( ! wooagent_companion_pair_valid_code( $code ) ) {
 		return new WP_Error(
@@ -92,13 +167,49 @@ function wooagent_companion_pair_request( WP_REST_Request $request ) {
 			array( 'status' => 400 )
 		);
 	}
+	$raw_device_name = $request->get_param( 'device_name' );
+	if ( $raw_device_name !== null && ! is_scalar( $raw_device_name ) ) {
+		return new WP_Error(
+			'invalid_device_name',
+			__( 'device_name must be a string no longer than 100 bytes.', 'wooagent-companion' ),
+			array( 'status' => 400 )
+		);
+	}
+	$device_name = sanitize_text_field( $raw_device_name === null ? '' : (string) $raw_device_name );
+	if ( strlen( $device_name ) > WOOAGENT_PAIR_DEVICE_NAME_MAX_BYTES ) {
+		return new WP_Error(
+			'invalid_device_name',
+			__( 'device_name must be a string no longer than 100 bytes.', 'wooagent-companion' ),
+			array( 'status' => 400 )
+		);
+	}
 	if ( $device_name === '' ) {
 		$device_name = 'wooagent-device';
 	}
 
+	$key      = wooagent_companion_pair_transient_key( $code );
+	$existing = get_transient( $key );
+	if ( is_array( $existing ) ) {
+		if ( ( $existing['status'] ?? '' ) === 'pending' ) {
+			$existing_expires_at = (int) ( $existing['expires_at'] ?? 0 );
+			return rest_ensure_response(
+				array(
+					'status'     => 'pending',
+					'expires_at' => gmdate( 'c', $existing_expires_at > 0 ? $existing_expires_at : time() ),
+				)
+			);
+		}
+
+		return new WP_Error(
+			'pairing_code_in_use',
+			__( 'pairing code is already in use', 'wooagent-companion' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	$expires_at = time() + WOOAGENT_PAIR_TTL_SECONDS;
 	set_transient(
-		wooagent_companion_pair_transient_key( $code ),
+		$key,
 		array(
 			'status'      => 'pending',
 			'device_name' => $device_name,
@@ -138,7 +249,7 @@ function wooagent_companion_pair_poll( WP_REST_Request $request ) {
 	// has successfully approved.
 	nocache_headers();
 
-	$code = (string) $request->get_param( 'code' );
+	$code = wooagent_companion_pair_sanitize_code( $request->get_param( 'code' ) );
 	if ( ! wooagent_companion_pair_valid_code( $code ) ) {
 		return new WP_Error( 'invalid_code', __( 'invalid code', 'wooagent-companion' ), array( 'status' => 400 ) );
 	}
@@ -183,8 +294,7 @@ function wooagent_companion_pair_poll( WP_REST_Request $request ) {
 
 /**
  * Permission check for /pair/revoke: bearer must match a known device's
- * token hash. Any registered device may revoke any device — multi-device
- * scoping is post-v0.1 and the test store is single-tenant.
+ * token hash and valid approving user.
  */
 function wooagent_companion_pair_revoke_permission( WP_REST_Request $request ): bool {
 	return wooagent_companion_find_device_by_bearer( $request ) !== null;
@@ -201,7 +311,8 @@ function wooagent_companion_devices_me_permission( WP_REST_Request $request ): b
 
 /**
  * Resolves a request's Authorization: Bearer header to a registered device
- * record, or null when no header is present or the token is unknown.
+ * record, or null when no header is present, the token is unknown, or the
+ * record no longer maps to an existing approving WordPress user.
  * Constant-time compare on token_hash so a timing oracle can't fingerprint
  * the device list. Shared by /pair/revoke + /devices/me.
  */
@@ -220,11 +331,25 @@ function wooagent_companion_find_device_by_bearer( WP_REST_Request $request ): ?
 		return null;
 	}
 	foreach ( $devices as $d ) {
-		if ( is_array( $d ) && isset( $d['token_hash'] ) && hash_equals( (string) $d['token_hash'], $hash ) ) {
-			return $d;
+		if ( is_array( $d ) && isset( $d['token_hash'] ) && is_scalar( $d['token_hash'] ) && hash_equals( (string) $d['token_hash'], $hash ) ) {
+			return wooagent_companion_device_user_id( $d ) > 0 ? $d : null;
 		}
 	}
 	return null;
+}
+
+/**
+ * Returns the existing WordPress user that approved a device, or 0 when the
+ * record predates approver capture or that user has since been deleted.
+ * Invalid records fail closed and must pair again instead of inheriting a
+ * different administrator's identity.
+ */
+function wooagent_companion_device_user_id( array $device ): int {
+	$user_id = isset( $device['paired_by_user_id'] ) ? (int) $device['paired_by_user_id'] : 0;
+	if ( $user_id <= 0 || ! get_user_by( 'id', $user_id ) ) {
+		return 0;
+	}
+	return $user_id;
 }
 
 /**
@@ -247,7 +372,10 @@ function wooagent_companion_pair_revoke( WP_REST_Request $request ) {
 		array_filter(
 			$devices,
 			static function ( $d ) use ( $hash ) {
-				return ! ( isset( $d['token_hash'] ) && hash_equals( $d['token_hash'], $hash ) );
+				if ( ! is_array( $d ) || ! isset( $d['token_hash'] ) || ! is_scalar( $d['token_hash'] ) ) {
+					return true;
+				}
+				return ! hash_equals( (string) $d['token_hash'], $hash );
 			}
 		)
 	);
@@ -347,6 +475,10 @@ function wooagent_companion_pair_reject_code( string $code ): bool {
 
 function wooagent_companion_pair_valid_code( string $code ): bool {
 	return (bool) preg_match( '/^WOOA-[A-Z0-9]{4}-[A-Z0-9]{4}$/', $code );
+}
+
+function wooagent_companion_pair_sanitize_code( $code ): string {
+	return is_scalar( $code ) ? strtoupper( sanitize_text_field( (string) $code ) ) : '';
 }
 
 function wooagent_companion_pair_transient_key( string $code ): string {
