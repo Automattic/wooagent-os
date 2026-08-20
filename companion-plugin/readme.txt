@@ -4,7 +4,7 @@ Tags: woocommerce, ai, agents, mcp, abilities
 Requires at least: 6.7
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.4.1
 License: Apache-2.0
 
 Registers the WooAgent OS ability surface on a WooCommerce store. Paired with the WooAgent OS daemon running on the operator's machine.
@@ -39,6 +39,12 @@ Device pairing (stub — shipping in v0.2):
 Until pairing ships, authenticate with a WordPress Application Password (Users → Profile → Application Passwords).
 
 == Changelog ==
+
+= 0.4.1 =
+* Removes internal diagnostic REST endpoints, including the source-inspection endpoint.
+* Restricts device bearer authentication to REST requests and valid approving WordPress users. Legacy pairings without an approver identity must pair again.
+* Adds pairing input bounds, fixed-window rate limits, and non-destructive retry behavior.
+* Hardens plugin packaging and adds repeatable security/release verification.
 
 = 0.4.0 =
 * Adds self-update via plugin-update-checker pointed at github.com/Automattic/wooagent-os releases. Installed copies will now check for new releases automatically and surface them in WP Admin → Plugins.
