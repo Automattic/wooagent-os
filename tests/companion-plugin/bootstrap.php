@@ -179,6 +179,12 @@ function get_user_by( $field, $value ) {
 	return $GLOBALS['wooagent_test_users'][ $user_id ] ?? false;
 }
 
+function get_users( $args = array() ): array {
+	$user_ids = array_keys( $GLOBALS['wooagent_test_users'] );
+	sort( $user_ids );
+	return array_map( 'intval', $user_ids );
+}
+
 function current_user_can( $capability ): bool {
 	return ! empty( $GLOBALS['wooagent_test_caps'][ $capability ] );
 }

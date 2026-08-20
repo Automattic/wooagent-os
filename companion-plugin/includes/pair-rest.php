@@ -20,9 +20,10 @@
  * State:
  *   - Pending pairs: WP transients keyed `wooagent_pair_<code>`, 10 min TTL.
  *   - Approved devices: wp_option `wooagent_devices`, JSON array of
- *     {id, name, token_hash (sha256), created_at}. We never store the
- *     plaintext token outside the transient; the daemon picks it up on the
- *     first /poll after approval and the transient expires shortly after.
+ *     {id, name, token_hash (sha256), paired_by_user_id, created_at}. We
+ *     never store the plaintext token outside the transient; the daemon
+ *     picks it up on the first /poll after approval and the transient
+ *     expires shortly after.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -201,7 +202,8 @@ function wooagent_companion_devices_me_permission( WP_REST_Request $request ): b
 
 /**
  * Resolves a request's Authorization: Bearer header to a registered device
- * record, or null when no header is present or the token is unknown.
+ * record, or null when no header is present, the token is unknown, or the
+ * record no longer maps to an existing approving WordPress user.
  * Constant-time compare on token_hash so a timing oracle can't fingerprint
  * the device list. Shared by /pair/revoke + /devices/me.
  */
@@ -221,10 +223,24 @@ function wooagent_companion_find_device_by_bearer( WP_REST_Request $request ): ?
 	}
 	foreach ( $devices as $d ) {
 		if ( is_array( $d ) && isset( $d['token_hash'] ) && hash_equals( (string) $d['token_hash'], $hash ) ) {
-			return $d;
+			return wooagent_companion_device_user_id( $d ) > 0 ? $d : null;
 		}
 	}
 	return null;
+}
+
+/**
+ * Returns the existing WordPress user that approved a device, or 0 when the
+ * record predates approver capture or that user has since been deleted.
+ * Invalid records fail closed and must pair again instead of inheriting a
+ * different administrator's identity.
+ */
+function wooagent_companion_device_user_id( array $device ): int {
+	$user_id = isset( $device['paired_by_user_id'] ) ? (int) $device['paired_by_user_id'] : 0;
+	if ( $user_id <= 0 || ! get_user_by( 'id', $user_id ) ) {
+		return 0;
+	}
+	return $user_id;
 }
 
 /**
